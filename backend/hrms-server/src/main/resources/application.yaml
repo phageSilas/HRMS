@@ -1,3 +1,8 @@
 spring:
   application:
     name: hrms-server
+
+#暂时禁用docker compose
+  docker:
+    compose:
+      enabled: false
