@@ -4,7 +4,7 @@ backend为后端相关代码,frontend为前端相关代码
 每人先提交自己的模块的到各自分支  
 ## 技术栈版本:
 后端:springboot 3.5.16  
-前端:  
+前端:node:24.18.0, pnpm:11.10.0, React 18 + TypeScript 5
   
 # 提交规范:
 Git 提交规范中最主流的是 **Conventional Commits（约定式提交）**，它通过结构化的提交信息，让代码变更历史清晰可读，并支持自动化工具生成变更日志（CHANGELOG）。
