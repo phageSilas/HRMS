@@ -1,4 +1,4 @@
-HELP.md
+#协同开发文档.md
 target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
