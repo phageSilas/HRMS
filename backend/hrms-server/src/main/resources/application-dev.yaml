@@ -2,3 +2,16 @@ spring:
   config:
     activate:
       on-profile: dev
+
+  # 数据源配置（成员根据自己环境配置）
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DB:hrms}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+# 开发环境日志配置
+logging:
+  level:
+    com.hrms: debug
+    org.springframework.web: debug

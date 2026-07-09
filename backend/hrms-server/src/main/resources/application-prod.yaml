@@ -2,3 +2,16 @@ spring:
   config:
     activate:
       on-profile: prod
+
+  # 生产环境数据源配置（部署时配置）
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DB}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_USERNAME}
+    password: ${MYSQL_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+# 生产环境日志配置
+logging:
+  level:
+    com.hrms: info
+    org.springframework.web: warn
