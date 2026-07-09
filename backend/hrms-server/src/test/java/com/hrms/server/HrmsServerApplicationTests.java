@@ -36,7 +36,7 @@ class HrmsServerApplicationTests {
     void shouldReturnSystemSummary() throws Exception {
         mockMvc.perform(get("/api/system/summary"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.code").value(200))
+            .andExpect(jsonPath("$.code").value("0000"))
             .andExpect(jsonPath("$.data").value("system module: permission, organization, employee archive"));
     }
 
@@ -49,10 +49,36 @@ class HrmsServerApplicationTests {
     void shouldReturnBusinessSummary() throws Exception {
         mockMvc.perform(get("/api/business/summary"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.code").value(200))
+            .andExpect(jsonPath("$.code").value("0000"))
             .andExpect(jsonPath("$.data").value(
                 "business module: onboarding, attendance, payroll, approval, profile; depends on "
                     + "system module: permission, organization, employee archive"
             ));
+    }
+
+    /**
+     * 验证部门树接口可以正常访问。
+     *
+     * @throws Exception 接口调用异常
+     */
+    @Test
+    void shouldReturnDepartmentTree() throws Exception {
+        mockMvc.perform(get("/api/system/departments/tree"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.code").value("0000"))
+            .andExpect(jsonPath("$.data[0].id").value(1));
+    }
+
+    /**
+     * 验证员工简要信息接口可以正常访问。
+     *
+     * @throws Exception 接口调用异常
+     */
+    @Test
+    void shouldReturnEmployeeBrief() throws Exception {
+        mockMvc.perform(get("/api/business/employees/brief/1"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.code").value("0000"))
+            .andExpect(jsonPath("$.data.employeeNo").value("202601001"));
     }
 }

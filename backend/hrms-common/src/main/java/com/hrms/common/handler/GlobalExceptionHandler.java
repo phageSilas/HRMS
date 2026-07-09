@@ -3,6 +3,8 @@ package com.hrms.common.handler;
 import com.hrms.common.enums.ResultCode;
 import com.hrms.common.exception.BusinessException;
 import com.hrms.common.model.Result;
+import jakarta.validation.ConstraintViolationException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -21,6 +23,32 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     public Result<Void> handleBusinessException(BusinessException exception) {
         return Result.failure(exception.getResultCode(), exception.getMessage());
+    }
+
+    /**
+     * 处理请求体参数校验异常。
+     *
+     * @param exception 参数校验异常对象
+     * @return 统一返回对象
+     */
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public Result<Void> handleMethodArgumentNotValidException(MethodArgumentNotValidException exception) {
+        String message = exception.getBindingResult().getFieldErrors().stream()
+            .findFirst()
+            .map(fieldError -> fieldError.getField() + fieldError.getDefaultMessage())
+            .orElse(ResultCode.PARAM_ERROR.getMessage());
+        return Result.failure(ResultCode.PARAM_ERROR, message);
+    }
+
+    /**
+     * 处理路径与查询参数校验异常。
+     *
+     * @param exception 参数校验异常对象
+     * @return 统一返回对象
+     */
+    @ExceptionHandler(ConstraintViolationException.class)
+    public Result<Void> handleConstraintViolationException(ConstraintViolationException exception) {
+        return Result.failure(ResultCode.PARAM_ERROR, exception.getMessage());
     }
 
     /**
