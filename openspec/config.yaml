@@ -1,0 +1,140 @@
+schema: spec-driven
+
+# 项目上下文
+context: |
+  ## 技术栈
+  - 后端：Spring Boot 3.5.16 + Java 17 + MyBatis-Plus 3.5.12
+  - 前端：React 18 + TypeScript 5 + UmiJS
+  - 数据库：MySQL 8.0+
+  - 缓存/消息：Redis、RabbitMQ
+  - 构建工具：Maven（后端）、pnpm 11.10.0（前端）
+
+  ## 后端模块结构
+  - hrms-common：公共基础模块（只做能力，不做业务）
+    - 返回体、异常、枚举、BaseEntity、SecurityContextHolder
+    - MyMetaObjectHandler（自动填充）、MybatisPlusConfig（逻辑删除）
+    - 禁止包含 Controller、禁止涉及数据表
+  - hrms-system：系统管理域
+    - auth：用户、角色、菜单、登录认证
+    - organization：部门、职位、字典
+    - file：附件管理
+    - log：操作日志、登录日志
+  - hrms-business：业务域
+    - employee：员工档案管理
+    - personnel：入转调离流程
+    - attendance：考勤管理
+    - salary：薪资管理
+    - approval：审批中心
+    - mycenter：个人中心
+  - hrms-server：启动聚合模块
+    - CorsConfig（跨域配置）
+    - 禁止写 Controller/Service/Mapper
+
+  ## 模块依赖关系
+  hrms-server → hrms-business → hrms-system → hrms-common
+
+  ## 开发协作分工
+  - 地基搭建者：hrms-common + file + log
+  - 成员 A：auth + organization
+  - 成员 B：employee + personnel
+  - 成员 C：attendance + salary
+  - 成员 D：approval + mycenter
+
+  ## 包命名规范
+  - com.hrms.common
+  - com.hrms.system.auth
+  - com.hrms.system.organization
+  - com.hrms.system.file
+  - com.hrms.system.log
+  - com.hrms.business.employee
+  - com.hrms.business.personnel
+  - com.hrms.business.attendance
+  - com.hrms.business.salary
+  - com.hrms.business.approval
+  - com.hrms.business.mycenter
+
+  ## 统一返回体
+  - code: 0=成功，非0=异常
+  - message: 响应消息
+  - data: 业务数据
+
+  ## 错误码分段
+  - 0: 成功
+  - 40001-40099: 参数错误
+  - 40100-40199: 认证授权错误
+  - 50001-50009: 系统内部错误
+  - 50010-50019: 附件模块错误
+  - 50020-50029: 日志模块错误
+  - 60001-60099: 档案模块业务错误
+  - 60100-60199: 组织模块业务错误
+  - 60200-60299: 入离职模块业务错误
+  - 60300-60399: 考勤模块业务错误
+  - 60400-60499: 薪资模块业务错误
+  - 60500-60599: 审批模块业务错误
+
+  ## 数据库表命名
+  - 系统表：sys_ 前缀（sys_user, sys_role, sys_dept, sys_post, sys_menu, sys_file, sys_operate_log, sys_login_log）
+  - 业务表：hr_ 前缀（hr_employee, hr_approval_instance）
+  - 公共字段：id, create_by, create_time, update_by, update_time, is_deleted
+
+  ## 分层规范
+  - controller：接口层
+  - service/impl：业务层
+  - mapper：数据访问层
+  - entity：数据库实体（XxxDO）
+  - dto：入参（XxxRequestDTO, XxxQueryDTO）
+  - vo：出参（XxxVO）
+  - convert：对象转换
+  - enums：模块枚举
+  - config：模块配置
+
+  ## 枚举存储
+  - 数据库使用 TINYINT 类型存储枚举编码
+  - 所有枚举实现 BaseEnum 接口
+  - 禁止硬编码比较（if (status == 1)），必须用枚举比较
+
+  ## MyBatis-Plus 规范
+  - 自动填充：MyMetaObjectHandler 在 hrms-common 中统一实现
+  - 逻辑删除：MybatisPlusConfig 配置 is_deleted 字段
+  - 禁止各模块单独实现 MetaObjectHandler
+
+  ## 认证上下文规范
+  - SecurityContextHolder（基于 ThreadLocal）在 hrms-common 中统一实现
+  - 所有模块必须通过 SecurityContextHolder.getUserId() 获取当前用户
+  - 禁止自行解析 Token
+
+  ## JWT 规范
+  - JwtUtils 在 hrms-system.auth.util 中实现
+  - 由成员 A 负责，其他成员复用
+
+  ## 核心跨模块接口
+  1. 获取员工简要信息：/employees/brief/{id}（employee → attendance, salary, approval, mycenter）
+  2. 生成工号：/employees/gen-no（employee → personnel）
+  3. 获取部门树：/departments/tree（organization → employee, personnel, attendance, salary, approval）
+  4. 发起审批任务：/approval/start（approval → personnel）
+  5. 审批回调：/approval/callback（各业务模块 → approval）
+  6. 获取员工完整档案：/employees/full/{id}（employee → personnel, salary, mycenter）
+  7. 获取员工考勤汇总：/attendance/summary/{employeeId}/{yearMonth}（attendance → salary）
+  8. 获取员工薪资档案：/salary/account/{employeeId}（salary → employee, personnel, mycenter）
+  9. 按部门获取员工列表：/employees/by-department/{departmentId}（employee → attendance, salary）
+  10. 获取待审批数量：/approval/pending-count（approval → mycenter）
+  11. 获取字段权限：/permissions/field（auth → 所有模块）
+  12. 获取数据权限范围：/permissions/data-scope（auth → 所有模块）
+
+# 每个工件的规则
+rules:
+  proposal:
+    - 遵循 HRMS 模块划分规范（docs/03-HRMS模块划分规范.md）
+    - 明确业务规则与状态流转
+    - 确定数据库模型变更
+    - 定义接口契约
+    - 遵守公共字段约定（BaseEntity）
+    - 待建表必须包含审批状态字段（approval_status, approval_instance_id）
+  tasks:
+    - 将任务分解为可执行的步骤
+    - 遵循 TDD 原则：先写测试再实现
+    - 每个任务需明确验收标准
+    - 目标测试覆盖率 80%+
+    - 使用枚举比较，禁止硬编码
+    - 使用 SecurityContextHolder 获取当前用户
+    - 使用 MyMetaObjectHandler 自动填充公共字段

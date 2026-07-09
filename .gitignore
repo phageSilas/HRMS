@@ -237,6 +237,15 @@ reports/
 # Uploaded files (if any)
 uploads/
 
+# ==================== Claude Code ====================
+# Claude Code local configuration
+#.claude/
+#CLAUDE.md
+
+# ==================== OpenSpec ====================
+# OpenSpec change management directory
+#openspec/
+
 # ==================== Keep These Files ====================
 # Important: DO NOT ignore these even if they match patterns above
 !README.md
