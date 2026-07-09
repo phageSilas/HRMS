@@ -67,6 +67,7 @@ HRMS
 - 用户与账号
 - 角色与菜单权限
 - 部门与岗位基础配置
+- 员工档案
 - 字典与参数配置
 - 登录日志、操作日志、附件管理
 
@@ -74,8 +75,6 @@ HRMS
 
 业务域，负责人资核心业务：
 
-- 组织架构管理
-- 员工档案管理
 - 入职管理
 - 转正管理
 - 调岗管理
@@ -83,7 +82,6 @@ HRMS
 - 审批中心
 - 考勤管理
 - 薪资管理
-- 个人中心
 
 #### `hrms-server`
 
@@ -127,7 +125,7 @@ HRMS
 ### 4.3 类命名规范
 
 - 实体类：`XxxDO` 或 `XxxEntity`，项目内统一后不得混用
-- DTO：`XxxRequestDTO`、`XxxQueryDTO`、`XxxCommandDTO`
+- DTO：`XxxCreateDTO`、`XxxUpdateDTO`、`XxxQueryDTO`、`XxxCommandDTO`
 - VO：`XxxVO`、`XxxPageVO`
 - Mapper：`XxxMapper`
 - Service：`XxxService`
@@ -139,15 +137,15 @@ HRMS
 建议优先采用更易识别的命名方式：
 
 - 数据库实体：`XxxDO`
-- 接口入参：`XxxRequestDTO`、`XxxQueryDTO`
+- 接口入参：按场景使用 `XxxCreateDTO`、`XxxUpdateDTO`、`XxxQueryDTO`
 - 接口出参：`XxxVO`
 
 ## 5. 统一开发原则
 
 ### 5.1 单一职责原则
 
-- `system` 模块只处理系统底座与主数据配置
-- `business` 模块只处理人资业务规则
+- `system` 模块承载系统底座、员工档案与组织主数据等基础能力
+- `business` 模块依赖 `system` 的基础能力，处理入转调离、考勤、薪资、审批等核心业务流程
 - 公共能力必须沉淀到 `common`，避免重复实现
 
 ### 5.2 先建契约后写实现
@@ -170,7 +168,7 @@ HRMS
 
 ### 6.1 返回体规范
 
-项目统一使用 `com.hrms.common.model.Result<T>` 作为返回体，统一字段如下：
+项目统一使用 `com.hrms.common.web.Result<T>` 作为返回体，统一字段如下：
 
 - `code`：业务响应码
 - `message`：响应消息
@@ -183,6 +181,8 @@ HRMS
 - 失败统一抛出业务异常，由全局异常处理器转换为标准结构
 
 ### 6.2 HTTP 语义规范
+
+业务接口路径统一使用 `/api/v1` 前缀。
 
 - `GET`：查询
 - `POST`：新增、流程发起、复杂条件查询
@@ -216,10 +216,10 @@ HRMS
 
 | 序号 | 接口名 | 路径 | 请求方式 | 最小必填入参 | 最小必有返回字段 | 提供方(模块) | 调用方(模块) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 获取员工简要信息 | `/employees/brief/{id}` | `GET` | `id (Path)` | `id, name, employeeNo, departmentId, departmentName, status` | `4(档案)` | `6,7,8,9` |
-| 2 | 生成工号 | `/employees/gen-no` | `POST` | `departmentId` | `employeeNo` | `4(档案)` | `5(入职)` |
-| 3 | 获取部门树 | `/departments/tree` | `GET` | 无（基于 Token 自动过滤） | `[{id, name, parentId, children}]` | `3(组织)` | `4,5,6,7,8` |
-| 4 | 发起审批任务 | `/approval/start` | `POST` | `bizType, bizId, applicantId` | `taskId` | `8(审批)` | `5,6` |
+| 1 | 获取员工简要信息 | `/api/v1/employees/brief/{id}` | `GET` | `id (Path)` | `id, name, employeeNo, departmentId, departmentName, status` | `4(档案)` | `6,7,8,9` |
+| 2 | 生成工号 | `/api/v1/employees/gen-no` | `POST` | `departmentId` | `employeeNo` | `4(档案)` | `5(入职)` |
+| 3 | 获取部门树 | `/api/v1/departments/tree` | `GET` | 无（基于 Token 自动过滤） | `[{id, name, parentId, children}]` | `3(组织)` | `4,5,6,7,8` |
+| 4 | 发起审批任务 | `/api/v1/approval/start` | `POST` | `bizType, bizId, applicantId` | `taskId` | `8(审批)` | `5,6` |
 
 接口协同时还应补充以下约束：
 
@@ -473,20 +473,22 @@ HRMS 全局核心主数据包括：
 
 员工在职状态统一枚举建议：
 
-- `PROBATION`：试用期
-- `FORMAL`：正式
-- `PENDING_LEAVE`：待离职
-- `LEFT`：已离职
+- `1`：试用期
+- `2`：正式
+- `3`：待离职
+- `4`：已离职
 
 ### 9.2 入职流程
 
-入职流程状态统一建议：
+入职流程审批状态统一使用 `approval_status` 数字编码：
 
-- `DRAFT`：草稿
-- `PENDING_APPROVAL`：审批中
-- `APPROVED_PENDING_ENTRY`：已批准待入职
-- `REJECTED`：已拒绝
-- `ENTERED`：已入职
+- `0`：草稿
+- `1`：审批中
+- `2`：已通过
+- `3`：已驳回
+- `4`：已撤回
+
+入职业务完成状态可由单据状态或员工主档在职状态表达，入职通过并完成建档后员工在职状态写入 `1` 试用期或 `2` 正式。
 
 入职申请至少包含：
 
@@ -614,24 +616,29 @@ HRMS 全局核心主数据包括：
 
 建议错误码分段如下：
 
-- `0000`：成功
-- `1000-1999`：通用参数与校验异常
-- `2000-2999`：认证与授权异常
-- `3000-3999`：系统管理模块异常
-- `4000-4999`：员工档案与组织业务异常
-- `5000-5999`：审批流程异常
-- `6000-6999`：考勤异常
-- `7000-7999`：薪资异常
-- `9000-9999`：系统内部异常
+- `0`：成功
+- `40001-40099`：参数错误
+- `40100-40199`：认证授权错误
+- `50001-50099`：系统内部错误
+- `60001-60999`：业务逻辑错误
+
+业务码段分配：
+
+- `60001-60099`：档案模块
+- `60100-60199`：组织模块
+- `60200-60299`：入离职模块
+- `60300-60399`：考勤模块
+- `60400-60499`：薪资模块
+- `60500-60599`：审批模块
 
 示例：
 
-- `4001`：员工不存在
-- `4002`：工号重复
-- `4003`：部门不存在
-- `4004`：职位不存在
-- `5001`：审批单不存在
-- `5002`：当前节点无审批权限
+- `60001`：员工不存在
+- `60002`：工号重复
+- `60100`：部门不存在
+- `60101`：职位不存在
+- `60500`：审批单不存在
+- `60501`：当前节点无审批权限
 
 ## 12. 命名与字段规范
 
@@ -670,8 +677,8 @@ HRMS 全局核心主数据包括：
 
 ### 13.1 模块边界
 
-- `system` 不直接耦合业务流程细节
-- `business` 可依赖 `system` 的主数据能力
+- `system` 承载系统底座、员工档案与组织主数据，不承载入转调离、考勤、薪资、审批等业务流程编排
+- `business` 可依赖 `system` 的系统底座、员工档案与组织主数据能力，负责核心业务流程
 - 所有模块均可依赖 `common`
 - 禁止 `common` 反向依赖业务模块
 
@@ -706,6 +713,8 @@ docs(spec): 新增HRMS统一全局规范文档
 ## 14. 基础公用 SQL 建表语法
 
 以下 SQL 作为 HRMS 项目基础公共表与核心主数据表的推荐建表基线，默认数据库为 MySQL 8.0，字符集为 `utf8mb4`。
+
+本章核心基础表为 17 张，`14.1` 为建库建议，不计入基础表数量。
 
 ### 14.1 建库建议
 
@@ -1561,15 +1570,26 @@ CREATE TABLE `hr_approval_task` (
 - `contract_type`
 - `hire_type`
 - `approval_status`
+- `salary_batch_status`
+- `attendance_status`
+- `leave_type`
+- `biz_type`
 - `post_sequence`
 - `job_level`
 - `data_scope`
 
 建议预置关键字典值：
 
-- `employment_status`：`PROBATION`、`FORMAL`、`PENDING_LEAVE`、`LEFT`
-- `contract_type`：`FIXED_TERM`、`NON_FIXED_TERM`、`LABOR`
-- `post_sequence`：`M`、`P`、`S`
+- `employment_status`：`1-试用期`、`2-正式`、`3-待离职`、`4-已离职`
+- `gender`：`1-男`、`2-女`
+- `hire_type`：`1-全职`、`2-兼职`、`3-实习`
+- `contract_type`：`1-固定期限`、`2-无固定期限`、`3-劳务合同`
+- `approval_status`：`0-草稿`、`1-审批中`、`2-已通过`、`3-已驳回`、`4-已撤回`
+- `salary_batch_status`：`0-草稿`、`1-计算中`、`2-待确认`、`3-已通过`、`4-已发放`、`5-已驳回`
+- `attendance_status`：`0-正常`、`1-迟到`、`2-早退`、`3-旷工`、`4-缺卡`、`5-请假`
+- `leave_type`：`1-年假`、`2-病假`、`3-事假`、`4-婚假`、`5-产假`、`6-丧假`、`7-调休`
+- `biz_type`：`ONBOARDING`、`TRANSFER`、`DIMISSION`、`LEAVE`、`ATTENDANCE_RECTIFY`、`SALARY_APPROVAL`
+- `post_sequence`：按组织岗位序列字典统一维护
 
 ## 16. 版本记录
 
