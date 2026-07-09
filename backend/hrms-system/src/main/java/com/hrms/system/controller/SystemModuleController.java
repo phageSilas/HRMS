@@ -1,6 +1,6 @@
 package com.hrms.system.controller;
 
-import com.hrms.common.model.Result;
+import com.hrms.common.web.Result;
 import com.hrms.system.service.SystemModuleService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
