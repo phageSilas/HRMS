@@ -2,6 +2,11 @@ spring:
   application:
     name: hrms-server
 
+  # 禁用 Docker Compose 自动启动
+  docker:
+    compose:
+      enabled: false
+
   # Redis 配置
   data:
     redis:
@@ -31,8 +36,3 @@ mybatis-plus:
       logic-delete-field: isDeleted
       logic-delete-value: 1
       logic-not-delete-value: 0
-
-# 暂时禁用 docker compose
-  docker:
-    compose:
-      enabled: false

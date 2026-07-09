@@ -5,10 +5,28 @@ spring:
 
   # 数据源配置（成员根据自己环境配置）
   datasource:
-    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DB:hrms}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
-    username: ${MYSQL_USERNAME:root}
-    password: ${MYSQL_PASSWORD:root}
+    url: jdbc:mysql:localhost:3306/hrms?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: root
+    password: 230814
     driver-class-name: com.mysql.cj.jdbc.Driver
+
+  # 临时禁用 Redis（验证地基搭建时）
+  data:
+    redis:
+      client-type: lettuce
+      host: localhost
+      port: 6379
+
+  # 临时禁用 RabbitMQ（验证地基搭建时）
+  rabbitmq:
+    host: localhost
+    port: 5672
+
+  # 自动配置排除（临时禁用 Redis 和 RabbitMQ 自动配置）
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
 
 # 开发环境日志配置
 logging:

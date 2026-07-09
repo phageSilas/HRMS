@@ -1227,7 +1227,348 @@ approval 模块
 
 ---
 
-## 七、版本记录
+## 八、权限矩阵
+
+> 本节定义各模块的菜单级、页面级、数据范围级、字段级权限规则，作为后端数据权限控制和前端菜单显示的统一依据。
+
+### 8.1 角色定义
+
+| 角色标识 | 角色名称 | 数据范围 | 核心职责 |
+|----------|----------|----------|----------|
+| `ADMIN` | 系统管理员 | 全平台 | 系统配置、角色管理、数据备份 |
+| `HR` | HR 专员 | 全部员工 | 员工管理、薪资核算、考勤管理、审批管理 |
+| `MANAGER` | 部门主管 | 本部门及下属 | 本部门员工查看、下属审批 |
+| `FINANCE` | 财务专员 | 薪资相关 | 薪资审核、成本报表查看 |
+| `EMPLOYEE` | 普通员工 | 仅本人 | 个人信息、请假申请、工资条查看 |
+
+> **说明**：角色数据已在 `init_admin.sql` 中初始化，`data_scope` 字段值：1-本人、2-本部门、3-本部门及子部门、4-全部。
+
+### 8.2 侧边栏菜单可见性
+
+| 菜单项 | 系统管理员 | HR 专员 | 部门主管 | 财务专员 | 普通员工 |
+|--------|:---:|:---:|:---:|:---:|:---:|
+| 🏠 首页 | ✓ | ✓ | ✓ | ✓ | ✓ |
+| 🔧 系统管理 | ✓ | ✗ | ✗ | ✗ | ✗ |
+| 👥 员工档案 | ✓ | ✓ | ✓(本部门) | ✗ | ✗ |
+| 📋 入转调离 | ✓ | ✓ | ✓ | ✗ | ✗ |
+| ⏰ 考勤管理 | ✓ | ✓ | ✓(本部门) | ✗ | ✗ |
+| 💰 薪资管理 | ✓ | ✓ | ✗ | ✓ | ✗ |
+| ✅ 审批中心 | ✓ | ✓ | ✓ | ✓ | ✗ |
+| 👤 个人中心 | ✓ | ✓ | ✓ | ✓ | ✓(唯一入口) |
+
+> **注**：普通员工侧边栏只显示 **首页** 和 **个人中心**，所有业务操作通过个人中心进入。
+
+### 8.3 业务模块权限矩阵
+
+#### 8.3.1 模块权限总览
+
+| 业务模块 | 系统管理员 | HR 专员 | 部门主管 | 财务专员 | 普通员工 |
+|----------|:---:|:---:|:---:|:---:|:---:|
+| **权限体系(auth)** | ✅ 全功能 | ❌ | ❌ | ❌ | ❌ |
+| **组织架构(organization)** | ✅ 全功能 | ✅ 只读 | ❌ | ❌ | ❌ |
+| **员工档案(employee)** | ✅ 全功能 | ✅ 全功能 | ✅ 本部门 | ❌ | ❌ |
+| **入转调离(personnel)** | ✅ 全功能 | ✅ 全功能 | ✅ 审批+调岗 | ❌ | ❌ |
+| **考勤管理(attendance)** | ✅ 全功能 | ✅ 全功能 | ✅ 本部门 | ❌ | ✅ 仅自己(个人中心) |
+| **薪资管理(salary)** | ✅ 全功能 | ✅ 全功能 | ❌ | ✅ 全功能 | ✅ 仅自己(个人中心) |
+| **审批中心(approval)** | ✅ 全功能 | ✅ 全功能 | ✅ 本部门 | ✅ 薪资审批 | ❌ |
+| **个人中心(mycenter)** | ✅ 全功能 | ✅ 全功能 | ✅ 全功能 | ✅ 全功能 | ✅ 全功能 |
+
+#### 8.3.2 权限体系（auth）
+
+| 维度 | 系统管理员 | HR 专员 | 部门主管 | 财务专员 | 普通员工 |
+|------|:---:|:---:|:---:|:---:|:---:|
+| **菜单入口可见** | ✓ | ✗ | ✗ | ✗ | ✗ |
+| **页面可访问** | ✓ | ✗ | ✗ | ✗ | ✗ |
+| **数据范围** | 全平台 | — | — | — | — |
+| **权限标识** | `system:user:*`<br>`system:role:*`<br>`system:menu:*` | — | — | — | — |
+
+> **特殊说明**：仅系统管理员可管理用户、角色、菜单。
+
+#### 8.3.3 组织架构（organization）
+
+| 维度 | 系统管理员 | HR 专员 | 部门主管 | 财务专员 | 普通员工 |
+|------|:---:|:---:|:---:|:---:|:---:|
+| **菜单入口可见** | ✓ | ✓ | ✗ | ✗ | ✗ |
+| **页面可访问** | ✓ | ✓(只读) | ✗ | ✗ | ✗ |
+| **可编辑** | ✓ | ✗ | ✗ | ✗ | ✗ |
+| **数据范围** | 全部 | 全部(只读) | — | — | — |
+| **权限标识** | `organization:dept:*`<br>`organization:post:*`<br>`organization:dict:*` | `organization:dept:list`<br>`organization:post:list` | — | — | — |
+
+> **特殊说明**：HR 专员需要查看部门/职位信息用于员工档案录入，但无增删改权限。部门树接口供其他模块调用，不受菜单权限限制。
+
+#### 8.3.4 员工档案（employee）
+
+| 维度 | 系统管理员 | HR 专员 | 部门主管 | 财务专员 | 普通员工 |
+|------|:---:|:---:|:---:|:---:|:---:|
+| **菜单入口可见** | ✓ | ✓ | ✓ | ✗ | ✗ |
+| **页面可访问** | ✓ | ✓ | ✓ | ✗ | ✗ |
+| **数据范围** | 全部员工 | 全部员工 | 本部门及下属 | — | — |
+| **可编辑** | ✓ | ✓ | ✗ | ✗ | ✗ |
+| **可删除** | ✓ | ✓(逻辑删除) | ✗ | ✗ | ✗ |
+| **权限标识** | `employee:*` | `employee:list`<br>`employee:create`<br>`employee:edit`<br>`employee:delete` | `employee:list`<br>`employee:query` | — | — |
+
+**字段级权限**：
+
+| 字段 | HR 专员 | 部门主管 | 普通员工(本人) |
+|------|:---:|:---:|:---:|
+| 姓名、工号、部门、职位、手机、邮箱 | 可见 | 可见 | 可见 |
+| **身份证号** | **可见** | **不可见** | **仅自己可见** |
+| **薪资信息** | **可见** | **不可见** | **仅自己可见** |
+| **紧急联系人** | **可见** | **不可见** | **仅自己可见** |
+| 合同信息 | 可见 | 不可见 | 不可见 |
+
+#### 8.3.5 入转调离（personnel）
+
+| 维度 | 系统管理员 | HR 专员 | 部门主管 | 财务专员 | 普通员工 |
+|------|:---:|:---:|:---:|:---:|:---:|
+| **菜单入口可见** | ✓ | ✓ | ✓ | ✗ | ✗ |
+| **页面可访问** | ✓ | ✓ | ✓ | ✗ | ✗ |
+| **发起入职** | ✓ | ✓ | ✗ | ✗ | ✗ |
+| **发起转正** | ✓ | ✓ | ✗ | ✗ | ✗ |
+| **发起调岗** | ✓ | ✓ | ✓(下属) | ✗ | ✗ |
+| **发起离职** | ✓ | ✓ | ✗ | ✗ | ✗ |
+| **审批入职/转正/离职** | ✓ | ✓ | ✓(下属) | ✗ | ✗ |
+| **数据范围** | 全部 | 全部 | 本部门及下属 | — | — |
+| **权限标识** | `personnel:*` | `personnel:entry:create`<br>`personnel:regular:create`<br>`personnel:leave:create`<br>`personnel:*:approve` | `personnel:transfer:create`<br>`personnel:*:approve` | — | — |
+
+> **特殊说明**：部门主管可发起调岗申请（将下属调至其他部门），但不能发起入职/离职/转正（由 HR 发起）。
+
+#### 8.3.6 考勤管理（attendance）
+
+| 维度 | 系统管理员 | HR 专员 | 部门主管 | 财务专员 | 普通员工 |
+|------|:---:|:---:|:---:|:---:|:---:|
+| **菜单入口可见** | ✓ | ✓ | ✓ | ✗ | ✗ |
+| **页面可访问** | ✓ | ✓ | ✓ | ✗ | ✗(个人中心) |
+| **数据范围** | 全部 | 全部 | 本部门 | — | 仅本人 |
+| **打卡记录查看** | 全部 | 全部 | 本部门 | — | 仅本人 |
+| **考勤统计查看** | 全部 | 全部 | 本部门 | — | 仅本人 |
+| **请假审批** | ✓ | ✓ | ✓(下属) | ✗ | ✗ |
+| **考勤规则配置** | ✓ | ✓ | ✗ | ✗ | ✗ |
+| **权限标识** | `attendance:*` | `attendance:record:list`<br>`attendance:leave:approve`<br>`attendance:summary:list` | `attendance:record:list`<br>`attendance:leave:approve` | — | `attendance:leave:create`(本人) |
+
+> **特殊说明**：普通员工的考勤数据通过「个人中心→我的考勤」查看，不进入考勤管理模块。
+
+#### 8.3.7 薪资管理（salary）
+
+| 维度 | 系统管理员 | HR 专员 | 部门主管 | 财务专员 | 普通员工 |
+|------|:---:|:---:|:---:|:---:|:---:|
+| **菜单入口可见** | ✓ | ✓ | ✗ | ✓ | ✗ |
+| **页面可访问** | ✓ | ✓ | ✗ | ✓ | ✗(个人中心) |
+| **数据范围** | 全部 | 全部 | — | 全部 | 仅本人 |
+| **薪资账套管理** | ✓ | ✓ | ✗ | ✓ | ✗ |
+| **薪资核算** | ✓ | ✓(发起) | ✗ | ✓(审核) | ✗ |
+| **工资条管理** | ✓ | ✓(发放) | ✗ | ✓(审核) | ✗(仅查看自己) |
+| **成本报表** | ✓ | ✓ | ✗ | ✓ | ✗ |
+| **权限标识** | `salary:*` | `salary:accounts:*`<br>`salary:calculate:execute`<br>`salary:payslip:list` | — | `salary:accounts:list`<br>`salary:calculate:execute`<br>`salary:payslip:list` | `salary:payslip:view`(本人) |
+
+**薪资数据可见性**：
+
+| 数据 | 系统管理员 | HR 专员 | 财务专员 | 部门主管 | 普通员工 |
+|------|:---:|:---:|:---:|:---:|:---:|
+| 全员薪资明细 | — | ✓ | ✓ | ✗ | ✗ |
+| 本人薪资 | ✓ | ✓ | ✓ | ✓ | ✓ |
+
+> **特殊说明**：普通员工通过「个人中心→我的薪资」查看自己的工资条，需二次验证。
+
+#### 8.3.8 审批中心（approval）
+
+| 维度 | 系统管理员 | HR 专员 | 部门主管 | 财务专员 | 普通员工 |
+|------|:---:|:---:|:---:|:---:|:---:|
+| **菜单入口可见** | ✓ | ✓ | ✓ | ✓ | ✗ |
+| **页面可访问** | ✓ | ✓ | ✓ | ✓ | ✗(个人中心) |
+| **待办列表** | 全部待办 | 全部待办 | 本部门待办 | 薪资批次待办 | — |
+| **已办列表** | 全部已办 | 全部已办 | 本部门已办 | 薪资批次已办 | — |
+| **审批操作** | ✓ | ✓ | ✓(下属) | ✓(薪资批次) | ✗ |
+| **委托审批** | ✓ | ✓ | ✓ | ✓ | ✗ |
+| **权限标识** | `approval:*` | `approval:task:list`<br>`approval:task:approve` | `approval:task:list`<br>`approval:task:approve` | `approval:task:list`<br>`approval:task:approve` | — |
+
+**各角色审批类型**：
+
+| 角色 | 可审批类型 |
+|------|------------|
+| HR 专员 | 入职审批、转正审批、调岗审批、离职审批 |
+| 部门主管 | 下属请假审批、下属转正审批、下属调岗审批、下属离职审批 |
+| 财务专员 | 薪资批次审批 |
+| 系统管理员 | 全部(兜底) |
+
+> **特殊说明**：普通员工通过「个人中心→我的申请」查看自己的申请进度，不进入审批中心模块。
+
+#### 8.3.9 个人中心（mycenter）
+
+| 页面 | 系统管理员 | HR 专员 | 部门主管 | 财务专员 | 普通员工 |
+|------|:---:|:---:|:---:|:---:|:---:|
+| **我的档案** | ✓(本人) | ✓(本人) | ✓(本人) | ✓(本人) | ✓(本人) |
+| **我的考勤** | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **我的薪资** | ✓ | ✓ | ✓ | ✓ | ✓(需二次验证) |
+| **我的申请** | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **账号安全** | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **权限标识** | `mycenter:*` | `mycenter:*` | `mycenter:*` | `mycenter:*` | `mycenter:profile:view`<br>`mycenter:salary:view`<br>`mycenter:attendance:view` |
+
+> **特殊说明**：个人中心是所有角色的统一入口，普通员工的核心操作区域。普通员工在「我的档案」中查看的敏感字段（身份证、薪资等）仅对自己可见。
+
+### 8.4 权限标识规范
+
+#### 8.4.1 标识符命名规范
+
+遵循 **`{模块}:{资源}:{操作}`** 三段式格式：
+
+| 段落 | 说明 | 示例 |
+|------|------|------|
+| 模块 | 对应后端模块名 | `system`、`employee`、`salary` |
+| 资源 | 对应具体业务实体 | `user`、`employee`、`salary` |
+| 操作 | 对应操作类型 | `list`、`create`、`edit`、`delete`、`approve` |
+
+#### 8.4.2 完整权限标识清单
+
+| 模块 | 权限标识 | 说明 | 分配角色 |
+|------|----------|------|----------|
+| **auth** | `system:user:list` | 查看用户列表 | ADMIN |
+| | `system:user:create` | 创建用户 | ADMIN |
+| | `system:user:edit` | 编辑用户 | ADMIN |
+| | `system:user:delete` | 删除用户 | ADMIN |
+| | `system:role:list` | 查看角色列表 | ADMIN |
+| | `system:role:create` | 创建角色 | ADMIN |
+| | `system:role:edit` | 编辑角色 | ADMIN |
+| | `system:role:delete` | 删除角色 | ADMIN |
+| | `system:menu:list` | 查看菜单列表 | ADMIN |
+| | `system:menu:create` | 创建菜单 | ADMIN |
+| | `system:menu:edit` | 编辑菜单 | ADMIN |
+| | `system:menu:delete` | 删除菜单 | ADMIN |
+| **organization** | `organization:dept:list` | 查看部门列表 | ADMIN、HR |
+| | `organization:dept:create` | 创建部门 | ADMIN |
+| | `organization:dept:edit` | 编辑部门 | ADMIN |
+| | `organization:dept:delete` | 删除部门 | ADMIN |
+| | `organization:post:list` | 查看职位列表 | ADMIN、HR |
+| | `organization:dict:list` | 查看字典列表 | ADMIN、HR |
+| **employee** | `employee:list` | 查看员工列表 | ADMIN、HR、MANAGER |
+| | `employee:query` | 查看员工详情 | ADMIN、HR、MANAGER、EMPLOYEE(本人) |
+| | `employee:create` | 创建员工 | ADMIN、HR |
+| | `employee:edit` | 编辑员工 | ADMIN、HR |
+| | `employee:delete` | 删除员工 | ADMIN、HR |
+| | `employee:contract:list` | 查看合同 | ADMIN、HR |
+| | `employee:transfer:list` | 查看调岗记录 | ADMIN、HR、MANAGER |
+| **personnel** | `personnel:entry:create` | 发起入职 | ADMIN、HR |
+| | `personnel:entry:approve` | 审批入职 | ADMIN、HR、MANAGER |
+| | `personnel:regular:create` | 发起转正 | ADMIN、HR |
+| | `personnel:transfer:create` | 发起调岗 | ADMIN、HR、MANAGER |
+| | `personnel:leave:create` | 发起离职 | ADMIN、HR |
+| **attendance** | `attendance:record:list` | 查看打卡记录 | ADMIN、HR、MANAGER |
+| | `attendance:record:checkin` | 执行打卡 | ALL |
+| | `attendance:leave:create` | 发起请假 | ALL |
+| | `attendance:leave:approve` | 审批请假 | ADMIN、HR、MANAGER |
+| | `attendance:summary:list` | 查看考勤统计 | ADMIN、HR、MANAGER |
+| **salary** | `salary:accounts:list` | 查看薪资账套 | ADMIN、HR、FINANCE |
+| | `salary:accounts:create` | 创建账套 | ADMIN、HR |
+| | `salary:calculate:execute` | 执行核算 | ADMIN、HR、FINANCE |
+| | `salary:payslip:list` | 查看工资条 | ADMIN、HR、FINANCE、EMPLOYEE(本人) |
+| **approval** | `approval:task:list` | 查看待办列表 | ADMIN、HR、MANAGER、FINANCE |
+| | `approval:task:approve` | 审批操作 | ADMIN、HR、MANAGER、FINANCE |
+| | `approval:task:delegate` | 委托审批 | ADMIN、HR、MANAGER、FINANCE |
+| **mycenter** | `mycenter:profile:view` | 查看个人档案 | ALL |
+| | `mycenter:salary:view` | 查看个人薪资 | ALL(EMPLOYEE需二次验证) |
+| | `mycenter:attendance:view` | 查看个人考勤 | ALL |
+| | `mycenter:password:edit` | 修改密码 | ALL |
+
+### 8.5 数据权限范围
+
+| data_scope 值 | 含义 | 适用角色 |
+|---------------|------|----------|
+| 1 | 仅本人 | EMPLOYEE、FINANCE |
+| 2 | 本部门 | — |
+| 3 | 本部门及子部门 | MANAGER |
+| 4 | 全部数据 | ADMIN、HR |
+
+### 8.6 菜单初始化数据
+
+> 菜单数据需在 `backend/sql/data/` 目录下新增 `init_menu.sql` 文件初始化。
+
+#### 8.6.1 一级菜单目录
+
+| ID | 菜单名称 | 菜单类型 | 路径 | 权限标识 | 排序 |
+|----|----------|----------|------|----------|------|
+| 1 | 首页 | 1(目录) | /home | - | 1 |
+| 2 | 系统管理 | 1(目录) | /system | system | 2 |
+| 3 | 员工档案 | 1(目录) | /employee | employee | 3 |
+| 4 | 入转调离 | 1(目录) | /process | process | 5 |
+| 5 | 考勤管理 | 1(目录) | /attendance | attendance | 6 |
+| 6 | 薪资管理 | 1(目录) | /salary | salary | 7 |
+| 7 | 审批中心 | 1(目录) | /approval | approval | 8 |
+| 8 | 个人中心 | 1(目录) | /profile | - | 9 |
+
+#### 8.6.2 二级菜单页面（示例）
+
+**系统管理（parent_id=2）**
+
+| ID | 菜单名称 | 菜单类型 | 路径 | 权限标识 |
+|----|----------|----------|------|----------|
+| 21 | 用户管理 | 2(菜单) | /system/user | system:user |
+| 22 | 角色管理 | 2(菜单) | /system/role | system:role |
+| 23 | 菜单管理 | 2(菜单) | /system/menu | system:menu |
+
+**员工档案（parent_id=3）**
+
+| ID | 菜单名称 | 菜单类型 | 路径 | 权限标识 |
+|----|----------|----------|------|----------|
+| 31 | 员工列表 | 2(菜单) | /employee/list | employee:list |
+| 32 | 合同管理 | 2(菜单) | /employee/contract | employee:contract |
+
+**入转调离（parent_id=4）**
+
+| ID | 菜单名称 | 菜单类型 | 路径 | 权限标识 |
+|----|----------|----------|------|----------|
+| 41 | 入职管理 | 2(菜单) | /process/entry | personnel:entry |
+| 42 | 转正管理 | 2(菜单) | /process/regular | personnel:regular |
+| 43 | 调岗管理 | 2(菜单) | /process/transfer | personnel:transfer |
+| 44 | 离职管理 | 2(菜单) | /process/leave | personnel:leave |
+
+**考勤管理（parent_id=5）**
+
+| ID | 菜单名称 | 菜单类型 | 路径 | 权限标识 |
+|----|----------|----------|------|----------|
+| 51 | 打卡记录 | 2(菜单) | /attendance/record | attendance:record |
+| 52 | 请假管理 | 2(菜单) | /attendance/leave | attendance:leave |
+| 53 | 考勤统计 | 2(菜单) | /attendance/summary | attendance:summary |
+
+**薪资管理（parent_id=6）**
+
+| ID | 菜单名称 | 菜单类型 | 路径 | 权限标识 |
+|----|----------|----------|------|----------|
+| 61 | 薪资账套 | 2(菜单) | /salary/account | salary:account |
+| 62 | 薪资核算 | 2(菜单) | /salary/calculate | salary:calculate |
+| 63 | 工资条 | 2(菜单) | /salary/payslip | salary:payslip |
+
+**审批中心（parent_id=7）**
+
+| ID | 菜单名称 | 菜单类型 | 路径 | 权限标识 |
+|----|----------|----------|------|----------|
+| 71 | 待办任务 | 2(菜单) | /approval/pending | approval:task |
+| 72 | 已办任务 | 2(菜单) | /approval/done | approval:task |
+
+**个人中心（parent_id=8）**
+
+| ID | 菜单名称 | 菜单类型 | 路径 | 权限标识 |
+|----|----------|----------|------|----------|
+| 81 | 我的档案 | 2(菜单) | /profile/info | mycenter:profile |
+| 82 | 我的考勤 | 2(菜单) | /profile/attendance | mycenter:attendance |
+| 83 | 我的薪资 | 2(菜单) | /profile/salary | mycenter:salary |
+| 84 | 我的申请 | 2(菜单) | /profile/application | mycenter:application |
+
+#### 8.6.3 按钮级权限（示例）
+
+**用户管理（parent_id=21）**
+
+| ID | 菜单名称 | 菜单类型 | 权限标识 |
+|----|----------|----------|----------|
+| 211 | 查询 | 3(按钮) | system:user:list |
+| 212 | 新增 | 3(按钮) | system:user:create |
+| 213 | 编辑 | 3(按钮) | system:user:edit |
+| 214 | 删除 | 3(按钮) | system:user:delete |
+
+> **说明**：完整的菜单和按钮权限初始化数据，需在开发阶段根据实际情况补充到 `init_menu.sql` 文件中。
+
+---
+
+## 九、版本记录
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
@@ -1235,3 +1576,4 @@ approval 模块
 | v1.1 | 2026-07-09 | 修复缺陷：file/log 移至 hrms-system，补充 BaseEntity、枚举规范、异常规范、认证上下文规范、待建表约束、权限接口 |
 | v1.2 | 2026-07-09 | 修复缺陷：补充 MyBatis-Plus 自动填充规范、file/log 专属错误码段 |
 | v1.3 | 2026-07-09 | 补充地基搭建前置任务：MyMetaObjectHandler、MybatisPlusConfig、CorsConfig、JwtUtils |
+| v1.4 | 2026-07-10 | 新增第八章权限矩阵：角色定义、菜单可见性、模块权限矩阵、权限标识清单、数据权限范围、菜单初始化数据（与前端规范对齐） |
