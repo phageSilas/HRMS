@@ -777,7 +777,7 @@ CREATE TABLE `sys_role` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `role_name` VARCHAR(64) NOT NULL COMMENT '角色名称',
   `role_code` VARCHAR(64) NOT NULL COMMENT '角色编码',
-  `data_scope` VARCHAR(32) NOT NULL DEFAULT 'SELF' COMMENT '数据权限范围',
+  `data_scope` TINYINT NOT NULL DEFAULT 4 COMMENT '数据权限范围：1-本人 2-本部门 3-本部门及子部门 4-全部',
   `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态：1启用 0禁用',
   `sort_no` INT NOT NULL DEFAULT 0 COMMENT '排序号',
   `create_by` BIGINT UNSIGNED DEFAULT NULL COMMENT '创建人',
@@ -798,7 +798,7 @@ CREATE TABLE `sys_role` (
 | `id` | `BIGINT UNSIGNED` | 是 | 角色主键 | 自增主键 |
 | `role_name` | `VARCHAR(64)` | 是 | 角色名称 | 如系统管理员、HR 专员 |
 | `role_code` | `VARCHAR(64)` | 是 | 角色编码 | 全局唯一，供权限判断与程序识别 |
-| `data_scope` | `VARCHAR(32)` | 是 | 数据权限范围 | 如 `ALL`、`DEPT_AND_CHILD`、`SELF` |
+| `data_scope` | `TINYINT` | 是 | 数据权限范围 | 1-本人、2-本部门、3-本部门及子部门、4-全部 |
 | `status` | `TINYINT` | 是 | 角色状态 | `1` 启用，`0` 禁用 |
 | `sort_no` | `INT` | 是 | 排序号 | 控制角色展示顺序 |
 | `create_by` | `BIGINT UNSIGNED` | 否 | 创建人 | 公共审计字段 |
@@ -849,7 +849,7 @@ CREATE TABLE `sys_menu` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `parent_id` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '父级菜单ID',
   `menu_name` VARCHAR(64) NOT NULL COMMENT '菜单名称',
-  `menu_type` VARCHAR(16) NOT NULL COMMENT '类型：DIR/MENU/BUTTON',
+  `menu_type` TINYINT NOT NULL COMMENT '菜单类型：1-目录 2-菜单 3-按钮',
   `path` VARCHAR(255) DEFAULT NULL COMMENT '路由路径',
   `component` VARCHAR(255) DEFAULT NULL COMMENT '组件路径',
   `permission` VARCHAR(128) DEFAULT NULL COMMENT '权限标识',
@@ -875,7 +875,7 @@ CREATE TABLE `sys_menu` (
 | `id` | `BIGINT UNSIGNED` | 是 | 菜单主键 | 自增主键 |
 | `parent_id` | `BIGINT UNSIGNED` | 是 | 父级菜单ID | `0` 表示顶级菜单 |
 | `menu_name` | `VARCHAR(64)` | 是 | 菜单名称 | 用于前后端统一展示 |
-| `menu_type` | `VARCHAR(16)` | 是 | 菜单类型 | `DIR`、`MENU`、`BUTTON` |
+| `menu_type` | `TINYINT` | 是 | 菜单类型 | 1-目录、2-菜单、3-按钮 |
 | `path` | `VARCHAR(255)` | 否 | 路由路径 | 目录或菜单型节点使用 |
 | `component` | `VARCHAR(255)` | 否 | 前端组件路径 | 页面菜单时需配置 |
 | `permission` | `VARCHAR(128)` | 否 | 权限标识 | 按钮与接口鉴权使用 |
@@ -1264,7 +1264,7 @@ CREATE TABLE `hr_employee` (
   `post_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '职位ID',
   `leader_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '直接汇报人员工ID',
   `employee_name` VARCHAR(64) NOT NULL COMMENT '员工姓名',
-  `gender` VARCHAR(16) DEFAULT NULL COMMENT '性别',
+  `gender` TINYINT DEFAULT NULL COMMENT '性别：1-男 2-女',
   `phone` VARCHAR(20) NOT NULL COMMENT '手机号',
   `email` VARCHAR(128) DEFAULT NULL COMMENT '邮箱',
   `id_card_no` VARCHAR(128) DEFAULT NULL COMMENT '身份证号（建议加密存储）',
@@ -1273,12 +1273,12 @@ CREATE TABLE `hr_employee` (
   `current_address` VARCHAR(255) DEFAULT NULL COMMENT '现居住地址',
   `job_level` VARCHAR(16) DEFAULT NULL COMMENT '职级',
   `work_location` VARCHAR(128) DEFAULT NULL COMMENT '工作地点',
-  `hire_type` VARCHAR(32) DEFAULT NULL COMMENT '入职类型',
-  `employment_status` VARCHAR(32) NOT NULL COMMENT '在职状态',
+  `hire_type` TINYINT DEFAULT NULL COMMENT '入职类型：1-全职 2-兼职 3-实习',
+  `employment_status` TINYINT NOT NULL COMMENT '在职状态：1-试用期 2-正式 3-待离职 4-已离职',
   `hire_date` DATE NOT NULL COMMENT '入职日期',
   `probation_month` INT DEFAULT 3 COMMENT '试用期（月）',
   `probation_salary_ratio` DECIMAL(5,2) DEFAULT 100.00 COMMENT '试用期薪资比例',
-  `contract_type` VARCHAR(32) DEFAULT NULL COMMENT '合同类型',
+  `contract_type` TINYINT DEFAULT NULL COMMENT '合同类型：1-固定期限 2-无固定期限 3-劳务合同',
   `contract_expire_date` DATE DEFAULT NULL COMMENT '合同到期日',
   `salary_template_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '薪资账套ID',
   `base_salary` DECIMAL(12,2) DEFAULT NULL COMMENT '基本工资',
@@ -1313,7 +1313,7 @@ CREATE TABLE `hr_employee` (
 | `post_id` | `BIGINT UNSIGNED` | 否 | 职位ID | 关联 `sys_post.id` |
 | `leader_id` | `BIGINT UNSIGNED` | 否 | 直接汇报人员工ID | 关联 `hr_employee.id` |
 | `employee_name` | `VARCHAR(64)` | 是 | 员工姓名 | 人事主数据核心字段 |
-| `gender` | `VARCHAR(16)` | 否 | 性别 | 建议引用 `gender` 字典 |
+| `gender` | `TINYINT` | 否 | 性别 | 1-男、2-女 |
 | `phone` | `VARCHAR(20)` | 是 | 手机号 | 全局唯一，常用于通知与登录找回 |
 | `email` | `VARCHAR(128)` | 否 | 邮箱 | 建议校验格式 |
 | `id_card_no` | `VARCHAR(128)` | 否 | 身份证号 | 敏感字段，建议加密存储 |
@@ -1322,12 +1322,12 @@ CREATE TABLE `hr_employee` (
 | `current_address` | `VARCHAR(255)` | 否 | 现居住地址 | 属于敏感个人信息 |
 | `job_level` | `VARCHAR(16)` | 否 | 职级 | 建议引用 `job_level` 字典 |
 | `work_location` | `VARCHAR(128)` | 否 | 工作地点 | 支持多办公区管理 |
-| `hire_type` | `VARCHAR(32)` | 否 | 入职类型 | 建议引用 `hire_type` 字典 |
-| `employment_status` | `VARCHAR(32)` | 是 | 在职状态 | 建议引用 `employment_status` 字典 |
+| `hire_type` | `TINYINT` | 否 | 入职类型 | 1-全职、2-兼职、3-实习 |
+| `employment_status` | `TINYINT` | 是 | 在职状态 | 1-试用期、2-正式、3-待离职、4-已离职 |
 | `hire_date` | `DATE` | 是 | 入职日期 | 人事流程关键时间节点 |
 | `probation_month` | `INT` | 否 | 试用期月数 | 默认 `3` 个月 |
 | `probation_salary_ratio` | `DECIMAL(5,2)` | 否 | 试用期薪资比例 | 例如 `80.00`、`100.00` |
-| `contract_type` | `VARCHAR(32)` | 否 | 合同类型 | 建议引用 `contract_type` 字典 |
+| `contract_type` | `TINYINT` | 否 | 合同类型 | 1-固定期限、2-无固定期限、3-劳务合同 |
 | `contract_expire_date` | `DATE` | 否 | 合同到期日 | 用于合同到期预警 |
 | `salary_template_id` | `BIGINT UNSIGNED` | 否 | 薪资账套ID | 关联薪酬模块主数据 |
 | `base_salary` | `DECIMAL(12,2)` | 否 | 基本工资 | 建议配合权限脱敏展示 |
@@ -1349,7 +1349,7 @@ CREATE TABLE `hr_employee_contract` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `employee_id` BIGINT UNSIGNED NOT NULL COMMENT '员工ID',
   `contract_no` VARCHAR(64) DEFAULT NULL COMMENT '合同编号',
-  `contract_type` VARCHAR(32) NOT NULL COMMENT '合同类型',
+  `contract_type` TINYINT NOT NULL COMMENT '合同类型：1-固定期限 2-无固定期限 3-劳务合同',
   `start_date` DATE DEFAULT NULL COMMENT '合同开始日期',
   `end_date` DATE DEFAULT NULL COMMENT '合同结束日期',
   `probation_month` INT DEFAULT NULL COMMENT '试用期（月）',
@@ -1374,7 +1374,7 @@ CREATE TABLE `hr_employee_contract` (
 | `id` | `BIGINT UNSIGNED` | 是 | 合同主键 | 自增主键 |
 | `employee_id` | `BIGINT UNSIGNED` | 是 | 员工ID | 关联 `hr_employee.id` |
 | `contract_no` | `VARCHAR(64)` | 否 | 合同编号 | 建议按业务规则生成并保持唯一 |
-| `contract_type` | `VARCHAR(32)` | 是 | 合同类型 | 建议引用 `contract_type` 字典 |
+| `contract_type` | `TINYINT` | 是 | 合同类型 | 1-固定期限、2-无固定期限、3-劳务合同 |
 | `start_date` | `DATE` | 否 | 合同开始日期 | 用于合同周期计算 |
 | `end_date` | `DATE` | 否 | 合同结束日期 | 用于到期预警 |
 | `probation_month` | `INT` | 否 | 试用期月数 | 与员工主档可保持一致 |
@@ -1456,7 +1456,7 @@ CREATE TABLE `hr_approval_instance` (
   `applicant_user_id` BIGINT UNSIGNED NOT NULL COMMENT '申请人用户ID',
   `applicant_employee_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '申请人员工ID',
   `current_node_name` VARCHAR(64) DEFAULT NULL COMMENT '当前节点名称',
-  `approval_status` VARCHAR(32) NOT NULL COMMENT '审批状态',
+  `approval_status` TINYINT NOT NULL COMMENT '审批状态：0-草稿 1-审批中 2-已通过 3-已驳回 4-已撤回',
   `apply_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '申请时间',
   `finish_time` DATETIME DEFAULT NULL COMMENT '完成时间',
   `form_json` JSON DEFAULT NULL COMMENT '表单快照',
@@ -1485,7 +1485,7 @@ CREATE TABLE `hr_approval_instance` (
 | `applicant_user_id` | `BIGINT UNSIGNED` | 是 | 申请人用户ID | 关联 `sys_user.id` |
 | `applicant_employee_id` | `BIGINT UNSIGNED` | 否 | 申请人员工ID | 关联 `hr_employee.id` |
 | `current_node_name` | `VARCHAR(64)` | 否 | 当前节点名称 | 审批中用于展示当前进度 |
-| `approval_status` | `VARCHAR(32)` | 是 | 审批状态 | 建议引用 `approval_status` 字典 |
+| `approval_status` | `TINYINT` | 是 | 审批状态 | 0-草稿、1-审批中、2-已通过、3-已驳回、4-已撤回 |
 | `apply_time` | `DATETIME` | 是 | 申请时间 | 审批发起时间 |
 | `finish_time` | `DATETIME` | 否 | 完成时间 | 审批结束时回填 |
 | `form_json` | `JSON` | 否 | 表单快照 | 保存审批发起时的业务数据快照 |
@@ -1507,8 +1507,8 @@ CREATE TABLE `hr_approval_task` (
   `node_name` VARCHAR(64) NOT NULL COMMENT '节点名称',
   `approver_user_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '审批人用户ID',
   `approver_employee_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '审批人员工ID',
-  `task_status` VARCHAR(32) NOT NULL COMMENT '任务状态',
-  `approve_result` VARCHAR(32) DEFAULT NULL COMMENT '审批结果',
+  `task_status` TINYINT NOT NULL COMMENT '任务状态：0-待处理 1-已处理 2-已转交',
+  `approve_result` TINYINT DEFAULT NULL COMMENT '审批结果：1-通过 2-驳回 3-转交',
   `approve_comment` VARCHAR(500) DEFAULT NULL COMMENT '审批意见',
   `receive_time` DATETIME DEFAULT NULL COMMENT '接收时间',
   `approve_time` DATETIME DEFAULT NULL COMMENT '审批时间',
@@ -1537,8 +1537,8 @@ CREATE TABLE `hr_approval_task` (
 | `node_name` | `VARCHAR(64)` | 是 | 节点名称 | 用于待办展示 |
 | `approver_user_id` | `BIGINT UNSIGNED` | 否 | 审批人用户ID | 关联 `sys_user.id` |
 | `approver_employee_id` | `BIGINT UNSIGNED` | 否 | 审批人员工ID | 关联 `hr_employee.id` |
-| `task_status` | `VARCHAR(32)` | 是 | 任务状态 | 如待处理、已处理、已转交 |
-| `approve_result` | `VARCHAR(32)` | 否 | 审批结果 | 如通过、驳回、撤回 |
+| `task_status` | `TINYINT` | 是 | 任务状态 | 0-待处理、1-已处理、2-已转交 |
+| `approve_result` | `TINYINT` | 否 | 审批结果 | 1-通过、2-驳回、3-转交 |
 | `approve_comment` | `VARCHAR(500)` | 否 | 审批意见 | 记录审批说明 |
 | `receive_time` | `DATETIME` | 否 | 接收时间 | 任务进入待办的时间 |
 | `approve_time` | `DATETIME` | 否 | 审批时间 | 实际处理完成时间 |
