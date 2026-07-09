@@ -1,9 +1,10 @@
 package com.hrms.common.handler;
 
-import com.hrms.common.enums.ResultCode;
-import com.hrms.common.exception.BusinessException;
-import com.hrms.common.model.Result;
-import jakarta.validation.ConstraintViolationException;
+import com.hrms.common.exception.ErrorCode;
+import com.hrms.common.exception.GlobalException;
+import com.hrms.common.web.Result;
+import org.springframework.validation.BindException;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -20,35 +21,35 @@ public class GlobalExceptionHandler {
      * @param exception 业务异常对象
      * @return 统一返回对象
      */
-    @ExceptionHandler(BusinessException.class)
-    public Result<Void> handleBusinessException(BusinessException exception) {
-        return Result.failure(exception.getResultCode(), exception.getMessage());
+    @ExceptionHandler(GlobalException.class)
+    public Result<Void> handleGlobalException(GlobalException exception) {
+        return Result.failure(exception.getErrorCode(), exception.getMessage());
     }
 
     /**
      * 处理请求体参数校验异常。
      *
-     * @param exception 参数校验异常对象
+     * @param exception 校验异常对象
      * @return 统一返回对象
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public Result<Void> handleMethodArgumentNotValidException(MethodArgumentNotValidException exception) {
-        String message = exception.getBindingResult().getFieldErrors().stream()
-            .findFirst()
-            .map(fieldError -> fieldError.getField() + fieldError.getDefaultMessage())
-            .orElse(ResultCode.PARAM_ERROR.getMessage());
-        return Result.failure(ResultCode.PARAM_ERROR, message);
+    public Result<Void> handleMethodArgumentNotValid(MethodArgumentNotValidException exception) {
+        FieldError fieldError = exception.getBindingResult().getFieldError();
+        String message = fieldError != null ? fieldError.getDefaultMessage() : ErrorCode.PARAM_INVALID.getMessage();
+        return Result.failure(ErrorCode.PARAM_INVALID, message);
     }
 
     /**
-     * 处理路径与查询参数校验异常。
+     * 处理表单参数校验异常。
      *
-     * @param exception 参数校验异常对象
+     * @param exception 校验异常对象
      * @return 统一返回对象
      */
-    @ExceptionHandler(ConstraintViolationException.class)
-    public Result<Void> handleConstraintViolationException(ConstraintViolationException exception) {
-        return Result.failure(ResultCode.PARAM_ERROR, exception.getMessage());
+    @ExceptionHandler(BindException.class)
+    public Result<Void> handleBindException(BindException exception) {
+        FieldError fieldError = exception.getBindingResult().getFieldError();
+        String message = fieldError != null ? fieldError.getDefaultMessage() : ErrorCode.PARAM_INVALID.getMessage();
+        return Result.failure(ErrorCode.PARAM_INVALID, message);
     }
 
     /**
@@ -59,6 +60,6 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(Exception.class)
     public Result<Void> handleException(Exception exception) {
-        return Result.failure(ResultCode.INTERNAL_ERROR, exception.getMessage());
+        return Result.failure(ErrorCode.INTERNAL_ERROR, ErrorCode.INTERNAL_ERROR.getMessage());
     }
 }
