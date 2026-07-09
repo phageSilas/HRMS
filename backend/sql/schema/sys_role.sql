@@ -8,7 +8,7 @@ CREATE TABLE `sys_role` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `role_name` VARCHAR(64) NOT NULL COMMENT '角色名称',
   `role_code` VARCHAR(64) NOT NULL COMMENT '角色编码',
-  `data_scope` VARCHAR(32) NOT NULL DEFAULT 'SELF' COMMENT '数据权限范围',
+  `data_scope` TINYINT NOT NULL DEFAULT 1 COMMENT '数据权限范围：1-本人 2-本部门 3-本部门及子部门 4-全部',
   `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态：1启用 0禁用',
   `sort_no` INT NOT NULL DEFAULT 0 COMMENT '排序号',
   `create_by` BIGINT UNSIGNED DEFAULT NULL COMMENT '创建人',

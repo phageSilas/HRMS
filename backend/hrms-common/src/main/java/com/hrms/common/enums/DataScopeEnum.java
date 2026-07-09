@@ -3,24 +3,24 @@ package com.hrms.common.enums;
 import com.baomidou.mybatisplus.annotation.EnumValue;
 
 /**
- * 员工在职状态。
+ * 数据权限范围。
  */
-public enum EmployeeStatusEnum implements BaseEnum {
+public enum DataScopeEnum implements BaseEnum {
 
-    /** 试用期。 */
-    PROBATION(1, "试用期"),
-    /** 正式。 */
-    FORMAL(2, "正式"),
-    /** 待离职。 */
-    PENDING_LEAVE(3, "待离职"),
-    /** 已离职。 */
-    LEFT(4, "已离职");
+    /** 本人。 */
+    SELF(1, "本人"),
+    /** 本部门。 */
+    DEPT(2, "本部门"),
+    /** 本部门及子部门。 */
+    DEPT_AND_CHILD(3, "本部门及子部门"),
+    /** 全部。 */
+    ALL(4, "全部");
 
     @EnumValue
     private final int code;
     private final String description;
 
-    EmployeeStatusEnum(int code, String description) {
+    DataScopeEnum(int code, String description) {
         this.code = code;
         this.description = description;
     }

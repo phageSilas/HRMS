@@ -4,6 +4,8 @@
 > **生效日期**：2026-07-09
 > **适用范围**：HRMS 后端开发团队
 > **文档定位**：独立执行手册，成员按此文档搭建地基并进行后续开发
+> > **冲突处理说明**：当 `01-HRMS全局开发规范` 与 `02-HRMS全局地基搭建规范` 存在冲突时，
+> **以02规范为准**。
 
 ---
 
@@ -185,21 +187,40 @@ if (employee == null) {
 
 **位置**：`com.hrms.common.enums`
 
-所有枚举均实现 `BaseEnum` 接口。
+所有枚举均实现 `BaseEnum` 接口，使用数字编码（对应数据库 TINYINT 类型）。
 
 **已有枚举**：
 
 | 枚举类 | 说明 | 编码值 |
 |--------|------|--------|
-| `EmployeeStatusEnum` | 员工状态 | 1-试用期, 2-正式, 3-待离职, 4-已离职 |
-| `GenderEnum` | 性别 | 1-男, 2-女 |
-| `HireTypeEnum` | 入职类型 | 1-全职, 2-兼职, 3-实习 |
-| `ContractTypeEnum` | 合同类型 | 1-固定期限, 2-无固定期限, 3-劳务合同 |
+| `EmployeeStatusEnum` | 员工状态 | 1-试用期(PROBATION), 2-正式(FORMAL), 3-待离职(PENDING_LEAVE), 4-已离职(LEFT) |
+| `GenderEnum` | 性别 | 1-男(MALE), 2-女(FEMALE) |
+| `HireTypeEnum` | 入职类型 | 1-全职(FULL_TIME), 2-兼职(PART_TIME), 3-实习(INTERN) |
+| `ContractTypeEnum` | 合同类型 | 1-固定期限(FIXED_TERM), 2-无固定期限(NON_FIXED_TERM), 3-劳务合同(LABOR) |
 | `LeaveTypeEnum` | 请假类型 | 1-年假, 2-病假, 3-事假, 4-婚假, 5-产假, 6-丧假, 7-调休 |
-| `ApprovalStatusEnum` | 审批状态 | 0-草稿, 1-审批中, 2-已通过, 3-已驳回, 4-已撤回 |
+| `ApprovalStatusEnum` | 审批状态 | 0-草稿(DRAFT), 1-审批中(APPROVING), 2-已通过(APPROVED), 3-已驳回(REJECTED), 4-已撤回(WITHDRAWN) |
+| `TaskStatusEnum` | 审批任务状态 | 0-待处理(PENDING), 1-已处理(PROCESSED), 2-已转交(TRANSFERRED) |
+| `ApproveResultEnum` | 审批结果 | 1-通过(APPROVED), 2-驳回(REJECTED), 3-转交(TRANSFERRED) |
+| `DataScopeEnum` | 数据权限范围 | 1-本人(SELF), 2-本部门(DEPT), 3-本部门及子部门(DEPT_AND_CHILD), 4-全部(ALL) |
+| `MenuTypeEnum` | 菜单类型 | 1-目录(DIR), 2-菜单(MENU), 3-按钮(BUTTON) |
 | `SalaryBatchStatusEnum` | 薪资批次状态 | 0-草稿, 1-计算中, 2-待确认, 3-已通过, 4-已发放, 5-已驳回 |
 | `AttendanceStatusEnum` | 考勤状态 | 0-正常, 1-迟到, 2-早退, 3-旷工, 4-缺卡, 5-请假 |
 | `BizTypeEnum` | 审批业务类型 | 字符串编码：ONBOARDING, TRANSFER, DIMISSION, LEAVE, ATTENDANCE_RECTIFY, SALARY_APPROVAL |
+
+**数据库字段类型约定**：
+
+所有使用数字编码枚举的数据库字段，必须定义为 `TINYINT` 类型，而非 `VARCHAR`。
+
+| 表名 | 字段 | 数据库类型 | 对应枚举 |
+|------|------|------------|----------|
+| `hr_employee` | `employment_status` | TINYINT | EmployeeStatusEnum |
+| `hr_employee` | `gender` | TINYINT | GenderEnum |
+| `hr_employee` | `hire_type` | TINYINT | HireTypeEnum |
+| `hr_employee` | `contract_type` | TINYINT | ContractTypeEnum |
+| `hr_approval_instance` | `approval_status` | TINYINT | ApprovalStatusEnum |
+| `hr_approval_task` | `task_status` | TINYINT | TaskStatusEnum |
+| `hr_approval_task` | `approve_result` | TINYINT | ApproveResultEnum |
+| `sys_role` | `data_scope` | TINYINT | DataScopeEnum |
 
 ### 3.5 使用示例
 
