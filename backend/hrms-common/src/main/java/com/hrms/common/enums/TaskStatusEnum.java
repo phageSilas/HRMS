@@ -3,24 +3,22 @@ package com.hrms.common.enums;
 import com.baomidou.mybatisplus.annotation.EnumValue;
 
 /**
- * 员工在职状态。
+ * 审批任务状态。
  */
-public enum EmployeeStatusEnum implements BaseEnum {
+public enum TaskStatusEnum implements BaseEnum {
 
-    /** 试用期。 */
-    PROBATION(1, "试用期"),
-    /** 正式。 */
-    FORMAL(2, "正式"),
-    /** 待离职。 */
-    PENDING_LEAVE(3, "待离职"),
-    /** 已离职。 */
-    LEFT(4, "已离职");
+    /** 待处理。 */
+    PENDING(0, "待处理"),
+    /** 已处理。 */
+    PROCESSED(1, "已处理"),
+    /** 已转交。 */
+    TRANSFERRED(2, "已转交");
 
     @EnumValue
     private final int code;
     private final String description;
 
-    EmployeeStatusEnum(int code, String description) {
+    TaskStatusEnum(int code, String description) {
         this.code = code;
         this.description = description;
     }

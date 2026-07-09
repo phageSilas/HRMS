@@ -16,7 +16,7 @@ CREATE TABLE `hr_approval_instance` (
   `applicant_user_id` BIGINT UNSIGNED NOT NULL COMMENT '申请人用户ID',
   `applicant_employee_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '申请人员工ID',
   `current_node_name` VARCHAR(64) DEFAULT NULL COMMENT '当前节点名称',
-  `approval_status` VARCHAR(32) NOT NULL COMMENT '审批状态',
+  `approval_status` TINYINT NOT NULL COMMENT '审批状态：0-草稿 1-审批中 2-已通过 3-已驳回 4-已撤回',
   `apply_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '申请时间',
   `finish_time` DATETIME DEFAULT NULL COMMENT '完成时间',
   `form_json` JSON DEFAULT NULL COMMENT '表单快照',
