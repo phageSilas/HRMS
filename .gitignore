@@ -222,6 +222,17 @@ secrets.json
 application-secret.yml
 application-secret.properties
 
+# Environment files (contain secrets)
+.env
+.env.local
+.env.*.local
+
+# SSL certificates
+ssl/
+*.p12
+*.jks
+*.keystore
+
 # ==================== Documentation ====================
 # Build outputs that shouldn't be committed
 docs/_build/

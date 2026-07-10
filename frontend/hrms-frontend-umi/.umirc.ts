@@ -10,7 +10,7 @@ export default defineConfig({
     title: 'HRMS 人资管理系统',
   },
   // Mock 配置（开发环境自动加载）
-  mock: {},
+  // mock: {},  // 已切换到真实后端（2026-07-10）
   // 代理配置（后端集成时使用）
   proxy: {
     '/auth': {

@@ -20,7 +20,7 @@ INSERT INTO `sys_role` (`id`, `role_name`, `role_code`, `data_scope`, `status`, 
 -- 密码: admin123 (实际项目中应使用加密后的密码)
 -- ========================================
 INSERT INTO `sys_user` (`id`, `username`, `password`, `nickname`, `real_name`, `phone`, `email`, `status`, `need_change_password`, `remark`) VALUES
-(1, 'admin', '$2a$10$N.zmdr9k7uOCQb3ZQMKT.eX7mI9v0g6nLXB4Z5z0a8Yv0g6nLXB4Z', '超级管理员', '系统管理员', '13800138000', 'admin@hrms.com', 1, 1, '系统默认管理员账号');
+(1, 'admin', '$2a$10$dXJ3SW6G7P50lGmMkkmwe.20cQQubK3.HZWzG3YB1tlRy.fqvM/BG', '超级管理员', '系统管理员', '13800138000', 'admin@hrms.com', 1, 1, '系统默认管理员账号');
 
 -- ========================================
 -- 用户角色关联

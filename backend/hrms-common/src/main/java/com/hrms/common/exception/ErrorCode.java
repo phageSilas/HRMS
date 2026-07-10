@@ -30,11 +30,19 @@ public enum ErrorCode {
     PARAM_MISSING(40001, "参数缺失"),
     /** 参数格式错误。 */
     PARAM_INVALID(40002, "参数格式错误"),
+    /** 参数错误。 */
+    PARAM_ERROR(40003, "参数错误"),
 
     /** 未登录。 */
     UNAUTHORIZED(40100, "未登录"),
     /** 无权限。 */
     FORBIDDEN(40101, "无权限"),
+    /** 认证错误。 */
+    AUTH_ERROR(40102, "认证错误"),
+    /** Token 无效。 */
+    TOKEN_INVALID(40103, "Token 无效"),
+    /** Token 已过期。 */
+    TOKEN_EXPIRED(40104, "Token 已过期"),
 
     /** 数据库异常。 */
     DB_ERROR(50001, "数据库异常"),
