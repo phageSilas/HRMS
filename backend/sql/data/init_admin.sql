@@ -6,20 +6,21 @@
 
 -- ========================================
 -- 角色数据
+-- data_scope: 1-本人 2-本部门 3-本部门及子部门 4-全部
 -- ========================================
 INSERT INTO `sys_role` (`id`, `role_name`, `role_code`, `data_scope`, `status`, `sort_no`, `remark`) VALUES
-(1, '系统管理员', 'ADMIN', 'ALL', 1, 1, '系统最高权限管理员'),
-(2, 'HR专员', 'HR', 'ALL', 1, 2, '人力资源专员'),
-(3, '部门主管', 'MANAGER', 'DEPT_AND_CHILD', 1, 3, '部门主管'),
-(4, '普通员工', 'EMPLOYEE', 'SELF', 1, 4, '普通员工'),
-(5, '财务专员', 'FINANCE', 'SELF', 1, 5, '财务专员');
+(1, '系统管理员', 'ADMIN', 4, 1, 1, '系统最高权限管理员'),
+(2, 'HR专员', 'HR', 4, 1, 2, '人力资源专员'),
+(3, '部门主管', 'MANAGER', 3, 1, 3, '部门主管'),
+(4, '普通员工', 'EMPLOYEE', 1, 1, 4, '普通员工'),
+(5, '财务专员', 'FINANCE', 1, 1, 5, '财务专员');
 
 -- ========================================
 -- 管理员用户
 -- 密码: admin123 (实际项目中应使用加密后的密码)
 -- ========================================
 INSERT INTO `sys_user` (`id`, `username`, `password`, `nickname`, `real_name`, `phone`, `email`, `status`, `need_change_password`, `remark`) VALUES
-(1, 'admin', '$2a$10$N.zmdr9k7uOCQb3ZQMKT.eX7mI9v0g6nLXB4Z5z0a8Yv0g6nLXB4Z', '超级管理员', '系统管理员', '13800138000', 'admin@hrms.com', 1, 1, '系统默认管理员账号');
+(1, 'admin', '$2a$10$dXJ3SW6G7P50lGmMkkmwe.20cQQubK3.HZWzG3YB1tlRy.fqvM/BG', '超级管理员', '系统管理员', '13800138000', 'admin@hrms.com', 1, 1, '系统默认管理员账号');
 
 -- ========================================
 -- 用户角色关联

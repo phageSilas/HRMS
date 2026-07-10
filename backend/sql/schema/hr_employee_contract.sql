@@ -9,7 +9,7 @@ CREATE TABLE `hr_employee_contract` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `employee_id` BIGINT UNSIGNED NOT NULL COMMENT '员工ID',
   `contract_no` VARCHAR(64) DEFAULT NULL COMMENT '合同编号',
-  `contract_type` VARCHAR(32) NOT NULL COMMENT '合同类型',
+  `contract_type` TINYINT NOT NULL COMMENT '合同类型：1-固定期限 2-无固定期限 3-劳务合同',
   `start_date` DATE DEFAULT NULL COMMENT '合同开始日期',
   `end_date` DATE DEFAULT NULL COMMENT '合同结束日期',
   `probation_month` INT DEFAULT NULL COMMENT '试用期（月）',
