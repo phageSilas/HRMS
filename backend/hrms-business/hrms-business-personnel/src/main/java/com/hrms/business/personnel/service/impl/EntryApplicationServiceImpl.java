@@ -4,11 +4,15 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hrms.business.personnel.convert.EntryApplicationConvert;
+import com.hrms.business.personnel.dto.EntryApplicationCreateOrUpdateRequestDTO;
 import com.hrms.business.personnel.dto.EntryApplicationQueryDTO;
 import com.hrms.business.personnel.entity.EntryApplicationEntity;
+import com.hrms.business.personnel.enums.ApplicationStatusEnum;
 import com.hrms.business.personnel.mapper.EntryApplicationMapper;
 import com.hrms.business.personnel.service.EntryApplicationService;
 import com.hrms.business.personnel.vo.EntryApplicationPageVO;
+import com.hrms.common.exception.ErrorCode;
+import com.hrms.common.exception.GlobalException;
 import com.hrms.common.web.PageResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -23,6 +27,8 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class EntryApplicationServiceImpl implements EntryApplicationService {
+
+    private static final ErrorCode ENTRY_APPLICATION_PHONE_DUPLICATE = new ErrorCode(40045, "手机号已存在入职申请");
 
     private static final int DEFAULT_PAGE_NUM = 1;
 
@@ -44,6 +50,30 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
                 .map(EntryApplicationConvert::toPageVO)
                 .toList();
         return PageResult.of(records, page.getTotal(), pageNum, pageSize);
+    }
+
+    @Override
+    public EntryApplicationPageVO createEntryApplication(EntryApplicationCreateOrUpdateRequestDTO requestDTO) {
+        checkPhoneAvailable(requestDTO.getPhone(), null);
+        EntryApplicationEntity entity = EntryApplicationConvert.toEntity(requestDTO);
+        entity.setApprovalStatus(ApplicationStatusEnum.DRAFT.getCode());
+        entryApplicationMapper.insert(entity);
+        return EntryApplicationConvert.toPageVO(entity);
+    }
+
+    /**
+     * 校验入职申请手机号是否可用。
+     *
+     * @param phone 手机号
+     * @param excludeId 排除的入职申请ID
+     */
+    private void checkPhoneAvailable(String phone, Long excludeId) {
+        Long count = entryApplicationMapper.selectCount(new LambdaQueryWrapper<EntryApplicationEntity>()
+                .eq(EntryApplicationEntity::getPhone, phone)
+                .ne(excludeId != null, EntryApplicationEntity::getId, excludeId));
+        if (count != null && count > 0) {
+            throw new GlobalException(ENTRY_APPLICATION_PHONE_DUPLICATE);
+        }
     }
 
     /**
