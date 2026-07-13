@@ -5,12 +5,14 @@ import cn.hutool.core.util.IdUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hrms.business.personnel.convert.EntryApplicationConvert;
+import com.hrms.business.personnel.dto.EntryApplicationConfirmRequestDTO;
 import com.hrms.business.personnel.dto.EntryApplicationCreateOrUpdateRequestDTO;
 import com.hrms.business.personnel.dto.EntryApplicationQueryDTO;
 import com.hrms.business.personnel.entity.EntryApplicationEntity;
 import com.hrms.business.personnel.enums.ApplicationStatusEnum;
 import com.hrms.business.personnel.mapper.EntryApplicationMapper;
 import com.hrms.business.personnel.service.EntryApplicationService;
+import com.hrms.business.personnel.vo.EntryApplicationConfirmVO;
 import com.hrms.business.personnel.vo.EntryApplicationPageVO;
 import com.hrms.business.personnel.vo.EntryApplicationSubmitVO;
 import com.hrms.common.exception.ErrorCode;
@@ -23,6 +25,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 入职申请服务实现
@@ -36,6 +40,10 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
     private static final ErrorCode ENTRY_APPLICATION_NOT_FOUND = new ErrorCode(40041, "入职申请不存在");
 
     private static final ErrorCode ENTRY_APPLICATION_NOT_DRAFT = new ErrorCode(40042, "非草稿状态无法修改");
+
+    private static final ErrorCode ENTRY_APPLICATION_NOT_APPROVED = new ErrorCode(40044, "审批未通过，无法确认入职");
+
+    private static final Map<Long, Object> ENTRY_CONFIRM_LOCKS = new ConcurrentHashMap<>();
 
     private static final int DEFAULT_PAGE_NUM = 1;
 
@@ -104,6 +112,112 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         return IdUtil.getSnowflakeNextId();
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public EntryApplicationConfirmVO confirmEntryApplication(Long id, EntryApplicationConfirmRequestDTO requestDTO) {
+        EntryApplicationEntity entity = getRequiredEntryApplication(id);
+        if (entity.getApprovalStatus() != null && entity.getApprovalStatus() == ApplicationStatusEnum.ENTERED.getCode()) {
+            return tempBuildConfirmedEmployee(entity);
+        }
+        Object confirmLock = getEntryConfirmLock(id);
+        synchronized (confirmLock) {
+            EntryApplicationEntity lockedEntity = getRequiredEntryApplication(id);
+            if (lockedEntity.getApprovalStatus() != null
+                    && lockedEntity.getApprovalStatus() == ApplicationStatusEnum.ENTERED.getCode()) {
+                return tempBuildConfirmedEmployee(lockedEntity);
+            }
+            assertApproved(lockedEntity);
+            // employeeService.generateEmployeeNo(lockedEntity); 本接口需要调用 hrms-business-employee 模块的生成员工工号接口
+            String employeeNo = tempGenerateEmployeeNo(lockedEntity);
+            // authService.createEntryAccount(lockedEntity.getPhone(), employeeNo); 本接口需要调用 hrms-system-auth 模块的创建入职账号接口
+            tempCreateEntryAccount(lockedEntity, employeeNo);
+            // employeeService.createEmployee(lockedEntity, employeeNo); 本接口需要调用 hrms-business-employee 模块的创建员工档案接口
+            Long employeeId = tempCreateEmployee(lockedEntity, employeeNo);
+            lockedEntity.setActualHireDate(requestDTO.getActualHireDate());
+            lockedEntity.setApprovalStatus(ApplicationStatusEnum.ENTERED.getCode());
+            entryApplicationMapper.updateById(lockedEntity);
+            // entryConfirmedProducer.send(event); 本接口需要调用通知/MQ模块发送 personnel.entry.confirmed 事件和欢迎通知
+            tempSendEntryConfirmedNotice(lockedEntity, employeeId, employeeNo);
+            return buildConfirmVO(employeeId, employeeNo);
+        }
+    }
+
+    /**
+     * 获取入职确认本地锁。
+     *
+     * @param id 入职申请ID
+     * @return 本地锁对象
+     */
+    private Object getEntryConfirmLock(Long id) {
+        return ENTRY_CONFIRM_LOCKS.computeIfAbsent(id, key -> new Object());
+    }
+
+    /**
+     * 临时构造已确认入职的员工信息。
+     *
+     * @param entity 入职申请实体
+     * @return 入职确认结果
+     */
+    private EntryApplicationConfirmVO tempBuildConfirmedEmployee(EntryApplicationEntity entity) {
+        return buildConfirmVO(entity.getId(), tempGenerateEmployeeNo(entity));
+    }
+
+    /**
+     * 临时生成员工工号。
+     *
+     * @param entity 入职申请实体
+     * @return 员工工号
+     */
+    private String tempGenerateEmployeeNo(EntryApplicationEntity entity) {
+        return String.format("EMP%06d", entity.getId());
+    }
+
+    /**
+     * 临时创建入职账号。
+     *
+     * @param entity 入职申请实体
+     * @param employeeNo 员工工号
+     */
+    private void tempCreateEntryAccount(EntryApplicationEntity entity, String employeeNo) {
+        // 临时空实现，等待 hrms-system-auth 提供账号创建接口后替换。
+    }
+
+    /**
+     * 临时创建员工档案。
+     *
+     * @param entity 入职申请实体
+     * @param employeeNo 员工工号
+     * @return 员工ID
+     */
+    private Long tempCreateEmployee(EntryApplicationEntity entity, String employeeNo) {
+        return entity.getId();
+    }
+
+    /**
+     * 临时发送入职确认通知。
+     *
+     * @param entity 入职申请实体
+     * @param employeeId 员工ID
+     * @param employeeNo 员工工号
+     */
+    private void tempSendEntryConfirmedNotice(EntryApplicationEntity entity, Long employeeId, String employeeNo) {
+        // 临时空实现，等待通知模块或 RabbitMQ 事件生产者提供后替换。
+    }
+
+    /**
+     * 构造入职确认结果。
+     *
+     * @param employeeId 员工ID
+     * @param employeeNo 员工工号
+     * @return 入职确认结果
+     */
+    private EntryApplicationConfirmVO buildConfirmVO(Long employeeId, String employeeNo) {
+        EntryApplicationConfirmVO confirmVO = new EntryApplicationConfirmVO();
+        confirmVO.setEmployeeId(employeeId);
+        confirmVO.setEmployeeNo(employeeNo);
+        return confirmVO;
+    }
+
     /**
      * 查询必定存在的入职申请。
      *
@@ -126,6 +240,17 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
     private void assertDraft(EntryApplicationEntity entity) {
         if (entity.getApprovalStatus() == null || entity.getApprovalStatus() != ApplicationStatusEnum.DRAFT.getCode()) {
             throw new GlobalException(ENTRY_APPLICATION_NOT_DRAFT);
+        }
+    }
+
+    /**
+     * 校验入职申请审批是否已通过。
+     *
+     * @param entity 入职申请实体
+     */
+    private void assertApproved(EntryApplicationEntity entity) {
+        if (entity.getApprovalStatus() == null || entity.getApprovalStatus() != ApplicationStatusEnum.APPROVED.getCode()) {
+            throw new GlobalException(ENTRY_APPLICATION_NOT_APPROVED);
         }
     }
 
