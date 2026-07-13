@@ -3,7 +3,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 public class PasswordGen {
     public static void main(String[] args) {
         BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
-        String password = "admin123";
+        String password = "123456";
         String hash = encoder.encode(password);
         System.out.println("=====================================");
         System.out.println("Password: " + password);
