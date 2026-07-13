@@ -1,38 +1,29 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.hrms</groupId>
+    <artifactId>hrms-business</artifactId>
+    <version>1.0.0</version>
 
     <parent>
         <groupId>com.hrms</groupId>
-        <artifactId>backend</artifactId>
-        <version>0.0.1-SNAPSHOT</version>
+        <artifactId>hrms-parent</artifactId>
+        <version>1.0.0</version>
     </parent>
 
-    <artifactId>hrms-business</artifactId>
-    <name>hrms-business</name>
-    <description>HRMS business domain module</description>
+    <packaging>pom</packaging>
 
-    <dependencies>
-        <dependency>
-            <groupId>com.hrms</groupId>
-            <artifactId>hrms-common</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.hrms</groupId>
-            <artifactId>hrms-system</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <optional>true</optional>
-        </dependency>
-    </dependencies>
+    <modules>
+        <module>hrms-business-employee</module>
+        <module>hrms-business-personnel</module>
+        <module>hrms-business-attendance</module>
+        <module>hrms-business-salary</module>
+        <module>hrms-business-approval</module>
+        <module>hrms-business-mycenter</module>
+        <module>hrms-business-ai</module>
+    </modules>
+
 </project>

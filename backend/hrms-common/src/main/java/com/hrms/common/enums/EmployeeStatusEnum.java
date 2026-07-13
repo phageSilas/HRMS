@@ -1,37 +1,50 @@
 package com.hrms.common.enums;
 
-import com.baomidou.mybatisplus.annotation.EnumValue;
+import lombok.Getter;
 
 /**
- * 员工在职状态。
+ * 员工状态枚举
  */
+@Getter
 public enum EmployeeStatusEnum implements BaseEnum {
 
-    /** 试用期。 */
+    /**
+     * 试用期
+     */
     PROBATION(1, "试用期"),
-    /** 正式。 */
+
+    /**
+     * 正式
+     */
     FORMAL(2, "正式"),
-    /** 待离职。 */
-    PENDING_LEAVE(3, "待离职"),
-    /** 已离职。 */
-    LEFT(4, "已离职");
 
-    @EnumValue
+    /**
+     * 离职
+     */
+    RESIGNED(3, "离职");
+
     private final int code;
-    private final String description;
 
-    EmployeeStatusEnum(int code, String description) {
+    private final String desc;
+
+    EmployeeStatusEnum(int code, String desc) {
         this.code = code;
-        this.description = description;
+        this.desc = desc;
     }
 
-    @Override
-    public Integer getCode() {
-        return code;
+    /**
+     * 根据编码获取枚举
+     *
+     * @param code 编码
+     * @return 枚举
+     */
+    public static EmployeeStatusEnum fromCode(int code) {
+        for (EmployeeStatusEnum status : values()) {
+            if (status.getCode() == code) {
+                return status;
+            }
+        }
+        return PROBATION;
     }
 
-    @Override
-    public String getDescription() {
-        return description;
-    }
 }
