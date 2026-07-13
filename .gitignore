@@ -273,3 +273,8 @@ openspec/
 !pom.xml
 !package.json
 !pnpm-lock.yaml
+
+docs/
+AGENTS.md
+CodeMap.md
+backend/.mvn/
