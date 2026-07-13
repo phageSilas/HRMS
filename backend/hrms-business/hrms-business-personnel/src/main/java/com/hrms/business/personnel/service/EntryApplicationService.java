@@ -1,7 +1,9 @@
 package com.hrms.business.personnel.service;
 
+import com.hrms.business.personnel.dto.EntryApplicationConfirmRequestDTO;
 import com.hrms.business.personnel.dto.EntryApplicationQueryDTO;
 import com.hrms.business.personnel.dto.EntryApplicationCreateOrUpdateRequestDTO;
+import com.hrms.business.personnel.vo.EntryApplicationConfirmVO;
 import com.hrms.business.personnel.vo.EntryApplicationPageVO;
 import com.hrms.business.personnel.vo.EntryApplicationSubmitVO;
 import com.hrms.common.web.PageResult;
@@ -42,5 +44,14 @@ public interface EntryApplicationService {
      * @return 提交审批结果
      */
     EntryApplicationSubmitVO submitEntryApplication(Long id);
+
+    /**
+     * 确认入职并触发员工档案创建。
+     *
+     * @param id 入职申请ID
+     * @param requestDTO 入职确认参数
+     * @return 入职确认结果
+     */
+    EntryApplicationConfirmVO confirmEntryApplication(Long id, EntryApplicationConfirmRequestDTO requestDTO);
 
 }

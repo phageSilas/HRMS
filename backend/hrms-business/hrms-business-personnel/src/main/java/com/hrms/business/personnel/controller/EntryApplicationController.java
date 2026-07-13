@@ -1,8 +1,10 @@
 package com.hrms.business.personnel.controller;
 
+import com.hrms.business.personnel.dto.EntryApplicationConfirmRequestDTO;
 import com.hrms.business.personnel.dto.EntryApplicationCreateOrUpdateRequestDTO;
 import com.hrms.business.personnel.dto.EntryApplicationQueryDTO;
 import com.hrms.business.personnel.service.EntryApplicationService;
+import com.hrms.business.personnel.vo.EntryApplicationConfirmVO;
 import com.hrms.business.personnel.vo.EntryApplicationPageVO;
 import com.hrms.business.personnel.vo.EntryApplicationSubmitVO;
 import com.hrms.common.web.PageResult;
@@ -80,6 +82,20 @@ public class EntryApplicationController {
     @Operation(summary = "提交入职审批")
     public Result<EntryApplicationSubmitVO> submitEntryApplication(@PathVariable Long id) {
         return Result.success(entryApplicationService.submitEntryApplication(id));
+    }
+
+    /**
+     * 确认入职并触发员工档案创建。
+     *
+     * @param id 入职申请ID
+     * @param requestDTO 入职确认参数
+     * @return 入职确认结果
+     */
+    @PostMapping("/{id}/confirm")
+    @Operation(summary = "确认入职")
+    public Result<EntryApplicationConfirmVO> confirmEntryApplication(@PathVariable Long id,
+                                                                    @Valid @RequestBody EntryApplicationConfirmRequestDTO requestDTO) {
+        return Result.success(entryApplicationService.confirmEntryApplication(id, requestDTO));
     }
 
 }
