@@ -1,5 +1,6 @@
 package com.hrms.business.personnel.controller;
 
+import com.hrms.business.personnel.dto.EntryApplicationCreateOrUpdateRequestDTO;
 import com.hrms.business.personnel.dto.EntryApplicationQueryDTO;
 import com.hrms.business.personnel.service.EntryApplicationService;
 import com.hrms.business.personnel.vo.EntryApplicationPageVO;
@@ -7,8 +8,11 @@ import com.hrms.common.web.PageResult;
 import com.hrms.common.web.Result;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -33,6 +37,19 @@ public class EntryApplicationController {
     @Operation(summary = "入职申请列表")
     public Result<PageResult<EntryApplicationPageVO>> pageEntryApplications(EntryApplicationQueryDTO queryDTO) {
         return Result.success(entryApplicationService.pageEntryApplications(queryDTO));
+    }
+
+    /**
+     * 创建入职申请草稿。
+     *
+     * @param requestDTO 入职申请创建参数
+     * @return 入职申请记录
+     */
+    @PostMapping
+    @Operation(summary = "创建入职申请")
+    public Result<EntryApplicationPageVO> createEntryApplication(
+            @Valid @RequestBody EntryApplicationCreateOrUpdateRequestDTO requestDTO) {
+        return Result.success(entryApplicationService.createEntryApplication(requestDTO));
     }
 
 }

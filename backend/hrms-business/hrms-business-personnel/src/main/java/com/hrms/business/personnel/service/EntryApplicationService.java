@@ -1,6 +1,7 @@
 package com.hrms.business.personnel.service;
 
 import com.hrms.business.personnel.dto.EntryApplicationQueryDTO;
+import com.hrms.business.personnel.dto.EntryApplicationCreateOrUpdateRequestDTO;
 import com.hrms.business.personnel.vo.EntryApplicationPageVO;
 import com.hrms.common.web.PageResult;
 
@@ -16,5 +17,13 @@ public interface EntryApplicationService {
      * @return 入职申请分页结果
      */
     PageResult<EntryApplicationPageVO> pageEntryApplications(EntryApplicationQueryDTO queryDTO);
+
+    /**
+     * 创建入职申请草稿。
+     *
+     * @param requestDTO 入职申请创建参数
+     * @return 入职申请分页 VO
+     */
+    EntryApplicationPageVO createEntryApplication(EntryApplicationCreateOrUpdateRequestDTO requestDTO);
 
 }
