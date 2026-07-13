@@ -4,6 +4,7 @@ import com.hrms.business.personnel.dto.EntryApplicationCreateOrUpdateRequestDTO;
 import com.hrms.business.personnel.dto.EntryApplicationQueryDTO;
 import com.hrms.business.personnel.service.EntryApplicationService;
 import com.hrms.business.personnel.vo.EntryApplicationPageVO;
+import com.hrms.business.personnel.vo.EntryApplicationSubmitVO;
 import com.hrms.common.web.PageResult;
 import com.hrms.common.web.Result;
 import io.swagger.v3.oas.annotations.Operation;
@@ -67,6 +68,18 @@ public class EntryApplicationController {
                                                @Valid @RequestBody EntryApplicationCreateOrUpdateRequestDTO requestDTO) {
         entryApplicationService.updateEntryApplication(id, requestDTO);
         return Result.success();
+    }
+
+    /**
+     * 提交入职申请审批。
+     *
+     * @param id 入职申请ID
+     * @return 提交审批结果
+     */
+    @PostMapping("/{id}/submit")
+    @Operation(summary = "提交入职审批")
+    public Result<EntryApplicationSubmitVO> submitEntryApplication(@PathVariable Long id) {
+        return Result.success(entryApplicationService.submitEntryApplication(id));
     }
 
 }
