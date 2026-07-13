@@ -26,4 +26,12 @@ public interface EntryApplicationService {
      */
     EntryApplicationPageVO createEntryApplication(EntryApplicationCreateOrUpdateRequestDTO requestDTO);
 
+    /**
+     * 更新入职申请草稿。
+     *
+     * @param id 入职申请ID
+     * @param requestDTO 入职申请更新参数
+     */
+    void updateEntryApplication(Long id, EntryApplicationCreateOrUpdateRequestDTO requestDTO);
+
 }
