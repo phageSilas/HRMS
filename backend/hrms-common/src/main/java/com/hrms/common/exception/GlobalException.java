@@ -1,17 +1,24 @@
 package com.hrms.common.exception;
 
-/**
- * 系统全局业务异常。
- *
- * <p>业务层抛出该异常时携带 {@link ErrorCode}，由
- * {@link com.hrms.common.handler.GlobalExceptionHandler} 统一转换为响应体。</p>
- */
-public class GlobalException extends RuntimeException {
+import lombok.Data;
 
+import java.io.Serializable;
+
+/**
+ * 全局业务异常
+ */
+@Data
+public class GlobalException extends RuntimeException implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+
+    /**
+     * 错误码
+     */
     private final ErrorCode errorCode;
 
     /**
-     * 创建全局异常，使用错误码自带描述。
+     * 构造函数
      *
      * @param errorCode 错误码
      */
@@ -21,10 +28,10 @@ public class GlobalException extends RuntimeException {
     }
 
     /**
-     * 创建全局异常，覆盖错误码描述。
+     * 构造函数
      *
      * @param errorCode 错误码
-     * @param message 异常消息
+     * @param message   自定义消息
      */
     public GlobalException(ErrorCode errorCode, String message) {
         super(message);
@@ -32,23 +39,18 @@ public class GlobalException extends RuntimeException {
     }
 
     /**
-     * 创建全局异常并携带原因。
+     * 构造函数
      *
      * @param errorCode 错误码
-     * @param message 异常消息
-     * @param cause 原始异常
+     * @param cause     原始异常
      */
-    public GlobalException(ErrorCode errorCode, String message, Throwable cause) {
-        super(message, cause);
+    public GlobalException(ErrorCode errorCode, Throwable cause) {
+        super(message(errorCode.getMessage(), cause), cause);
         this.errorCode = errorCode;
     }
 
-    /**
-     * 获取异常错误码。
-     *
-     * @return 错误码
-     */
-    public ErrorCode getErrorCode() {
-        return errorCode;
+    private static String message(String customMessage, Throwable cause) {
+        return customMessage != null ? customMessage : cause.getMessage();
     }
+
 }

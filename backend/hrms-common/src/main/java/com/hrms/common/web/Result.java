@@ -1,124 +1,97 @@
 package com.hrms.common.web;
 
-import com.hrms.common.exception.ErrorCode;
+import lombok.Data;
+
+import java.io.Serializable;
 
 /**
- * 系统统一接口返回结构。
+ * 统一返回体
  *
- * <p>遵循全局技术底座契约：{@code code} 为 0 表示成功，非 0 表示异常。</p>
- *
- * @param <T> 返回数据类型
+ * @param <T> 数据类型
  */
-public class Result<T> {
+@Data
+public class Result<T> implements Serializable {
 
-    /** 成功状态码。 */
-    public static final int CODE_SUCCESS = 0;
-
-    private final int code;
-    private final String message;
-    private final T data;
+    private static final long serialVersionUID = 1L;
 
     /**
-     * 创建统一返回对象。
-     *
-     * @param code 响应状态码
-     * @param message 响应消息
-     * @param data 响应数据
+     * 成功码
      */
-    private Result(int code, String message, T data) {
+    public static final int SUCCESS_CODE = 20000;
+
+    /**
+     * 错误码
+     */
+    private int code;
+
+    /**
+     * 消息
+     */
+    private String message;
+
+    /**
+     * 数据
+     */
+    private T data;
+
+    /**
+     * 时间戳
+     */
+    private long timestamp;
+
+    public Result() {
+        this.timestamp = System.currentTimeMillis();
+    }
+
+    public Result(int code, String message, T data) {
         this.code = code;
         this.message = message;
         this.data = data;
+        this.timestamp = System.currentTimeMillis();
     }
 
     /**
-     * 构建成功响应且返回数据。
+     * 成功返回
      *
-     * @param data 响应数据
-     * @param <T> 数据类型
-     * @return 统一返回对象
+     * @param data 数据
+     * @param <T>  数据类型
+     * @return Result
      */
     public static <T> Result<T> success(T data) {
-        return new Result<>(CODE_SUCCESS, ErrorCode.SUCCESS.getMessage(), data);
+        return new Result<>(SUCCESS_CODE, "success", data);
     }
 
     /**
-     * 构建成功响应且不返回业务数据。
+     * 成功返回（无数据）
      *
-     * @return 统一返回对象
-     */
-    public static Result<Void> success() {
-        return new Result<>(CODE_SUCCESS, ErrorCode.SUCCESS.getMessage(), null);
-    }
-
-    /**
-     * 构建失败响应，使用错误码自带描述。
-     *
-     * @param errorCode 错误码
      * @param <T> 数据类型
-     * @return 统一返回对象
+     * @return Result
      */
-    public static <T> Result<T> failure(ErrorCode errorCode) {
-        return new Result<>(errorCode.getCode(), errorCode.getMessage(), null);
+    public static <T> Result<T> success() {
+        return new Result<>(SUCCESS_CODE, "success", null);
     }
 
     /**
-     * 构建失败响应，覆盖错误码描述。
+     * 失败返回
      *
-     * @param errorCode 错误码
-     * @param message 响应消息
-     * @param <T> 数据类型
-     * @return 统一返回对象
+     * @param message 消息
+     * @param <T>     数据类型
+     * @return Result
      */
-    public static <T> Result<T> failure(ErrorCode errorCode, String message) {
-        return new Result<>(errorCode.getCode(), message, null);
+    public static <T> Result<T> failure(String message) {
+        return new Result<>(50000, message, null);
     }
 
     /**
-     * 构建失败响应，直接指定状态码与消息。
+     * 失败返回
      *
-     * @param code 状态码
-     * @param message 响应消息
-     * @param <T> 数据类型
-     * @return 统一返回对象
+     * @param code    错误码
+     * @param message 消息
+     * @param <T>     数据类型
+     * @return Result
      */
     public static <T> Result<T> failure(int code, String message) {
         return new Result<>(code, message, null);
     }
 
-    /**
-     * 获取响应状态码。
-     *
-     * @return 响应状态码
-     */
-    public int getCode() {
-        return code;
-    }
-
-    /**
-     * 获取响应消息。
-     *
-     * @return 响应消息
-     */
-    public String getMessage() {
-        return message;
-    }
-
-    /**
-     * 获取响应数据。
-     *
-     * @return 响应数据
-     */
-    public T getData() {
-        return data;
-    }
-
-    /**
-     * 判断是否为成功响应。
-     *
-     * @return 成功返回 true
-     */
-    public boolean isSuccess() {
-        return code == CODE_SUCCESS;
-    }
 }

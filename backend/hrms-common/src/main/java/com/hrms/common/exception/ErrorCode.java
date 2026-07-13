@@ -1,87 +1,99 @@
 package com.hrms.common.exception;
 
+import lombok.Getter;
+
+import java.io.Serializable;
+
 /**
- * 系统统一错误码。
- *
- * <p>遵循全局技术底座契约的码段划分：</p>
- * <ul>
- *   <li>{@code 0} —— 成功</li>
- *   <li>{@code 40001-40099} —— 客户端参数错误</li>
- *   <li>{@code 40100-40199} —— 认证与授权错误</li>
- *   <li>{@code 50001-50099} —— 系统内部错误</li>
- *   <li>{@code 60001-60999} —— 业务逻辑异常，由各业务模块自行分配：
- *     <ul>
- *       <li>60001-60099 档案</li>
- *       <li>60100-60199 组织</li>
- *       <li>60200-60299 入离职</li>
- *       <li>60300-60399 考勤</li>
- *       <li>60400-60499 薪资</li>
- *       <li>60500-60599 审批</li>
- *     </ul>
- *   </li>
- * </ul>
+ * 错误码定义
  */
-public enum ErrorCode {
+@Getter
+public class ErrorCode implements Serializable {
 
-    /** 操作成功。 */
-    SUCCESS(0, "操作成功"),
+    private static final long serialVersionUID = 1L;
 
-    /** 参数缺失。 */
-    PARAM_MISSING(40001, "参数缺失"),
-    /** 参数格式错误。 */
-    PARAM_INVALID(40002, "参数格式错误"),
-    /** 参数错误。 */
-    PARAM_ERROR(40003, "参数错误"),
-
-    /** 未登录。 */
-    UNAUTHORIZED(40100, "未登录"),
-    /** 无权限。 */
-    FORBIDDEN(40101, "无权限"),
-    /** 认证错误。 */
-    AUTH_ERROR(40102, "认证错误"),
-    /** Token 无效。 */
-    TOKEN_INVALID(40103, "Token 无效"),
-    /** Token 已过期。 */
-    TOKEN_EXPIRED(40104, "Token 已过期"),
-
-    /** 数据库异常。 */
-    DB_ERROR(50001, "数据库异常"),
-    /** 缓存异常。 */
-    CACHE_ERROR(50002, "缓存异常"),
-    /** 远程调用超时。 */
-    REMOTE_TIMEOUT(50003, "远程调用超时"),
-    /** 系统内部错误。 */
-    INTERNAL_ERROR(50099, "系统内部错误");
-
+    /**
+     * 错误码
+     */
     private final int code;
+
+    /**
+     * 错误消息
+     */
     private final String message;
 
     /**
-     * 创建错误码。
+     * 构造函数
      *
-     * @param code 状态码
-     * @param message 状态描述
+     * @param code    错误码
+     * @param message 错误消息
      */
-    ErrorCode(int code, String message) {
+    public ErrorCode(int code, String message) {
         this.code = code;
         this.message = message;
     }
 
     /**
-     * 获取状态码数值。
-     *
-     * @return 状态码数值
+     * 成功码
      */
-    public int getCode() {
-        return code;
-    }
+    public static final ErrorCode SUCCESS = new ErrorCode(20000, "操作成功");
 
     /**
-     * 获取状态描述信息。
-     *
-     * @return 状态描述信息
+     * 参数错误系列 (40000-40099)
      */
-    public String getMessage() {
-        return message;
-    }
+    public static final ErrorCode PARAM_VALIDATION_FAILED = new ErrorCode(40001, "参数校验失败");
+    public static final ErrorCode PARAM_TYPE_MISMATCH = new ErrorCode(40002, "参数类型不匹配");
+    public static final ErrorCode PARAM_REQUIRED = new ErrorCode(40003, "参数不能为空");
+    public static final ErrorCode PARAM_FORMAT_ERROR = new ErrorCode(40004, "参数格式错误");
+
+    /**
+     * 请求方法不支持 (40050-40099)
+     */
+    public static final ErrorCode METHOD_NOT_ALLOWED = new ErrorCode(40050, "不支持的请求方法");
+
+    /**
+     * 认证错误系列 (40100-40199)
+     */
+    public static final ErrorCode UNAUTHORIZED = new ErrorCode(40100, "未登录");
+    public static final ErrorCode TOKEN_EXPIRED = new ErrorCode(40101, "Token已过期");
+    public static final ErrorCode TOKEN_INVALID = new ErrorCode(40102, "Token无效");
+    public static final ErrorCode ACCOUNT_LOCKED = new ErrorCode(40110, "账号已锁定");
+    public static final ErrorCode ACCOUNT_DISABLED = new ErrorCode(40111, "账号已禁用");
+    public static final ErrorCode ACCOUNT_EXPIRED = new ErrorCode(40112, "账号已过期");
+
+    /**
+     * 权限错误系列 (40300-40399)
+     */
+    public static final ErrorCode FORBIDDEN = new ErrorCode(40300, "无权限");
+    public static final ErrorCode DATA_SCOPE_DENIED = new ErrorCode(40301, "数据权限不足");
+    public static final ErrorCode MENU_PERMISSION_DENIED = new ErrorCode(40302, "菜单权限不足");
+
+    /**
+     * 资源错误系列 (40400-40499)
+     */
+    public static final ErrorCode NOT_FOUND = new ErrorCode(40400, "资源不存在");
+    public static final ErrorCode RESOURCE_DELETED = new ErrorCode(40401, "资源已被删除");
+
+    /**
+     * 冲突错误系列 (40900-40999)
+     */
+    public static final ErrorCode CONFLICT = new ErrorCode(40900, "数据冲突");
+    public static final ErrorCode DATA_DUPLICATE = new ErrorCode(40901, "数据重复");
+    public static final ErrorCode VERSION_CONFLICT = new ErrorCode(40902, "版本冲突");
+
+    /**
+     * 系统错误系列 (50000-50099)
+     */
+    public static final ErrorCode SYSTEM_ERROR = new ErrorCode(50000, "系统内部错误");
+    public static final ErrorCode DATABASE_ERROR = new ErrorCode(50001, "数据库操作失败");
+    public static final ErrorCode REDIS_ERROR = new ErrorCode(50002, "Redis操作失败");
+    public static final ErrorCode RPC_ERROR = new ErrorCode(50003, "远程调用失败");
+    public static final ErrorCode FILE_UPLOAD_ERROR = new ErrorCode(50004, "文件上传失败");
+    public static final ErrorCode FILE_DOWNLOAD_ERROR = new ErrorCode(50005, "文件下载失败");
+
+    /**
+     * 业务错误系列 (50100-50199)
+     */
+    public static final ErrorCode BUSINESS_ERROR = new ErrorCode(50100, "业务处理失败");
+
 }

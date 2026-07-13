@@ -1,24 +1,24 @@
 package com.hrms.common.enums;
 
+import java.io.Serializable;
+
 /**
- * 数字编码枚举的公共契约。
- *
- * <p>遵循全局技术底座契约：枚举 Key 必须使用数字编码（对应 TINYINT），
- * 描述文字仅供前端展示。</p>
+ * 枚举基类接口
  */
-public interface BaseEnum {
+public interface BaseEnum extends Serializable {
 
     /**
-     * 获取数字编码。
+     * 获取编码值
      *
-     * @return 编码
+     * @return 编码值
      */
-    Integer getCode();
+    int getCode();
 
     /**
-     * 获取描述文字。
+     * 获取描述信息
      *
-     * @return 描述
+     * @return 描述信息
      */
-    String getDescription();
+    String getDesc();
+
 }

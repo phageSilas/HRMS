@@ -1,33 +1,50 @@
 package com.hrms.common.enums;
 
-import com.baomidou.mybatisplus.annotation.EnumValue;
+import lombok.Getter;
 
 /**
- * 性别。
+ * 性别枚举
  */
+@Getter
 public enum GenderEnum implements BaseEnum {
 
-    /** 男。 */
+    /**
+     * 未知
+     */
+    UNKNOWN(0, "未知"),
+
+    /**
+     * 男
+     */
     MALE(1, "男"),
-    /** 女。 */
+
+    /**
+     * 女
+     */
     FEMALE(2, "女");
 
-    @EnumValue
     private final int code;
-    private final String description;
 
-    GenderEnum(int code, String description) {
+    private final String desc;
+
+    GenderEnum(int code, String desc) {
         this.code = code;
-        this.description = description;
+        this.desc = desc;
     }
 
-    @Override
-    public Integer getCode() {
-        return code;
+    /**
+     * 根据编码获取枚举
+     *
+     * @param code 编码
+     * @return 枚举
+     */
+    public static GenderEnum fromCode(int code) {
+        for (GenderEnum gender : values()) {
+            if (gender.getCode() == code) {
+                return gender;
+            }
+        }
+        return UNKNOWN;
     }
 
-    @Override
-    public String getDescription() {
-        return description;
-    }
 }

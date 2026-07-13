@@ -1,91 +1,92 @@
 package com.hrms.common.security;
 
+import java.io.Serializable;
 import java.util.List;
 
 /**
- * 用户上下文信息。
- *
- * <p>存储当前登录用户的关键信息，包括用户 ID、部门 ID、用户名和角色 ID 列表。</p>
- *
- * <p>此类由 {@link SecurityContextHolder} 管理，通过 ThreadLocal 存储在线程上下文中。</p>
+ * 用户上下文信息
  */
-public class UserContext {
+public class UserContext implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     /**
-     * 用户 ID。
+     * 用户ID
      */
-    private final Long userId;
+    private Long userId;
 
     /**
-     * 部门 ID。
+     * 用户名
      */
-    private final Long deptId;
+    private String username;
 
     /**
-     * 用户名。
+     * 部门ID
      */
-    private final String username;
+    private Long deptId;
 
     /**
-     * 角色 ID 列表。
+     * 角色ID列表
      */
-    private final List<Long> roleIds;
+    private List<Long> roleIds;
 
     /**
-     * 创建用户上下文对象。
-     *
-     * @param userId   用户 ID
-     * @param deptId   部门 ID
-     * @param username 用户名
-     * @param roleIds  角色 ID 列表
+     * 角色编码列表
      */
-    public UserContext(Long userId, Long deptId, String username, List<Long> roleIds) {
-        this.userId = userId;
-        this.deptId = deptId;
-        this.username = username;
-        this.roleIds = roleIds != null ? roleIds : List.of();
-    }
+    private List<String> roleCodes;
 
     /**
-     * 兼容旧构造函数。
+     * 权限码列表
      */
-    public UserContext(Long userId, Long deptId, List<Long> roleIds) {
-        this(userId, deptId, null, roleIds);
-    }
+    private List<String> permissions;
 
-    /**
-     * 获取用户 ID。
-     *
-     * @return 用户 ID，未登录时可能为 null
-     */
+    // Getters and Setters
     public Long getUserId() {
         return userId;
     }
 
-    /**
-     * 获取部门 ID。
-     *
-     * @return 部门 ID，未登录时可能为 null
-     */
-    public Long getDeptId() {
-        return deptId;
+    public void setUserId(Long userId) {
+        this.userId = userId;
     }
 
-    /**
-     * 获取用户名。
-     *
-     * @return 用户名，未登录时可能为 null
-     */
     public String getUsername() {
         return username;
     }
 
-    /**
-     * 获取角色 ID 列表。
-     *
-     * @return 角色 ID 列表，永不为 null（未登录时返回空列表）
-     */
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public Long getDeptId() {
+        return deptId;
+    }
+
+    public void setDeptId(Long deptId) {
+        this.deptId = deptId;
+    }
+
     public List<Long> getRoleIds() {
         return roleIds;
     }
+
+    public void setRoleIds(List<Long> roleIds) {
+        this.roleIds = roleIds;
+    }
+
+    public List<String> getRoleCodes() {
+        return roleCodes;
+    }
+
+    public void setRoleCodes(List<String> roleCodes) {
+        this.roleCodes = roleCodes;
+    }
+
+    public List<String> getPermissions() {
+        return permissions;
+    }
+
+    public void setPermissions(List<String> permissions) {
+        this.permissions = permissions;
+    }
+
 }
