@@ -1,6 +1,7 @@
 package com.hrms.business.personnel.service.impl;
 
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.core.util.IdUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hrms.business.personnel.convert.EntryApplicationConvert;
@@ -11,11 +12,13 @@ import com.hrms.business.personnel.enums.ApplicationStatusEnum;
 import com.hrms.business.personnel.mapper.EntryApplicationMapper;
 import com.hrms.business.personnel.service.EntryApplicationService;
 import com.hrms.business.personnel.vo.EntryApplicationPageVO;
+import com.hrms.business.personnel.vo.EntryApplicationSubmitVO;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
 import com.hrms.common.web.PageResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -72,6 +75,33 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         checkPhoneAvailable(requestDTO.getPhone(), id);
         EntryApplicationConvert.fillEntity(entity, requestDTO);
         entryApplicationMapper.updateById(entity);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public EntryApplicationSubmitVO submitEntryApplication(Long id) {
+        EntryApplicationEntity entity = getRequiredEntryApplication(id);
+        assertDraft(entity);
+        // approvalService.startEntryApproval(entity); 本接口需要调用 hrms-business-approval 模块的发起入职审批接口
+        Long approvalInstanceId = tempStartEntryApproval(entity);
+        entity.setApprovalInstanceId(approvalInstanceId);
+        entity.setApprovalStatus(ApplicationStatusEnum.APPROVING.getCode());
+        entryApplicationMapper.updateById(entity);
+
+        EntryApplicationSubmitVO submitVO = new EntryApplicationSubmitVO();
+        submitVO.setApprovalInstanceId(approvalInstanceId);
+        submitVO.setApprovalStatus(entity.getApprovalStatus());
+        return submitVO;
+    }
+
+    /**
+     * 临时发起入职审批。
+     *
+     * @param entity 入职申请实体
+     * @return 审批实例ID
+     */
+    private Long tempStartEntryApproval(EntryApplicationEntity entity) {
+        return IdUtil.getSnowflakeNextId();
     }
 
     /**

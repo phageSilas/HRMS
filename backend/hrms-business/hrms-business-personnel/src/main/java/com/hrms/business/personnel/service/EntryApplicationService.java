@@ -3,6 +3,7 @@ package com.hrms.business.personnel.service;
 import com.hrms.business.personnel.dto.EntryApplicationQueryDTO;
 import com.hrms.business.personnel.dto.EntryApplicationCreateOrUpdateRequestDTO;
 import com.hrms.business.personnel.vo.EntryApplicationPageVO;
+import com.hrms.business.personnel.vo.EntryApplicationSubmitVO;
 import com.hrms.common.web.PageResult;
 
 /**
@@ -33,5 +34,13 @@ public interface EntryApplicationService {
      * @param requestDTO 入职申请更新参数
      */
     void updateEntryApplication(Long id, EntryApplicationCreateOrUpdateRequestDTO requestDTO);
+
+    /**
+     * 提交入职申请审批。
+     *
+     * @param id 入职申请ID
+     * @return 提交审批结果
+     */
+    EntryApplicationSubmitVO submitEntryApplication(Long id);
 
 }
