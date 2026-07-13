@@ -3,6 +3,8 @@
  * 负责人：成员 A
  */
 
+import { ROLE_PERMISSIONS } from '@/constants/permissions';
+import { ROLE_LIST, RoleCode } from '@/types/user';
 import request from '@/utils/request';
 
 // ============ 类型定义 ============
@@ -36,17 +38,61 @@ export interface CurrentUser {
 
 // ============ 接口定义 ============
 
+const ROLE_NAME_MAP = ROLE_LIST.reduce<Record<string, string>>((map, role) => {
+  map[role.code] = role.name;
+  return map;
+}, {});
+
+/**
+ * 构建开发阶段本地登录用户
+ */
+function buildLocalUser(data: LoginRequest): CurrentUser {
+  const roleCode = data.role || RoleCode.ADMIN;
+  return {
+    userId: 1,
+    username: data.username,
+    nickname: data.username === 'admin' ? '系统管理员' : data.username,
+    realName: data.username === 'admin' ? '系统管理员' : data.username,
+    deptId: 1,
+    deptName: '人力资源部',
+    roleCode,
+    roleName: ROLE_NAME_MAP[roleCode] || '系统管理员',
+    permissions: ROLE_PERMISSIONS[roleCode] || ROLE_PERMISSIONS.ADMIN,
+  };
+}
+
 /**
  * 用户登录
  */
 export async function login(data: LoginRequest): Promise<LoginResult> {
-  return request.post('/auth/login', data);
+  if (!data.username || !data.password) {
+    throw new Error('请输入用户名和密码');
+  }
+
+  const localUser = buildLocalUser(data);
+  const token = `try-frontend-token-${Date.now()}`;
+  localStorage.setItem('token', token);
+  localStorage.setItem('userInfo', JSON.stringify(localUser));
+
+  return {
+    token,
+    userId: localUser.userId,
+    username: localUser.username,
+    nickname: localUser.nickname,
+    roleCode: localUser.roleCode,
+    permissions: localUser.permissions,
+  };
 }
 
 /**
  * 获取当前用户信息
  */
 export async function getCurrentUser(): Promise<CurrentUser> {
+  const localUserText = localStorage.getItem('userInfo');
+  if (localUserText) {
+    return JSON.parse(localUserText) as CurrentUser;
+  }
+
   return request.get('/auth/current-user');
 }
 
@@ -54,5 +100,6 @@ export async function getCurrentUser(): Promise<CurrentUser> {
  * 用户登出
  */
 export async function logout(): Promise<void> {
-  return request.post('/auth/logout');
+  localStorage.removeItem('token');
+  localStorage.removeItem('userInfo');
 }

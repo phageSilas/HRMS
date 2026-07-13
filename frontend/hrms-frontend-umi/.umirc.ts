@@ -55,24 +55,57 @@ export default defineConfig({
       path: '/home',
       name: '首页',
       icon: 'home',
-      component: '@/pages/home',
+      component: '@/pages/Home',
     },
 
     // 系统管理（成员 A）- 仅管理员可见
     {
       path: '/system',
-      name: '系统管理',
+      name: '权限体系',
       icon: 'setting',
       access: 'system',
       routes: [
         { path: '/system', redirect: '/system/user' },
-        { path: '/system/user', name: '用户管理', component: '@/pages/system/user' },
-        { path: '/system/role', name: '角色管理', component: '@/pages/system/role' },
-        { path: '/system/menu', name: '菜单管理', component: '@/pages/system/menu' },
-        { path: '/system/dept', name: '部门管理', component: '@/pages/system/dept' },
-        { path: '/system/post', name: '职位管理', component: '@/pages/system/post' },
-        { path: '/system/dict', name: '字典管理', component: '@/pages/system/dict' },
+        {
+          path: '/system/user',
+          name: '用户管理',
+          component: '@/pages/system/user',
+        },
+        {
+          path: '/system/role',
+          name: '角色管理',
+          component: '@/pages/system/role',
+        },
+        {
+          path: '/system/menu',
+          name: '菜单管理',
+          component: '@/pages/system/menu',
+        },
+        {
+          path: '/system/dept',
+          name: '部门管理',
+          component: '@/pages/system/dept',
+        },
+        {
+          path: '/system/post',
+          name: '职位管理',
+          component: '@/pages/system/post',
+        },
+        {
+          path: '/system/dict',
+          name: '字典管理',
+          component: '@/pages/system/dict',
+        },
       ],
+    },
+
+    // 组织架构（九大模块之一）
+    {
+      path: '/organization',
+      name: '组织架构',
+      icon: 'apartment',
+      access: 'organization',
+      component: '@/pages/organization',
     },
 
     // 员工档案（成员 B）- ADMIN, HR, MANAGER 可见
@@ -83,9 +116,22 @@ export default defineConfig({
       access: 'employee',
       routes: [
         { path: '/employee', redirect: '/employee/list' },
-        { path: '/employee/list', name: '员工列表', component: '@/pages/employee' },
-        { path: '/employee/detail/:id', name: '员工详情', component: '@/pages/employee/detail', hideInMenu: true },
-        { path: '/employee/contract', name: '合同管理', component: '@/pages/employee/contract' },
+        {
+          path: '/employee/list',
+          name: '员工列表',
+          component: '@/pages/employee',
+        },
+        {
+          path: '/employee/detail/:id',
+          name: '员工详情',
+          component: '@/pages/employee/detail',
+          hideInMenu: true,
+        },
+        {
+          path: '/employee/contract',
+          name: '合同管理',
+          component: '@/pages/employee/contract',
+        },
       ],
     },
 
@@ -97,10 +143,26 @@ export default defineConfig({
       access: 'process',
       routes: [
         { path: '/process', redirect: '/process/entry' },
-        { path: '/process/entry', name: '入职申请', component: '@/pages/process/entry' },
-        { path: '/process/regular', name: '转正申请', component: '@/pages/process/regular' },
-        { path: '/process/transfer', name: '调岗申请', component: '@/pages/process/transfer' },
-        { path: '/process/leave', name: '离职申请', component: '@/pages/process/leave' },
+        {
+          path: '/process/entry',
+          name: '入职申请',
+          component: '@/pages/process/entry',
+        },
+        {
+          path: '/process/regular',
+          name: '转正申请',
+          component: '@/pages/process/regular',
+        },
+        {
+          path: '/process/transfer',
+          name: '调岗申请',
+          component: '@/pages/process/transfer',
+        },
+        {
+          path: '/process/leave',
+          name: '离职申请',
+          component: '@/pages/process/leave',
+        },
       ],
     },
 
@@ -112,9 +174,21 @@ export default defineConfig({
       access: 'attendance',
       routes: [
         { path: '/attendance', redirect: '/attendance/record' },
-        { path: '/attendance/record', name: '考勤记录', component: '@/pages/attendance/record' },
-        { path: '/attendance/leave', name: '请假申请', component: '@/pages/attendance/leave' },
-        { path: '/attendance/summary', name: '考勤统计', component: '@/pages/attendance/summary' },
+        {
+          path: '/attendance/record',
+          name: '考勤记录',
+          component: '@/pages/attendance/record',
+        },
+        {
+          path: '/attendance/leave',
+          name: '请假申请',
+          component: '@/pages/attendance/leave',
+        },
+        {
+          path: '/attendance/summary',
+          name: '考勤统计',
+          component: '@/pages/attendance/summary',
+        },
       ],
     },
 
@@ -126,9 +200,21 @@ export default defineConfig({
       access: 'salary',
       routes: [
         { path: '/salary', redirect: '/salary/account' },
-        { path: '/salary/account', name: '薪资账套', component: '@/pages/salary/account' },
-        { path: '/salary/batch', name: '薪资核算', component: '@/pages/salary/batch' },
-        { path: '/salary/payslip', name: '工资条', component: '@/pages/salary/payslip' },
+        {
+          path: '/salary/account',
+          name: '薪资账套',
+          component: '@/pages/salary/account',
+        },
+        {
+          path: '/salary/batch',
+          name: '薪资核算',
+          component: '@/pages/salary/batch',
+        },
+        {
+          path: '/salary/payslip',
+          name: '工资条',
+          component: '@/pages/salary/payslip',
+        },
       ],
     },
 
@@ -140,9 +226,22 @@ export default defineConfig({
       access: 'approval',
       routes: [
         { path: '/approval', redirect: '/approval/pending' },
-        { path: '/approval/pending', name: '待办任务', component: '@/pages/approval/pending' },
-        { path: '/approval/done', name: '已办任务', component: '@/pages/approval/done' },
-        { path: '/approval/detail/:id', name: '审批详情', component: '@/pages/approval/detail', hideInMenu: true },
+        {
+          path: '/approval/pending',
+          name: '待办任务',
+          component: '@/pages/approval/pending',
+        },
+        {
+          path: '/approval/done',
+          name: '已办任务',
+          component: '@/pages/approval/done',
+        },
+        {
+          path: '/approval/detail/:id',
+          name: '审批详情',
+          component: '@/pages/approval/detail',
+          hideInMenu: true,
+        },
       ],
     },
 
@@ -153,8 +252,21 @@ export default defineConfig({
       icon: 'user',
       routes: [
         { path: '/profile', redirect: '/profile/index' },
-        { path: '/profile/index', name: '我的首页', component: '@/pages/profile' },
+        {
+          path: '/profile/index',
+          name: '我的首页',
+          component: '@/pages/profile',
+        },
       ],
+    },
+
+    // AI 智能助手（尝试性生成基础入口）
+    {
+      path: '/ai',
+      name: 'AI 智能助手',
+      icon: 'robot',
+      access: 'ai',
+      component: '@/pages/ai',
     },
 
     // 首页重定向
