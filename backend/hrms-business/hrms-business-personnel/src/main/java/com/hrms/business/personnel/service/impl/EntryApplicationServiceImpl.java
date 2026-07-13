@@ -30,6 +30,10 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
 
     private static final ErrorCode ENTRY_APPLICATION_PHONE_DUPLICATE = new ErrorCode(40045, "手机号已存在入职申请");
 
+    private static final ErrorCode ENTRY_APPLICATION_NOT_FOUND = new ErrorCode(40041, "入职申请不存在");
+
+    private static final ErrorCode ENTRY_APPLICATION_NOT_DRAFT = new ErrorCode(40042, "非草稿状态无法修改");
+
     private static final int DEFAULT_PAGE_NUM = 1;
 
     private static final int DEFAULT_PAGE_SIZE = 20;
@@ -59,6 +63,40 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         entity.setApprovalStatus(ApplicationStatusEnum.DRAFT.getCode());
         entryApplicationMapper.insert(entity);
         return EntryApplicationConvert.toPageVO(entity);
+    }
+
+    @Override
+    public void updateEntryApplication(Long id, EntryApplicationCreateOrUpdateRequestDTO requestDTO) {
+        EntryApplicationEntity entity = getRequiredEntryApplication(id);
+        assertDraft(entity);
+        checkPhoneAvailable(requestDTO.getPhone(), id);
+        EntryApplicationConvert.fillEntity(entity, requestDTO);
+        entryApplicationMapper.updateById(entity);
+    }
+
+    /**
+     * 查询必定存在的入职申请。
+     *
+     * @param id 入职申请ID
+     * @return 入职申请实体
+     */
+    private EntryApplicationEntity getRequiredEntryApplication(Long id) {
+        EntryApplicationEntity entity = entryApplicationMapper.selectById(id);
+        if (entity == null) {
+            throw new GlobalException(ENTRY_APPLICATION_NOT_FOUND);
+        }
+        return entity;
+    }
+
+    /**
+     * 校验入职申请是否为草稿。
+     *
+     * @param entity 入职申请实体
+     */
+    private void assertDraft(EntryApplicationEntity entity) {
+        if (entity.getApprovalStatus() == null || entity.getApprovalStatus() != ApplicationStatusEnum.DRAFT.getCode()) {
+            throw new GlobalException(ENTRY_APPLICATION_NOT_DRAFT);
+        }
     }
 
     /**

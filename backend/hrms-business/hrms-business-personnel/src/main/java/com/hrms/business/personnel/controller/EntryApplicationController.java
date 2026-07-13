@@ -11,7 +11,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -50,6 +52,21 @@ public class EntryApplicationController {
     public Result<EntryApplicationPageVO> createEntryApplication(
             @Valid @RequestBody EntryApplicationCreateOrUpdateRequestDTO requestDTO) {
         return Result.success(entryApplicationService.createEntryApplication(requestDTO));
+    }
+
+    /**
+     * 更新入职申请草稿。
+     *
+     * @param id 入职申请ID
+     * @param requestDTO 入职申请更新参数
+     * @return 更新结果
+     */
+    @PutMapping("/{id}")
+    @Operation(summary = "更新入职申请")
+    public Result<Void> updateEntryApplication(@PathVariable Long id,
+                                               @Valid @RequestBody EntryApplicationCreateOrUpdateRequestDTO requestDTO) {
+        entryApplicationService.updateEntryApplication(id, requestDTO);
+        return Result.success();
     }
 
 }
