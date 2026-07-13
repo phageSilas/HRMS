@@ -32,7 +32,12 @@ public enum ApplicationStatusEnum implements BaseEnum {
     /**
      * 已撤回
      */
-    WITHDRAWN(4, "已撤回");
+    WITHDRAWN(4, "已撤回"),
+
+    /**
+     * 已入职
+     */
+    ENTERED(5, "已入职");
 
     private final int code;
 
@@ -50,6 +55,19 @@ public enum ApplicationStatusEnum implements BaseEnum {
             }
         }
         return DRAFT;
+    }
+
+    /**
+     * 根据状态码获取状态描述。
+     *
+     * @param code 状态码
+     * @return 状态描述
+     */
+    public static String getDescByCode(Integer code) {
+        if (code == null) {
+            return DRAFT.getDesc();
+        }
+        return fromCode(code).getDesc();
     }
 
 }
