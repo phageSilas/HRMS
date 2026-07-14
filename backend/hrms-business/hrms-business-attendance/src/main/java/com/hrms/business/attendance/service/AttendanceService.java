@@ -8,6 +8,9 @@ import com.hrms.business.attendance.vo.AttendanceGroupPageVO;
 import com.hrms.business.attendance.vo.AttendanceClockVO;
 import com.hrms.business.attendance.vo.AttendanceCalendarVO;
 import com.hrms.business.attendance.vo.AttendanceCorrectionCreateVO;
+import com.hrms.business.attendance.vo.LeaveTypeVO;
+
+import java.util.List;
 import com.hrms.common.web.PageResult;
 
 /**
@@ -70,6 +73,14 @@ public interface AttendanceService {
      * 本方法使用的工具类: 无
      */
     AttendanceCorrectionCreateVO createCorrection(AttendanceCorrectionCreateRequestDTO requestDTO);
+
+    /**
+     * 查询启用的请假类型。
+     *
+     * @return 请假类型列表
+     * 本方法使用的工具类: List(JDK)
+     */
+    List<LeaveTypeVO> listLeaveTypes();
 
     /**
      * 获取月度考勤汇总。

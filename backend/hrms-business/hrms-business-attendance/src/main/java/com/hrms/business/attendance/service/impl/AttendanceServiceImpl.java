@@ -17,12 +17,14 @@ import com.hrms.business.attendance.entity.AttendanceGroupEntity;
 import com.hrms.business.attendance.entity.AttendanceRecordEntity;
 import com.hrms.business.attendance.entity.EmployeeSnapshotEntity;
 import com.hrms.business.attendance.entity.LeaveRequestEntity;
+import com.hrms.business.attendance.entity.DictDataEntity;
 import com.hrms.business.attendance.enums.ClockPeriodEnum;
 import com.hrms.business.attendance.mapper.AttendanceGroupMapper;
 import com.hrms.business.attendance.mapper.AttendanceCorrectionMapper;
 import com.hrms.business.attendance.mapper.AttendanceRecordMapper;
 import com.hrms.business.attendance.mapper.EmployeeSnapshotMapper;
 import com.hrms.business.attendance.mapper.LeaveRequestMapper;
+import com.hrms.business.attendance.mapper.DictDataMapper;
 import com.hrms.business.attendance.mq.AttendanceClockCreatedEvent;
 import com.hrms.business.attendance.mq.AttendanceClockEventHandler;
 import com.hrms.business.attendance.mq.AttendanceMqConstants;
@@ -31,6 +33,7 @@ import com.hrms.business.attendance.vo.AttendanceClockVO;
 import com.hrms.business.attendance.vo.AttendanceCalendarDayVO;
 import com.hrms.business.attendance.vo.AttendanceCalendarVO;
 import com.hrms.business.attendance.vo.AttendanceCorrectionCreateVO;
+import com.hrms.business.attendance.vo.LeaveTypeVO;
 import com.hrms.business.attendance.vo.AttendanceGroupPageVO;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
@@ -84,6 +87,8 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final EmployeeSnapshotMapper employeeSnapshotMapper;
 
     private final LeaveRequestMapper leaveRequestMapper;
+
+    private final DictDataMapper dictDataMapper;
 
     private final StringRedisTemplate stringRedisTemplate;
 
@@ -182,6 +187,34 @@ public class AttendanceServiceImpl implements AttendanceService {
         attendanceRecordMapper.updateCorrectionStatus(record.getId(), "PENDING");
         evictCalendarCache(employee.getId(), requestDTO.getDate());
         return buildCorrectionCreateVO(correction);
+    }
+
+    @Override
+    public List<LeaveTypeVO> listLeaveTypes() {
+        return dictDataMapper.selectList(new LambdaQueryWrapper<DictDataEntity>()
+                        .eq(DictDataEntity::getDictType, "leave_type")
+                        .eq(DictDataEntity::getStatus, 1)
+                        .eq(DictDataEntity::getIsDeleted, 0)
+                        .orderByAsc(DictDataEntity::getSort)
+                        .orderByAsc(DictDataEntity::getId))
+                .stream()
+                .map(this::toLeaveTypeVO)
+                .toList();
+    }
+
+    /**
+     * 转换请假类型视图。
+     *
+     * @param entity 字典数据
+     * @return 请假类型视图
+     * 本方法使用的工具类: 无
+     */
+    private LeaveTypeVO toLeaveTypeVO(DictDataEntity entity) {
+        LeaveTypeVO vo = new LeaveTypeVO();
+        vo.setId(entity.getId());
+        vo.setLabel(entity.getDictLabel());
+        vo.setValue(entity.getDictValue());
+        return vo;
     }
 
     /**
