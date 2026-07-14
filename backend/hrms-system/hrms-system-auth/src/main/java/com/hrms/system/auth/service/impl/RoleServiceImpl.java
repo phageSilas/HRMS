@@ -184,19 +184,39 @@ public class RoleServiceImpl implements RoleService {
             throw new GlobalException(ErrorCode.NOT_FOUND, "角色不存在");
         }
 
-        // 2. 删除该角色的所有旧菜单关联（逻辑删除）
-        roleMenuMapper.delete(
-                new LambdaQueryWrapper<RoleMenuEntity>()
-                        .eq(RoleMenuEntity::getRoleId, roleId));
+        // 2. 查询该角色所有已有的菜单关联（包括已删除的）
+        List<RoleMenuEntity> existingMenus = roleMenuMapper.selectAllByRoleId(roleId);
+        Map<Long, RoleMenuEntity> existingMenuMap = existingMenus.stream()
+                .collect(Collectors.toMap(RoleMenuEntity::getMenuId, rm -> rm));
 
-        // 3. 批量插入新关联
-        List<Long> menuIds = roleMenuAssignDTO.getMenuIds();
-        if (menuIds != null && !menuIds.isEmpty()) {
-            for (Long menuId : menuIds) {
+        List<Long> newMenuIds = roleMenuAssignDTO.getMenuIds();
+        if (newMenuIds == null) {
+            newMenuIds = List.of();
+        }
+
+        // 3. 处理新分配的菜单
+        for (Long menuId : newMenuIds) {
+            RoleMenuEntity existing = existingMenuMap.get(menuId);
+            if (existing != null) {
+                // 如果已存在但已删除，则恢复
+                if (existing.getIsDeleted() == 1) {
+                    existing.setIsDeleted(0);
+                    roleMenuMapper.updateById(existing);
+                }
+            } else {
+                // 如果不存在，则插入新关联
                 RoleMenuEntity roleMenu = new RoleMenuEntity();
                 roleMenu.setRoleId(roleId);
                 roleMenu.setMenuId(menuId);
                 roleMenuMapper.insert(roleMenu);
+            }
+        }
+
+        // 4. 处理需要移除的菜单（逻辑删除）
+        for (RoleMenuEntity existing : existingMenus) {
+            if (existing.getIsDeleted() == 0 && !newMenuIds.contains(existing.getMenuId())) {
+                // 当前存在但新列表中没有，逻辑删除
+                roleMenuMapper.deleteById(existing.getId());
             }
         }
     }

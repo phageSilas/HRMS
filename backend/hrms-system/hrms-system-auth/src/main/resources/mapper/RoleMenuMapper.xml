@@ -12,4 +12,11 @@
           AND is_deleted = 0
     </select>
 
+    <!-- 查询角色的所有菜单关联（包括已删除的） -->
+    <select id="selectAllByRoleId" resultType="com.hrms.system.auth.entity.RoleMenuEntity">
+        SELECT id, role_id, menu_id, is_deleted, version
+        FROM sys_role_menu
+        WHERE role_id = #{roleId}
+    </select>
+
 </mapper>

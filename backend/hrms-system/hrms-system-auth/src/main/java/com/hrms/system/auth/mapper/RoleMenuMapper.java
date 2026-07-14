@@ -20,4 +20,12 @@ public interface RoleMenuMapper extends BaseMapper<RoleMenuEntity> {
      */
     List<Long> selectMenuIdsByRoleIds(List<Long> roleIds);
 
+    /**
+     * 查询角色的所有菜单关联（包括已删除的）
+     *
+     * @param roleId 角色 ID
+     * @return 角色菜单关联列表
+     */
+    List<RoleMenuEntity> selectAllByRoleId(Long roleId);
+
 }
