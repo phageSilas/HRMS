@@ -2,19 +2,22 @@ package com.hrms.common.security;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 
-import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.util.Date;
 import java.util.List;
 
 /**
- * JWT工具类
+ * JWT工具类（Spring Bean 方式）
  */
 @Slf4j
+@Component
 public class JwtUtils {
 
     private static final String CLAIM_USER_ID = "userId";
@@ -22,23 +25,31 @@ public class JwtUtils {
     private static final String CLAIM_DEPT_ID = "deptId";
     private static final String CLAIM_ROLE_IDS = "roleIds";
 
-    private static final long EXPIRATION = 24 * 60 * 60 * 1000; // 24小时
+    @Value("${hrms.jwt.secret}")
+    private String secretKey;
+
+    @Value("${hrms.jwt.expiration:7200000}")
+    private long expiration;
+
+    private Key key;
+
+    @PostConstruct
+    public void init() {
+        this.key = Keys.hmacShaKeyFor(secretKey.getBytes(StandardCharsets.UTF_8));
+    }
 
     /**
      * 生成Token
      *
-     * @param userId      用户ID
-     * @param username    用户名
-     * @param deptId      部门ID
-     * @param roleIds     角色ID列表
-     * @param secretKey   密钥
+     * @param userId   用户ID
+     * @param username 用户名
+     * @param deptId   部门ID
+     * @param roleIds  角色ID列表
      * @return JWT Token
      */
-    public static String generateToken(Long userId, String username, Long deptId, List<Long> roleIds, String secretKey) {
+    public String generateToken(Long userId, String username, Long deptId, List<Long> roleIds) {
         Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + EXPIRATION);
-
-        Key key = new SecretKeySpec(secretKey.getBytes(StandardCharsets.UTF_8), SignatureAlgorithm.HS512.getJcaName());
+        Date expiryDate = new Date(now.getTime() + expiration);
 
         return Jwts.builder()
                 .setSubject(username)
@@ -48,84 +59,77 @@ public class JwtUtils {
                 .claim(CLAIM_ROLE_IDS, roleIds)
                 .setIssuedAt(now)
                 .setExpiration(expiryDate)
-                .signWith(key, SignatureAlgorithm.HS512)
+                .signWith(key)
                 .compact();
     }
 
     /**
      * 从Token中解析Claims
      *
-     * @param token     JWT Token
-     * @param secretKey 密钥
+     * @param token JWT Token
      * @return Claims
      */
-    public static Claims parseClaims(String token, String secretKey) {
-        Key key = new SecretKeySpec(secretKey.getBytes(StandardCharsets.UTF_8), SignatureAlgorithm.HS512.getJcaName());
+    public Claims parseClaims(String token) {
         return Jwts.parser()
                 .setSigningKey(key)
                 .build()
-                .parseSignedClaims(token)
+                .parseClaimsJws(token)
                 .getBody();
     }
 
     /**
      * 从Token中提取用户ID
      *
-     * @param token     JWT Token
-     * @param secretKey 密钥
+     * @param token JWT Token
      * @return 用户ID
      */
-    public static Long getUserIdFromToken(String token, String secretKey) {
-        return parseClaims(token, secretKey).get(CLAIM_USER_ID, Long.class);
+    public Long getUserIdFromToken(String token) {
+        return parseClaims(token).get(CLAIM_USER_ID, Long.class);
     }
 
     /**
      * 从Token中提取用户名
      *
-     * @param token     JWT Token
-     * @param secretKey 密钥
+     * @param token JWT Token
      * @return 用户名
      */
-    public static String getUsernameFromToken(String token, String secretKey) {
-        return parseClaims(token, secretKey).get(CLAIM_USERNAME, String.class);
+    public String getUsernameFromToken(String token) {
+        return parseClaims(token).get(CLAIM_USERNAME, String.class);
     }
 
     /**
      * 从Token中提取部门ID
      *
-     * @param token     JWT Token
-     * @param secretKey 密钥
+     * @param token JWT Token
      * @return 部门ID
      */
-    public static Long getDeptIdFromToken(String token, String secretKey) {
-        return parseClaims(token, secretKey).get(CLAIM_DEPT_ID, Long.class);
+    public Long getDeptIdFromToken(String token) {
+        return parseClaims(token).get(CLAIM_DEPT_ID, Long.class);
     }
 
     /**
      * 从Token中提取角色ID列表
      *
-     * @param token     JWT Token
-     * @param secretKey 密钥
+     * @param token JWT Token
      * @return 角色ID列表
      */
-    public static List<Long> getRoleIdsFromToken(String token, String secretKey) {
-        return parseClaims(token, secretKey).get(CLAIM_ROLE_IDS, List.class);
+    @SuppressWarnings("unchecked")
+    public List<Long> getRoleIdsFromToken(String token) {
+        return parseClaims(token).get(CLAIM_ROLE_IDS, List.class);
     }
 
     /**
      * 验证Token是否有效
      *
-     * @param token     JWT Token
-     * @param secretKey 密钥
+     * @param token JWT Token
      * @return 是否有效
      */
-    public static boolean validateToken(String token, String secretKey) {
+    public boolean validateToken(String token) {
         try {
-            Key key = new SecretKeySpec(secretKey.getBytes(StandardCharsets.UTF_8), SignatureAlgorithm.HS512.getJcaName());
             Jwts.parser()
                     .setSigningKey(key)
                     .build()
-                    .parseSignedClaims(token);
+                    .parseClaimsJws(token);
             return true;
         } catch (Exception e) {
             log.error("Token验证失败: {}", e.getMessage());
@@ -136,17 +140,25 @@ public class JwtUtils {
     /**
      * 验证Token是否过期
      *
-     * @param token     JWT Token
-     * @param secretKey 密钥
+     * @param token JWT Token
      * @return 是否过期
      */
-    public static boolean isTokenExpired(String token, String secretKey) {
+    public boolean isTokenExpired(String token) {
         try {
-            Claims claims = parseClaims(token, secretKey);
+            Claims claims = parseClaims(token);
             return claims.getExpiration().before(new Date());
         } catch (Exception e) {
             return true;
         }
+    }
+
+    /**
+     * 获取Token过期时间（毫秒）
+     *
+     * @return 过期时间
+     */
+    public long getExpiration() {
+        return expiration;
     }
 
 }

@@ -2,6 +2,7 @@ package com.hrms.common.config;
 
 import com.baomidou.mybatisplus.annotation.DbType;
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
+import com.hrms.common.interceptor.DataScopeInterceptor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -20,9 +21,7 @@ public class MybatisPlusConfig {
     public MybatisPlusInterceptor mybatisPlusInterceptor() {
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
 
-        // 分页插件（MyBatis-Plus 3.5.12 使用 PaginationInterceptor）
-        // 新版本使用 PaginationInnerInterceptor，旧版本使用 PaginationInterceptor
-        // 这里使用旧的类名以兼容 3.5.12
+        // 分页插件（MyBatis-Plus 3.5.12 使用 PaginationInnerInterceptor）
         try {
             // 尝试加载新版本的类
             Class<?> clazz = Class.forName("com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor");
@@ -36,7 +35,20 @@ public class MybatisPlusConfig {
             System.out.println("分页插件初始化失败: " + e.getMessage());
         }
 
+        // 注册数据权限拦截器
+        interceptor.addInnerInterceptor(dataScopeInterceptor());
+
         return interceptor;
+    }
+
+    /**
+     * 配置数据权限拦截器
+     *
+     * @return DataScopeInterceptor
+     */
+    @Bean
+    public DataScopeInterceptor dataScopeInterceptor() {
+        return new DataScopeInterceptor();
     }
 
 }

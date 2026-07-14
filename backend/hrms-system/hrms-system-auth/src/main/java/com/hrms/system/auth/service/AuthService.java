@@ -1,5 +1,8 @@
 package com.hrms.system.auth.service;
 
+import com.hrms.system.auth.vo.CurrentUserVO;
+import com.hrms.system.auth.vo.LoginVO;
+
 /**
  * 认证服务接口
  */
@@ -10,9 +13,9 @@ public interface AuthService {
      *
      * @param username 用户名
      * @param password 密码
-     * @return Token
+     * @return LoginVO
      */
-    String login(String username, String password);
+    LoginVO login(String username, String password);
 
     /**
      * 用户登出
@@ -28,5 +31,12 @@ public interface AuthService {
      * @return 是否有效
      */
     boolean validateToken(String token);
+
+    /**
+     * 获取当前用户信息
+     *
+     * @return CurrentUserVO
+     */
+    CurrentUserVO getCurrentUser();
 
 }
