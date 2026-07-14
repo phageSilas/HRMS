@@ -1,5 +1,6 @@
 package com.hrms.common.web;
 
+import com.hrms.common.exception.ErrorCode;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -92,6 +93,17 @@ public class Result<T> implements Serializable {
      */
     public static <T> Result<T> failure(int code, String message) {
         return new Result<>(code, message, null);
+    }
+
+    /**
+     * 错误返回（根据 ErrorCode）
+     *
+     * @param errorCode 错误码
+     * @param <T>       数据类型
+     * @return Result
+     */
+    public static <T> Result<T> error(ErrorCode errorCode) {
+        return new Result<>(errorCode.getCode(), errorCode.getMessage(), null);
     }
 
 }

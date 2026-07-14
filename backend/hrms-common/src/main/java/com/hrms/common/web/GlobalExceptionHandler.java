@@ -98,7 +98,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public Result<Void> handleException(Exception e) {
-        return Result.failure(50000, "系统内部错误");
+        e.printStackTrace();
+        return Result.failure(50000, "系统内部错误: " + e.getMessage());
     }
 
 }

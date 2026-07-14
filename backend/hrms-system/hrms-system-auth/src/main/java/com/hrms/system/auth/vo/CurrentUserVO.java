@@ -3,12 +3,14 @@ package com.hrms.system.auth.vo;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
+import java.util.List;
+
 /**
- * 用户信息 VO
+ * 当前用户信息 VO
  */
 @Data
-@Schema(description = "用户信息")
-public class UserVO {
+@Schema(description = "当前用户信息")
+public class CurrentUserVO {
 
     @Schema(description = "用户ID")
     private Long id;
@@ -30,6 +32,15 @@ public class UserVO {
 
     @Schema(description = "状态：1-正常，0-禁用")
     private Integer status;
+
+    @Schema(description = "角色列表")
+    private List<String> roles;
+
+    @Schema(description = "权限列表")
+    private List<String> permissions;
+
+    @Schema(description = "菜单树")
+    private List<MenuVO> menus;
 
     // 手动添加 getter 和 setter 方法
     public Long getId() {
@@ -86,6 +97,30 @@ public class UserVO {
 
     public void setStatus(Integer status) {
         this.status = status;
+    }
+
+    public List<String> getRoles() {
+        return roles;
+    }
+
+    public void setRoles(List<String> roles) {
+        this.roles = roles;
+    }
+
+    public List<String> getPermissions() {
+        return permissions;
+    }
+
+    public void setPermissions(List<String> permissions) {
+        this.permissions = permissions;
+    }
+
+    public List<MenuVO> getMenus() {
+        return menus;
+    }
+
+    public void setMenus(List<MenuVO> menus) {
+        this.menus = menus;
     }
 
 }

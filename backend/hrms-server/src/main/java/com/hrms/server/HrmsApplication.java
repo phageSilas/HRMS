@@ -2,6 +2,7 @@ package com.hrms.server;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.ComponentScan;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
@@ -9,6 +10,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * HRMS 应用启动类
  */
 @SpringBootApplication
+@ComponentScan(basePackages = {"com.hrms"})
 @EnableAsync
 @EnableScheduling
 public class HrmsApplication {

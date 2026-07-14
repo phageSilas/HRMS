@@ -16,6 +16,9 @@ spring:
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: GMT+8
+  sql:
+    init:
+      mode: never
 
   # Data Source
   datasource:
@@ -75,8 +78,8 @@ mybatis-plus:
 # JWT
 hrms:
   jwt:
-    secret: ${JWT_SECRET}
-    expiration: ${JWT_EXPIRATION:604800000}
+    secret: ${JWT_SECRET:hrms-default-secret-key-2026-hrms-default-secret-key-2026}
+    expiration: ${JWT_EXPIRATION:7200000}
     header: Authorization
     token-prefix: Bearer
 
