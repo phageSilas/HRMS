@@ -12,6 +12,7 @@ import com.hrms.business.attendance.dto.AttendanceClockRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceCorrectionCreateRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupCreateOrUpdateRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupQueryDTO;
+import com.hrms.business.attendance.dto.LeaveCreateRequestDTO;
 import com.hrms.business.attendance.entity.AttendanceCorrectionEntity;
 import com.hrms.business.attendance.entity.AttendanceGroupEntity;
 import com.hrms.business.attendance.entity.AttendanceRecordEntity;
@@ -35,6 +36,7 @@ import com.hrms.business.attendance.vo.AttendanceCalendarVO;
 import com.hrms.business.attendance.vo.AttendanceCorrectionCreateVO;
 import com.hrms.business.attendance.vo.LeaveTypeVO;
 import com.hrms.business.attendance.vo.LeaveBalanceVO;
+import com.hrms.business.attendance.vo.LeaveCreateVO;
 import com.hrms.business.attendance.vo.AttendanceGroupPageVO;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
@@ -54,6 +56,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.YearMonth;
+import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -79,6 +82,8 @@ public class AttendanceServiceImpl implements AttendanceService {
     private static final ErrorCode ATTENDANCE_CLOCK_RANGE_INVALID = new ErrorCode(40055, "不在允许的打卡范围内");
 
     private static final ErrorCode ATTENDANCE_CORRECTION_DUPLICATE = new ErrorCode(40056, "当前日期和类型已有审批中的补卡申请");
+
+    private static final ErrorCode LEAVE_DAYS_INVALID = new ErrorCode(40057, "请假天数必须大于0且不超过30天");
 
     private final AttendanceGroupMapper attendanceGroupMapper;
 
@@ -258,6 +263,130 @@ public class AttendanceServiceImpl implements AttendanceService {
         vo.setTotalDays(totalDays);
         vo.setUsedDays(usedDays);
         vo.setRemainingDays(totalDays.subtract(usedDays).max(BigDecimal.ZERO));
+        return vo;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public LeaveCreateVO createLeave(LeaveCreateRequestDTO requestDTO) {
+        EmployeeSnapshotEntity employee = getCurrentEmployeeSnapshot();
+        String leaveType = resolveLeaveType(requestDTO);
+        BigDecimal totalDays = calculateLeaveDays(requestDTO);
+        if (totalDays.compareTo(BigDecimal.ZERO) <= 0 || totalDays.compareTo(BigDecimal.valueOf(30)) > 0) {
+            throw new GlobalException(LEAVE_DAYS_INVALID);
+        }
+        // approvalService.startLeaveApproval(leaveRequest); 本接口需要调用 hrms-business-approval 模块的请假审批发起方法。
+        Long approvalInstanceId = tempStartLeaveApproval(employee.getId(), requestDTO);
+        LeaveRequestEntity entity = new LeaveRequestEntity();
+        entity.setEmployeeId(employee.getId());
+        entity.setLeaveType(leaveType);
+        entity.setStartTime(toPeriodTime(requestDTO.getStartDate(), requestDTO.getStartPeriod(), true));
+        entity.setEndTime(toPeriodTime(requestDTO.getEndDate(), requestDTO.getEndPeriod(), false));
+        entity.setTotalDays(totalDays);
+        entity.setTotalHours(totalDays.multiply(BigDecimal.valueOf(8)));
+        entity.setLeaveReason(requestDTO.getReason());
+        entity.setAttachmentUrl(resolveAttachment(requestDTO));
+        entity.setApprovalInstanceId(approvalInstanceId);
+        entity.setApprovalStatus(1);
+        leaveRequestMapper.insert(entity);
+        evictCalendarCache(employee.getId(), requestDTO.getStartDate());
+        return buildLeaveCreateVO(entity);
+    }
+
+    /**
+     * 解析请假类型。
+     *
+     * @param requestDTO 请假申请请求
+     * @return 请假类型值
+     * 本方法使用的工具类: StrUtil(hutool),GlobalException(hrms-common)
+     */
+    private String resolveLeaveType(LeaveCreateRequestDTO requestDTO) {
+        if (StrUtil.isNotBlank(requestDTO.getLeaveType())) {
+            return requestDTO.getLeaveType();
+        }
+        if (requestDTO.getLeaveTypeId() == null) {
+            throw new GlobalException(ErrorCode.PARAM_REQUIRED, "请假类型不能为空");
+        }
+        DictDataEntity dict = dictDataMapper.selectById(requestDTO.getLeaveTypeId());
+        if (dict == null) {
+            throw new GlobalException(ErrorCode.NOT_FOUND, "请假类型不存在");
+        }
+        return dict.getDictValue();
+    }
+
+    /**
+     * 计算请假天数。
+     *
+     * @param requestDTO 请假申请请求
+     * @return 请假天数
+     * 本方法使用的工具类: ChronoUnit(JDK),BigDecimal(JDK)
+     */
+    private BigDecimal calculateLeaveDays(LeaveCreateRequestDTO requestDTO) {
+        long days = ChronoUnit.DAYS.between(requestDTO.getStartDate(), requestDTO.getEndDate()) + 1;
+        BigDecimal total = BigDecimal.valueOf(days);
+        if ("PM".equalsIgnoreCase(requestDTO.getStartPeriod())) {
+            total = total.subtract(BigDecimal.valueOf(0.5));
+        }
+        if ("AM".equalsIgnoreCase(requestDTO.getEndPeriod())) {
+            total = total.subtract(BigDecimal.valueOf(0.5));
+        }
+        return total;
+    }
+
+    /**
+     * 将日期和时段转换为时间。
+     *
+     * @param date   日期
+     * @param period 时段
+     * @param start  是否开始时间
+     * @return 日期时间
+     * 本方法使用的工具类: 无
+     */
+    private LocalDateTime toPeriodTime(LocalDate date, String period, boolean start) {
+        if ("PM".equalsIgnoreCase(period)) {
+            return date.atTime(start ? LocalTime.NOON : LocalTime.MAX);
+        }
+        return date.atTime(start ? LocalTime.MIN : LocalTime.NOON);
+    }
+
+    /**
+     * 解析附件地址。
+     *
+     * @param requestDTO 请假申请请求
+     * @return 附件地址
+     * 本方法使用的工具类: StrUtil(hutool)
+     */
+    private String resolveAttachment(LeaveCreateRequestDTO requestDTO) {
+        if (StrUtil.isNotBlank(requestDTO.getAttachment())) {
+            return requestDTO.getAttachment();
+        }
+        return requestDTO.getAttachmentFileId() == null ? null : String.valueOf(requestDTO.getAttachmentFileId());
+    }
+
+    /**
+     * 临时发起请假审批。
+     *
+     * @param employeeId 员工ID
+     * @param requestDTO 请假申请请求
+     * @return 审批实例ID
+     * 本方法使用的工具类: IdUtil(hutool)
+     */
+    private Long tempStartLeaveApproval(Long employeeId, LeaveCreateRequestDTO requestDTO) {
+        return IdUtil.getSnowflakeNextId();
+    }
+
+    /**
+     * 构建请假创建结果。
+     *
+     * @param entity 请假申请
+     * @return 创建结果
+     * 本方法使用的工具类: 无
+     */
+    private LeaveCreateVO buildLeaveCreateVO(LeaveRequestEntity entity) {
+        LeaveCreateVO vo = new LeaveCreateVO();
+        vo.setId(entity.getId());
+        vo.setApprovalInstanceId(entity.getApprovalInstanceId());
+        vo.setApprovalStatus(entity.getApprovalStatus());
         return vo;
     }
 

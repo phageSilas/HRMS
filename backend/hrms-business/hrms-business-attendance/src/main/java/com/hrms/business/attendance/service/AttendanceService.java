@@ -4,12 +4,14 @@ import com.hrms.business.attendance.dto.AttendanceGroupQueryDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupCreateOrUpdateRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceClockRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceCorrectionCreateRequestDTO;
+import com.hrms.business.attendance.dto.LeaveCreateRequestDTO;
 import com.hrms.business.attendance.vo.AttendanceGroupPageVO;
 import com.hrms.business.attendance.vo.AttendanceClockVO;
 import com.hrms.business.attendance.vo.AttendanceCalendarVO;
 import com.hrms.business.attendance.vo.AttendanceCorrectionCreateVO;
 import com.hrms.business.attendance.vo.LeaveTypeVO;
 import com.hrms.business.attendance.vo.LeaveBalanceVO;
+import com.hrms.business.attendance.vo.LeaveCreateVO;
 
 import java.util.List;
 import com.hrms.common.web.PageResult;
@@ -90,6 +92,15 @@ public interface AttendanceService {
      * 本方法使用的工具类: List(JDK)
      */
     List<LeaveBalanceVO> listLeaveBalances();
+
+    /**
+     * 提交请假申请。
+     *
+     * @param requestDTO 请假申请请求
+     * @return 请假申请创建结果
+     * 本方法使用的工具类: 无
+     */
+    LeaveCreateVO createLeave(LeaveCreateRequestDTO requestDTO);
 
     /**
      * 获取月度考勤汇总。
