@@ -1,8 +1,10 @@
 package com.hrms.system.auth.controller;
 
 import com.hrms.common.web.Result;
+import com.hrms.system.auth.dto.RoleMenuAssignDTO;
 import com.hrms.system.auth.entity.RoleEntity;
 import com.hrms.system.auth.service.RoleService;
+import com.hrms.system.auth.vo.RoleVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -63,13 +65,23 @@ public class RoleController {
     }
 
     /**
-     * 查询所有角色
+     * 查询所有角色（返回RoleVO，包含菜单ID）
      */
     @GetMapping
-    @Operation(summary = "查询角色列表", description = "查询所有角色列表")
-    public Result<List<RoleEntity>> list() {
-        List<RoleEntity> roles = roleService.list();
+    @Operation(summary = "查询角色列表", description = "查询所有角色列表，包含关联的菜单ID")
+    public Result<List<RoleVO>> list() {
+        List<RoleVO> roles = roleService.listRoleVOs();
         return Result.success(roles);
+    }
+
+    /**
+     * 分配角色菜单权限
+     */
+    @PostMapping("/{roleId}/menus")
+    @Operation(summary = "分配角色菜单权限", description = "为角色分配菜单权限，全量覆盖")
+    public Result<Void> assignMenus(@PathVariable Long roleId, @RequestBody RoleMenuAssignDTO assignDTO) {
+        roleService.assignMenus(roleId, assignDTO);
+        return Result.success();
     }
 
 }

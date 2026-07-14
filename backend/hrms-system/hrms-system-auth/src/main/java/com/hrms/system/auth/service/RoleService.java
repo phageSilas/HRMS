@@ -1,7 +1,9 @@
 package com.hrms.system.auth.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.hrms.system.auth.dto.RoleMenuAssignDTO;
 import com.hrms.system.auth.entity.RoleEntity;
+import com.hrms.system.auth.vo.RoleVO;
 
 import java.util.List;
 
@@ -72,5 +74,20 @@ public interface RoleService {
      * @return 数据权限范围（1-仅本人 2-本部门 3-本部门及子部门 4-全部）
      */
     Integer getDataScope(Long userId);
+
+    /**
+     * 查询所有角色VO列表（包含菜单ID）
+     *
+     * @return 角色VO列表
+     */
+    List<RoleVO> listRoleVOs();
+
+    /**
+     * 分配角色菜单权限
+     *
+     * @param roleId          角色ID
+     * @param roleMenuAssignDTO 分配参数
+     */
+    void assignMenus(Long roleId, RoleMenuAssignDTO roleMenuAssignDTO);
 
 }

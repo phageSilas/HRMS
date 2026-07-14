@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
 import com.hrms.system.auth.entity.RoleEntity;
+import com.hrms.system.auth.entity.RoleMenuEntity;
 import com.hrms.system.auth.entity.UserRoleEntity;
 import com.hrms.system.auth.mapper.RoleMapper;
 import com.hrms.system.auth.mapper.UserRoleMapper;
@@ -15,8 +16,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import com.hrms.system.auth.dto.RoleMenuAssignDTO;
+import com.hrms.system.auth.mapper.RoleMenuMapper;
+import com.hrms.system.auth.vo.RoleVO;
+
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -29,6 +35,7 @@ public class RoleServiceImpl implements RoleService {
 
     private final RoleMapper roleMapper;
     private final UserRoleMapper userRoleMapper;
+    private final RoleMenuMapper roleMenuMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -121,6 +128,77 @@ public class RoleServiceImpl implements RoleService {
             .mapToInt(RoleEntity::getDataScope)
             .max()
             .orElse(1);
+    }
+
+    @Override
+    public List<RoleVO> listRoleVOs() {
+        // 1. 查询所有角色
+        LambdaQueryWrapper<RoleEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(RoleEntity::getStatus, 1);
+        wrapper.orderByAsc(RoleEntity::getSortNo);
+        List<RoleEntity> roles = roleMapper.selectList(wrapper);
+
+        if (roles.isEmpty()) {
+            return List.of();
+        }
+
+        // 2. 提取所有角色ID
+        List<Long> roleIds = roles.stream()
+                .map(RoleEntity::getId)
+                .collect(Collectors.toList());
+
+        // 3. 批量查询角色菜单关联
+        List<RoleMenuEntity> roleMenus = roleMenuMapper.selectList(
+                new LambdaQueryWrapper<RoleMenuEntity>()
+                        .in(RoleMenuEntity::getRoleId, roleIds)
+                        .eq(RoleMenuEntity::getIsDeleted, 0));
+
+        // 4. 按角色ID分组菜单ID
+        Map<Long, List<Long>> roleMenuMap = roleMenus.stream()
+                .collect(Collectors.groupingBy(
+                        RoleMenuEntity::getRoleId,
+                        Collectors.mapping(RoleMenuEntity::getMenuId, Collectors.toList())
+                ));
+
+        // 5. 转换为VO
+        return roles.stream().map(role -> {
+            RoleVO vo = new RoleVO();
+            vo.setId(role.getId());
+            vo.setRoleName(role.getRoleName());
+            vo.setRoleCode(role.getRoleCode());
+            vo.setDataScope(role.getDataScope());
+            vo.setStatus(role.getStatus());
+            vo.setSortNo(role.getSortNo());
+            vo.setRemark(role.getRemark());
+            vo.setMenuIds(roleMenuMap.getOrDefault(role.getId(), List.of()));
+            return vo;
+        }).collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void assignMenus(Long roleId, RoleMenuAssignDTO roleMenuAssignDTO) {
+        // 1. 校验角色是否存在
+        RoleEntity role = roleMapper.selectById(roleId);
+        if (role == null) {
+            throw new GlobalException(ErrorCode.NOT_FOUND, "角色不存在");
+        }
+
+        // 2. 删除该角色的所有旧菜单关联（逻辑删除）
+        roleMenuMapper.delete(
+                new LambdaQueryWrapper<RoleMenuEntity>()
+                        .eq(RoleMenuEntity::getRoleId, roleId));
+
+        // 3. 批量插入新关联
+        List<Long> menuIds = roleMenuAssignDTO.getMenuIds();
+        if (menuIds != null && !menuIds.isEmpty()) {
+            for (Long menuId : menuIds) {
+                RoleMenuEntity roleMenu = new RoleMenuEntity();
+                roleMenu.setRoleId(roleId);
+                roleMenu.setMenuId(menuId);
+                roleMenuMapper.insert(roleMenu);
+            }
+        }
     }
 
     /**
