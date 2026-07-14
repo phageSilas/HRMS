@@ -11,7 +11,8 @@ import com.hrms.system.auth.service.AuthService;
 import com.hrms.system.auth.vo.MenuVO;
 import com.hrms.system.auth.vo.CurrentUserVO;
 import com.hrms.system.auth.vo.LoginVO;
-import com.hrms.system.auth.vo.UserVO;
+import com.hrms.system.auth.vo.UserInfoVO;
+import com.hrms.system.auth.vo.RoleInfoVO;
 import com.hrms.system.auth.entity.MenuEntity;
 import com.hrms.system.auth.entity.RoleEntity;
 import com.hrms.system.auth.entity.UserRoleEntity;
@@ -105,16 +106,31 @@ public class AuthServiceImpl implements AuthService {
         loginVO.setTokenType("Bearer");
         loginVO.setExpiresIn(jwtUtils.getExpiration() / 1000);
 
-        UserVO userVO = new UserVO();
-        userVO.setId(user.getId());
-        userVO.setUsername(user.getUsername());
-        userVO.setNickname(user.getNickname());
-        userVO.setEmail(user.getEmail());
-        userVO.setPhone(user.getPhone());
-        userVO.setAvatar(user.getAvatarUrl());
-        userVO.setStatus(user.getStatus());
-        userVO.setRoles(roleCodes); // 设置真实角色
-        loginVO.setUser(userVO);
+        // 构建 UserInfoVO
+        UserInfoVO userInfoVO = new UserInfoVO();
+        userInfoVO.setId(user.getId());
+        userInfoVO.setUsername(user.getUsername());
+        userInfoVO.setRealName(user.getRealName());
+
+        // 构建角色信息列表
+        List<RoleInfoVO> roleInfoList = roleService.getRolesByUserId(user.getId())
+            .stream()
+            .map(role -> {
+                RoleInfoVO roleInfo = new RoleInfoVO();
+                roleInfo.setRoleId(role.getId());
+                roleInfo.setRoleName(role.getRoleName());
+                roleInfo.setRoleCode(role.getRoleCode());
+                roleInfo.setDataScope(role.getDataScope());
+                return roleInfo;
+            })
+            .collect(Collectors.toList());
+        userInfoVO.setRoles(roleInfoList);
+
+        // 查询权限列表
+        List<String> permissions = menuService.getPermissionsByRoleIds(roleIds);
+        userInfoVO.setPermissions(permissions);
+
+        loginVO.setUserInfo(userInfoVO);
 
         return loginVO;
     }
@@ -156,18 +172,28 @@ public class AuthServiceImpl implements AuthService {
         CurrentUserVO currentUserVO = new CurrentUserVO();
         currentUserVO.setId(user.getId());
         currentUserVO.setUsername(user.getUsername());
-        currentUserVO.setNickname(user.getNickname());
+        currentUserVO.setRealName(user.getRealName());
         currentUserVO.setEmail(user.getEmail());
         currentUserVO.setPhone(user.getPhone());
-        currentUserVO.setAvatar(user.getAvatarUrl());
+        currentUserVO.setAvatarUrl(user.getAvatarUrl());
         currentUserVO.setStatus(user.getStatus());
+        currentUserVO.setEmployeeId(user.getEmployeeId());
 
         // 查询用户角色
         List<RoleEntity> roles = roleService.getRolesByUserId(userId);
-        List<String> roleCodes = roles.stream()
-            .map(RoleEntity::getRoleCode)
+
+        // 构建角色信息列表（对象数组）
+        List<RoleInfoVO> roleInfoList = roles.stream()
+            .map(role -> {
+                RoleInfoVO roleInfo = new RoleInfoVO();
+                roleInfo.setRoleId(role.getId());
+                roleInfo.setRoleName(role.getRoleName());
+                roleInfo.setRoleCode(role.getRoleCode());
+                roleInfo.setDataScope(role.getDataScope());
+                return roleInfo;
+            })
             .collect(Collectors.toList());
-        currentUserVO.setRoles(roleCodes);
+        currentUserVO.setRoles(roleInfoList);
 
         // 查询用户权限
         List<Long> roleIds = roles.stream()
