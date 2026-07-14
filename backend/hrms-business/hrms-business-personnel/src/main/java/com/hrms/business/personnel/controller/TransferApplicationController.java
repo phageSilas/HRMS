@@ -1,0 +1,39 @@
+package com.hrms.business.personnel.controller;
+
+import com.hrms.business.personnel.dto.TransferApplicationQueryDTO;
+import com.hrms.business.personnel.service.TransferApplicationService;
+import com.hrms.business.personnel.vo.TransferApplicationPageVO;
+import com.hrms.common.web.PageResult;
+import com.hrms.common.web.Result;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * 调岗申请控制器
+ */
+@RestController
+@RequestMapping("/api/v1/transfer-applications")
+@RequiredArgsConstructor
+@Tag(name = "调岗申请接口", description = "调岗申请分页和创建接口")
+public class TransferApplicationController {
+
+    private final TransferApplicationService transferApplicationService;
+
+    /**
+     * 分页查询调岗申请列表。
+     *
+     * @param queryDTO 调岗申请查询参数
+     * @return 调岗申请分页结果
+     * 本方法使用的工具类: 无
+     */
+    @GetMapping
+    @Operation(summary = "调岗申请列表")
+    public Result<PageResult<TransferApplicationPageVO>> pageTransferApplications(TransferApplicationQueryDTO queryDTO) {
+        return Result.success(transferApplicationService.pageTransferApplications(queryDTO));
+    }
+
+}
