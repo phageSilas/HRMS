@@ -4,10 +4,13 @@ import com.hrms.business.attendance.dto.AttendanceClockRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceCorrectionCreateRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupQueryDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupCreateOrUpdateRequestDTO;
+import com.hrms.business.attendance.dto.MonthlyStatGenerateRequestDTO;
 import com.hrms.business.attendance.service.AttendanceService;
 import com.hrms.business.attendance.vo.AttendanceClockVO;
 import com.hrms.business.attendance.vo.AttendanceCalendarVO;
 import com.hrms.business.attendance.vo.AttendanceCorrectionCreateVO;
+import com.hrms.business.attendance.vo.MonthlyStatGenerateVO;
+import com.hrms.business.attendance.vo.AttendancePayrollSourceVO;
 import com.hrms.business.attendance.vo.AttendanceGroupPageVO;
 import com.hrms.common.web.PageResult;
 import com.hrms.common.web.Result;
@@ -23,6 +26,9 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
+
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * 考勤管理控制器。
@@ -112,6 +118,51 @@ public class AttendanceController {
     public Result<AttendanceCorrectionCreateVO> createCorrection(
             @Valid @RequestBody AttendanceCorrectionCreateRequestDTO requestDTO) {
         return Result.success(attendanceService.createCorrection(requestDTO));
+    }
+
+    /**
+     * 生成月度考勤统计。
+     *
+     * @param requestDTO 生成请求
+     * @return 生成结果
+     * 本方法使用的工具类: Result(hrms-common)
+     */
+    @PostMapping("/stats/monthly/generate")
+    public Result<MonthlyStatGenerateVO> generateMonthlyStat(
+            @Valid @RequestBody MonthlyStatGenerateRequestDTO requestDTO) {
+        return Result.success(attendanceService.generateMonthlyStat(requestDTO));
+    }
+
+    /**
+     * 查询薪资模块月度考勤数据源。
+     *
+     * @param month       月份
+     * @param employeeIds 员工ID逗号分隔
+     * @return 薪资考勤数据源
+     * 本方法使用的工具类: Result(hrms-common),Arrays(JDK),List(JDK)
+     */
+    @GetMapping("/stats/monthly/payroll-source")
+    public Result<List<AttendancePayrollSourceVO>> getPayrollSource(@RequestParam String month,
+                                                                    @RequestParam(required = false) String employeeIds) {
+        return Result.success(attendanceService.getPayrollSource(month, parseEmployeeIds(employeeIds)));
+    }
+
+    /**
+     * 解析员工ID参数。
+     *
+     * @param employeeIds 员工ID逗号分隔
+     * @return 员工ID列表
+     * 本方法使用的工具类: Arrays(JDK),List(JDK)
+     */
+    private List<Long> parseEmployeeIds(String employeeIds) {
+        if (employeeIds == null || employeeIds.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(employeeIds.split(","))
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .map(Long::valueOf)
+                .toList();
     }
 
     /**

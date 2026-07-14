@@ -5,6 +5,7 @@ import com.hrms.business.attendance.dto.AttendanceGroupCreateOrUpdateRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceClockRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceCorrectionCreateRequestDTO;
 import com.hrms.business.attendance.dto.LeaveCreateRequestDTO;
+import com.hrms.business.attendance.dto.MonthlyStatGenerateRequestDTO;
 import com.hrms.business.attendance.vo.AttendanceGroupPageVO;
 import com.hrms.business.attendance.vo.AttendanceClockVO;
 import com.hrms.business.attendance.vo.AttendanceCalendarVO;
@@ -12,6 +13,8 @@ import com.hrms.business.attendance.vo.AttendanceCorrectionCreateVO;
 import com.hrms.business.attendance.vo.LeaveTypeVO;
 import com.hrms.business.attendance.vo.LeaveBalanceVO;
 import com.hrms.business.attendance.vo.LeaveCreateVO;
+import com.hrms.business.attendance.vo.MonthlyStatGenerateVO;
+import com.hrms.business.attendance.vo.AttendancePayrollSourceVO;
 
 import java.util.List;
 import com.hrms.common.web.PageResult;
@@ -101,6 +104,25 @@ public interface AttendanceService {
      * 本方法使用的工具类: 无
      */
     LeaveCreateVO createLeave(LeaveCreateRequestDTO requestDTO);
+
+    /**
+     * 生成月度考勤统计。
+     *
+     * @param requestDTO 生成请求
+     * @return 生成结果
+     * 本方法使用的工具类: 无
+     */
+    MonthlyStatGenerateVO generateMonthlyStat(MonthlyStatGenerateRequestDTO requestDTO);
+
+    /**
+     * 查询薪资模块月度考勤数据源。
+     *
+     * @param month       月份
+     * @param employeeIds 员工ID列表
+     * @return 月度考勤汇总
+     * 本方法使用的工具类: List(JDK)
+     */
+    List<AttendancePayrollSourceVO> getPayrollSource(String month, List<Long> employeeIds);
 
     /**
      * 获取月度考勤汇总。

@@ -60,4 +60,27 @@ public final class AttendanceCacheKeys {
     public static String clockMessageIdempotent(String messageId) {
         return "attendance:mq:clock:created:" + messageId;
     }
+
+    /**
+     * 构建月度统计生成锁 Key。
+     *
+     * @param month 月份
+     * @return Redis Key
+     * 本方法使用的工具类: 无
+     */
+    public static String monthStatGenerateLock(String month) {
+        return "attendance:stat:generate:lock:" + month;
+    }
+
+    /**
+     * 构建员工月度统计缓存 Key。
+     *
+     * @param employeeId 员工ID
+     * @param month      月份，格式 yyyyMM
+     * @return Redis Key
+     * 本方法使用的工具类: 无
+     */
+    public static String monthStat(Long employeeId, String month) {
+        return "attendance:month:stat:" + employeeId + ":" + month.replace("-", "");
+    }
 }

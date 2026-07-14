@@ -13,6 +13,7 @@ import com.hrms.business.attendance.dto.AttendanceCorrectionCreateRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupCreateOrUpdateRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupQueryDTO;
 import com.hrms.business.attendance.dto.LeaveCreateRequestDTO;
+import com.hrms.business.attendance.dto.MonthlyStatGenerateRequestDTO;
 import com.hrms.business.attendance.entity.AttendanceCorrectionEntity;
 import com.hrms.business.attendance.entity.AttendanceGroupEntity;
 import com.hrms.business.attendance.entity.AttendanceRecordEntity;
@@ -37,6 +38,8 @@ import com.hrms.business.attendance.vo.AttendanceCorrectionCreateVO;
 import com.hrms.business.attendance.vo.LeaveTypeVO;
 import com.hrms.business.attendance.vo.LeaveBalanceVO;
 import com.hrms.business.attendance.vo.LeaveCreateVO;
+import com.hrms.business.attendance.vo.MonthlyStatGenerateVO;
+import com.hrms.business.attendance.vo.AttendancePayrollSourceVO;
 import com.hrms.business.attendance.vo.AttendanceGroupPageVO;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
@@ -64,6 +67,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.math.RoundingMode;
+import java.util.Collections;
 
 /**
  * 考勤管理服务实现。
@@ -291,6 +295,151 @@ public class AttendanceServiceImpl implements AttendanceService {
         leaveRequestMapper.insert(entity);
         evictCalendarCache(employee.getId(), requestDTO.getStartDate());
         return buildLeaveCreateVO(entity);
+    }
+
+    @Override
+    public MonthlyStatGenerateVO generateMonthlyStat(MonthlyStatGenerateRequestDTO requestDTO) {
+        String lockKey = AttendanceCacheKeys.monthStatGenerateLock(requestDTO.getMonth());
+        Boolean locked = stringRedisTemplate.opsForValue().setIfAbsent(lockKey, "1", Duration.ofMinutes(10));
+        if (Boolean.FALSE.equals(locked)) {
+            MonthlyStatGenerateVO vo = new MonthlyStatGenerateVO();
+            vo.setMonth(requestDTO.getMonth());
+            vo.setEmployeeCount(0);
+            vo.setSuccess(false);
+            return vo;
+        }
+        List<AttendancePayrollSourceVO> stats = computePayrollSources(requestDTO.getMonth(), requestDTO.getEmployeeIds());
+        stats.forEach(stat -> stringRedisTemplate.opsForValue().set(
+                AttendanceCacheKeys.monthStat(stat.getEmployeeId(), requestDTO.getMonth()),
+                JSONUtil.toJsonStr(stat),
+                Duration.ofDays(35)));
+        // attendanceStatGenerateProducer.send(requestDTO); 本接口后续替换为 attendance.stat.generate 生产者异步分片统计。
+        tempPublishMonthlyStatGenerateMessage(requestDTO);
+        MonthlyStatGenerateVO vo = new MonthlyStatGenerateVO();
+        vo.setMonth(requestDTO.getMonth());
+        vo.setEmployeeCount(stats.size());
+        vo.setSuccess(true);
+        return vo;
+    }
+
+    /**
+     * 临时发布月度统计生成消息。
+     *
+     * @param requestDTO 生成请求
+     * 本方法使用的工具类: JSONUtil(hutool)
+     */
+    private void tempPublishMonthlyStatGenerateMessage(MonthlyStatGenerateRequestDTO requestDTO) {
+        log.info("temp publish attendance.stat.generate: {}", JSONUtil.toJsonStr(requestDTO));
+    }
+
+    @Override
+    public List<AttendancePayrollSourceVO> getPayrollSource(String month, List<Long> employeeIds) {
+        List<EmployeeSnapshotEntity> employees = findStatEmployees(employeeIds);
+        return employees.stream()
+                .map(employee -> getPayrollSourceFromCache(month, employee))
+                .toList();
+    }
+
+    /**
+     * 从缓存读取薪资考勤数据，未命中时即时计算。
+     *
+     * @param month    月份
+     * @param employee 员工快照
+     * @return 薪资考勤数据
+     * 本方法使用的工具类: JSONUtil(hutool),AttendanceCacheKeys(本模块cache包)
+     */
+    private AttendancePayrollSourceVO getPayrollSourceFromCache(String month, EmployeeSnapshotEntity employee) {
+        String cached = stringRedisTemplate.opsForValue().get(AttendanceCacheKeys.monthStat(employee.getId(), month));
+        if (StrUtil.isNotBlank(cached)) {
+            return JSONUtil.toBean(cached, AttendancePayrollSourceVO.class);
+        }
+        return computePayrollSource(month, employee);
+    }
+
+    /**
+     * 批量计算薪资考勤数据。
+     *
+     * @param month       月份
+     * @param employeeIds 员工ID列表
+     * @return 薪资考勤数据
+     * 本方法使用的工具类: List(JDK)
+     */
+    private List<AttendancePayrollSourceVO> computePayrollSources(String month, List<Long> employeeIds) {
+        return findStatEmployees(employeeIds).stream()
+                .map(employee -> computePayrollSource(month, employee))
+                .toList();
+    }
+
+    /**
+     * 查询统计员工范围。
+     *
+     * @param employeeIds 员工ID列表
+     * @return 员工快照列表
+     * 本方法使用的工具类: Collections(JDK)
+     */
+    private List<EmployeeSnapshotEntity> findStatEmployees(List<Long> employeeIds) {
+        if (employeeIds != null && !employeeIds.isEmpty()) {
+            return employeeSnapshotMapper.selectList(new LambdaQueryWrapper<EmployeeSnapshotEntity>()
+                    .in(EmployeeSnapshotEntity::getId, employeeIds));
+        }
+        List<EmployeeSnapshotEntity> employees = employeeSnapshotMapper.selectList(new LambdaQueryWrapper<EmployeeSnapshotEntity>()
+                .ne(EmployeeSnapshotEntity::getEmploymentStatus, 4));
+        return employees == null ? Collections.emptyList() : employees;
+    }
+
+    /**
+     * 计算单个员工薪资考勤数据。
+     *
+     * @param month    月份
+     * @param employee 员工快照
+     * @return 薪资考勤数据
+     * 本方法使用的工具类: YearMonth(JDK),BigDecimal(JDK)
+     */
+    private AttendancePayrollSourceVO computePayrollSource(String month, EmployeeSnapshotEntity employee) {
+        YearMonth yearMonth = YearMonth.parse(month);
+        LocalDate startDate = yearMonth.atDay(1);
+        LocalDate endDate = yearMonth.atEndOfMonth();
+        List<AttendanceRecordEntity> records = attendanceRecordMapper.selectByEmployeeAndDateRange(employee.getId(), startDate, endDate);
+        BigDecimal leaveDays = leaveRequestMapper.selectList(new LambdaQueryWrapper<LeaveRequestEntity>()
+                        .eq(LeaveRequestEntity::getEmployeeId, employee.getId())
+                        .eq(LeaveRequestEntity::getApprovalStatus, 2)
+                        .ge(LeaveRequestEntity::getStartTime, startDate.atStartOfDay())
+                        .le(LeaveRequestEntity::getStartTime, endDate.atTime(LocalTime.MAX)))
+                .stream()
+                .map(LeaveRequestEntity::getTotalDays)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        int shouldAttendDays = countWeekdays(startDate, endDate);
+        int lateCount = (int) records.stream().filter(record -> "LATE".equals(record.getClockInStatus())).count();
+        int earlyLeaveCount = (int) records.stream().filter(record -> "EARLY_LEAVE".equals(record.getClockOutStatus())).count();
+        int actualAttendDays = (int) records.stream()
+                .filter(record -> record.getClockInTime() != null || record.getClockOutTime() != null)
+                .count();
+        AttendancePayrollSourceVO vo = new AttendancePayrollSourceVO();
+        vo.setEmployeeId(employee.getId());
+        vo.setEmployeeNo(employee.getEmployeeNo());
+        vo.setEmployeeName(employee.getEmployeeName());
+        vo.setShouldAttendDays(shouldAttendDays);
+        vo.setActualAttendDays(actualAttendDays);
+        vo.setLateCount(lateCount);
+        vo.setEarlyLeaveCount(earlyLeaveCount);
+        vo.setLeaveDays(leaveDays);
+        vo.setAbsenceDays(BigDecimal.valueOf(Math.max(0, shouldAttendDays - actualAttendDays)).subtract(leaveDays).max(BigDecimal.ZERO));
+        vo.setOvertimeHours(BigDecimal.ZERO);
+        return vo;
+    }
+
+    /**
+     * 计算工作日数量。
+     *
+     * @param startDate 开始日期
+     * @param endDate   结束日期
+     * @return 工作日数量
+     * 本方法使用的工具类: IntStream(JDK)
+     */
+    private int countWeekdays(LocalDate startDate, LocalDate endDate) {
+        return (int) startDate.datesUntil(endDate.plusDays(1))
+                .filter(date -> date.getDayOfWeek().getValue() <= 5)
+                .count();
     }
 
     /**
