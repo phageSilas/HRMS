@@ -1,20 +1,28 @@
 package com.hrms.business.personnel.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hrms.business.personnel.convert.RegularApplicationConvert;
+import com.hrms.business.personnel.dto.RegularApplicationApplyRequestDTO;
 import com.hrms.business.personnel.dto.RegularApplicationQueryDTO;
 import com.hrms.business.personnel.entity.EmployeeSnapshotEntity;
 import com.hrms.business.personnel.entity.RegularApplicationEntity;
+import com.hrms.business.personnel.enums.ApplicationStatusEnum;
+import com.hrms.business.personnel.enums.RegularEvaluateResultEnum;
 import com.hrms.business.personnel.mapper.EmployeeSnapshotMapper;
 import com.hrms.business.personnel.mapper.RegularApplicationMapper;
 import com.hrms.business.personnel.service.RegularApplicationService;
+import com.hrms.business.personnel.vo.RegularApplicationApplyVO;
 import com.hrms.business.personnel.vo.RegularApplicationPageVO;
+import com.hrms.common.exception.ErrorCode;
+import com.hrms.common.exception.GlobalException;
 import com.hrms.common.web.PageResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collections;
 import java.util.List;
@@ -28,6 +36,12 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class RegularApplicationServiceImpl implements RegularApplicationService {
+
+    private static final ErrorCode EMPLOYEE_NOT_FOUND = new ErrorCode(40060, "员工不存在");
+
+    private static final ErrorCode REGULAR_APPLICATION_DUPLICATE = new ErrorCode(40061, "员工已有进行中的转正申请");
+
+    private static final ErrorCode REGULAR_EXTEND_MONTH_REQUIRED = new ErrorCode(40062, "延长试用时必须填写延长月数");
 
     private static final String TAB_EVALUATED = "evaluated";
 
@@ -49,6 +63,81 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
             return pageEvaluatedRegularApplications(queryDTO);
         }
         return pagePendingRegularEmployees(queryDTO);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public RegularApplicationApplyVO applyRegular(Long employeeId, RegularApplicationApplyRequestDTO requestDTO) {
+        EmployeeSnapshotEntity employeeSnapshot = getRequiredEmployeeSnapshot(employeeId);
+        RegularEvaluateResultEnum evaluateResult = RegularEvaluateResultEnum.fromValue(requestDTO.getResult());
+        if (evaluateResult == RegularEvaluateResultEnum.EXTEND && requestDTO.getExtendMonth() == null) {
+            throw new GlobalException(REGULAR_EXTEND_MONTH_REQUIRED);
+        }
+        assertNoProcessingRegularApplication(employeeId);
+
+        RegularApplicationEntity entity = new RegularApplicationEntity();
+        entity.setEmployeeId(employeeId);
+        entity.setProbationStartDate(employeeSnapshot.getHireDate());
+        entity.setProbationEndDate(employeeSnapshot.getHireDate() == null
+                ? null
+                : employeeSnapshot.getHireDate().plusMonths(employeeSnapshot.getProbationMonth() == null ? 0 : employeeSnapshot.getProbationMonth()));
+        entity.setEvaluateResult(evaluateResult.getCode());
+        entity.setExtendMonth(requestDTO.getExtendMonth());
+        entity.setSalaryAdjustment(requestDTO.getSalaryAdjustment());
+        entity.setEvaluateOpinion(requestDTO.getEvaluateOpinion());
+        // approvalService.startApproval("REGULAR", entity.getId()); 本接口需要调用 hrms-business-approval 模块的转正审批发起接口
+        Long approvalInstanceId = tempStartRegularApproval(employeeSnapshot);
+        entity.setApprovalInstanceId(approvalInstanceId);
+        entity.setApprovalStatus(ApplicationStatusEnum.APPROVING.getCode());
+        regularApplicationMapper.insert(entity);
+
+        RegularApplicationApplyVO vo = new RegularApplicationApplyVO();
+        vo.setSuccess(Boolean.TRUE);
+        vo.setApprovalId(approvalInstanceId);
+        return vo;
+    }
+
+    /**
+     * 临时发起转正审批。
+     *
+     * @param employeeSnapshot 员工快照
+     * @return 审批实例ID
+     * 本方法使用的工具类: IdUtil(hutool)
+     */
+    private Long tempStartRegularApproval(EmployeeSnapshotEntity employeeSnapshot) {
+        return IdUtil.getSnowflakeNextId();
+    }
+
+    /**
+     * 查询必须存在的员工快照。
+     *
+     * @param employeeId 员工ID
+     * @return 员工快照
+     * 本方法使用的工具类: 无
+     */
+    private EmployeeSnapshotEntity getRequiredEmployeeSnapshot(Long employeeId) {
+        // employeeService.getEmployeeSnapshot(employeeId); 本接口需要调用 hrms-business-employee 模块的员工快照详情接口
+        EmployeeSnapshotEntity employeeSnapshot = employeeSnapshotMapper.selectById(employeeId);
+        if (employeeSnapshot == null) {
+            throw new GlobalException(EMPLOYEE_NOT_FOUND);
+        }
+        return employeeSnapshot;
+    }
+
+    /**
+     * 校验员工没有进行中的转正申请。
+     *
+     * @param employeeId 员工ID
+     * 本方法使用的工具类: 无
+     */
+    private void assertNoProcessingRegularApplication(Long employeeId) {
+        Long count = regularApplicationMapper.selectCount(new LambdaQueryWrapper<RegularApplicationEntity>()
+                .eq(RegularApplicationEntity::getEmployeeId, employeeId)
+                .in(RegularApplicationEntity::getApprovalStatus,
+                        ApplicationStatusEnum.DRAFT.getCode(), ApplicationStatusEnum.APPROVING.getCode()));
+        if (count != null && count > 0) {
+            throw new GlobalException(REGULAR_APPLICATION_DUPLICATE);
+        }
     }
 
     /**
