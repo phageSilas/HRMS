@@ -7,7 +7,7 @@
 -- 密码: 123456 (BCrypt加密, cost=10)
 -- ----------------------------------------
 INSERT IGNORE INTO `sys_user` (`id`, `username`, `password`, `nickname`, `real_name`, `phone`, `email`, `status`, `need_change_password`, `create_time`, `update_time`, `is_deleted`, `version`) VALUES
-    (1, 'admin', '$2a$10$8Z7FhWZ9u6jMkLq5rNxXxOeM9sTqWpY3JkLmNoPqRsTuVwXyZAbCdEf', '管理员', '系统管理员', '13800000000', 'admin@company.com', 1, 0, NOW(), NOW(), 0, 0);
+    (1, 'admin', '$2b$12$DM3WJuIpv4IN4aXoqp8EFOZKsfV1DXlCwbDsrYelpGlGINCLznpJe', '管理员', '系统管理员', '13800000000', 'admin@company.com', 1, 0, NOW(), NOW(), 0, 0);
 
 -- ----------------------------------------
 -- 2. 角色 (sys_role)
