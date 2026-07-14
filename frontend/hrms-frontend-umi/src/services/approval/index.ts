@@ -99,50 +99,50 @@ export interface DelegationCreateData {
 
 /** 待审批列表 */
 export async function getPendingTasks(params?: PendingQuery) {
-  return request.get<PageResult<ApprovalTask>>('/approval/tasks/pending', { params });
+  return request.get<PageResult<ApprovalTask>>('/api/v1/approval/tasks/pending', { params });
 }
 
 /** 待审批数量（用于角标） */
 export async function getPendingCount() {
-  return request.get<{ count: number; details: Array<{ bizType: string; count: number }> }>('/approval/pending-count');
+  return request.get<{ count: number; details: Array<{ bizType: string; count: number }> }>('/api/v1/approval/pending-count');
 }
 
 /** 已审批列表 */
 export async function getHistoryTasks(params?: PendingQuery) {
-  return request.get<PageResult<ApprovalTask>>('/approval/tasks/history', { params });
+  return request.get<PageResult<ApprovalTask>>('/api/v1/approval/tasks/history', { params });
 }
 
 /** 我发起的申请 */
 export async function getMyApplications(params?: MyApplicationQuery) {
-  return request.get<PageResult<ApprovalTask>>('/approval/my-applications', { params });
+  return request.get<PageResult<ApprovalTask>>('/api/v1/approval/my-applications', { params });
 }
 
 /** 审批详情 */
 export async function getApprovalDetail(id: number) {
-  return request.get<ApprovalDetail>(`/approval/${id}`);
+  return request.get<ApprovalDetail>(`/api/v1/approval/${id}`);
 }
 
 /** 审批操作 */
 export async function operateApproval(id: number, data: OperateData) {
-  return request.post<void>(`/approval/${id}/operate`, data);
+  return request.post<void>(`/api/v1/approval/${id}/operate`, data);
 }
 
 /** 撤回申请 */
 export async function withdrawApproval(id: number) {
-  return request.post<void>(`/approval/${id}/withdraw`);
+  return request.post<void>(`/api/v1/approval/${id}/withdraw`);
 }
 
 /** 新建委托 */
 export async function createDelegation(data: DelegationCreateData) {
-  return request.post<{ id: number }>('/approval/delegation', data);
+  return request.post<{ id: number }>('/api/v1/approval/delegation', data);
 }
 
 /** 取消委托 */
 export async function cancelDelegation(id: number) {
-  return request.put<void>(`/approval/delegation/${id}/cancel`);
+  return request.put<void>(`/api/v1/approval/delegation/${id}/cancel`);
 }
 
 /** 我的委托 */
 export async function getMyDelegations() {
-  return request.get<{ activeDelegation: Delegation | null; records: Delegation[] }>('/approval/delegation/my');
+  return request.get<{ activeDelegation: Delegation | null; records: Delegation[] }>('/api/v1/approval/delegation/my');
 }

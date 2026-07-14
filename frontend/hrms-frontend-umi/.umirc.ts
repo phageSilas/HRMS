@@ -25,10 +25,9 @@ export default defineConfig({
       target: 'http://localhost:8080',
       changeOrigin: true,
     },
-    '/approval': {
+    '/api/v1/approval': {
       target: 'http://localhost:8080',
       changeOrigin: true,
-      pathRewrite: { '^/approval': '/api/v1/approval' },
     },
     '/salary': {
       target: 'http://localhost:8080',
