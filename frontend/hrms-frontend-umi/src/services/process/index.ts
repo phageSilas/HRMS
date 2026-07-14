@@ -1,16 +1,17 @@
 /**
  * 入转调离流程相关接口。
- * 入职模块已对接后端真实 /api/v1 接口，转正、调岗、离职先保留接口契约。
+ * 所有接口均按后端 /api/v1 契约返回业务 data，不在页面重复解包 Result。
  */
 
+import type { PageQuery, PageResult } from '@/types/api';
 import request from '@/utils/request';
-import type { PageResult, PageQuery } from '@/types/api';
 
 export const ApprovalStatus = {
   DRAFT: 0,
   APPROVING: 1,
   APPROVED: 2,
   REJECTED: 3,
+  WITHDRAWN: 4,
   ENTERED: 5,
 } as const;
 
@@ -79,51 +80,113 @@ export interface EntryApplicationConfirmResult {
 }
 
 export interface RegularApplication {
-  id: number;
+  id?: number;
   employeeId: number;
   employeeName: string;
-  departmentName: string;
-  positionName: string;
-  hireDate: string;
-  probationEndDate: string;
-  remainingDays: number;
-  evaluationStatus: 'pending' | 'evaluated';
-  approvalStatus: number;
-  createTime: string;
+  employeeNo?: string;
+  deptId?: number;
+  departmentName?: string;
+  postId?: number;
+  positionName?: string;
+  hireDate?: string;
+  probationEndDate?: string;
+  remainingDays?: number;
+  evaluationStatus?: 'pending' | 'evaluated';
+  approvalStatus?: number;
+  approvalStatusDesc?: string;
+  createTime?: string;
+}
+
+export interface RegularApplicationQuery extends PageQuery {
+  tab?: 'pending' | 'evaluated';
+  keyword?: string;
+  departmentId?: number;
+}
+
+export interface RegularApplicationApplyRequest {
+  evaluateOpinion: string;
+  result: 'pass' | 'extend' | 'terminate';
+  salaryAdjustment?: number;
+  extendMonth?: number;
+}
+
+export interface RegularApplicationApplyResult {
+  success: boolean;
+  approvalId?: number;
 }
 
 export interface TransferApplication {
   id: number;
   employeeId: number;
-  employeeName: string;
-  fromDeptName: string;
-  fromPostName: string;
-  toDeptName: string;
-  toPostName: string;
+  employeeName?: string;
+  employeeNo?: string;
+  fromDeptName?: string;
+  fromPostName?: string;
+  toDeptName?: string;
+  toPostName?: string;
   effectiveDate: string;
-  reason: string;
-  approvalStatus: number;
-  createTime: string;
+  reason?: string;
+  approvalStatus?: number;
+  approvalStatusDesc?: string;
+  createTime?: string;
+}
+
+export interface TransferApplicationQuery extends PageQuery {
+  keyword?: string;
+  departmentId?: number;
+  approvalStatus?: number;
+}
+
+export interface TransferApplicationCreateRequest {
+  employeeId: number;
+  toDeptId: number;
+  toPostId: number;
+  toJobLevel?: string;
+  toLeaderId?: number;
+  effectiveDate: string;
+  salaryAdjustment?: number;
+  reason?: string;
+}
+
+export interface TransferApplicationCreateResult {
+  id: number;
+  approvalStatus?: number;
 }
 
 export interface LeaveApplication {
   id: number;
   employeeId: number;
-  employeeName: string;
-  departmentName: string;
+  employeeName?: string;
+  departmentName?: string;
   leaveType: string;
-  leaveTypeName: string;
+  leaveTypeName?: string;
   lastWorkDate: string;
-  leaveDate: string;
-  handoverEmployeeName: string;
-  reason: string;
-  approvalStatus: number;
-  createTime: string;
+  leaveDate?: string;
+  handoverEmployeeName?: string;
+  reason?: string;
+  approvalStatus?: number;
+  approvalStatusDesc?: string;
+  createTime?: string;
 }
 
-export interface ApplicationQuery extends PageQuery {
+export interface LeaveApplicationQuery extends PageQuery {
   keyword?: string;
+  departmentId?: number;
+  leaveType?: string;
   approvalStatus?: number;
+}
+
+export interface LeaveApplicationCreateRequest {
+  employeeId: number;
+  leaveType: 'resign' | 'terminate' | 'mutual' | 'contract_end';
+  leaveReason: string;
+  lastWorkDate: string;
+  handoverEmployeeId: number;
+  remark?: string;
+}
+
+export interface LeaveApplicationCreateResult {
+  id: number;
 }
 
 export async function getEntryApplicationList(
@@ -158,40 +221,39 @@ export async function confirmEntryApplication(
   return request.post(`/api/v1/entry-applications/${id}/confirm`, data);
 }
 
-export async function getRegularApplicationList(params: ApplicationQuery) {
-  return request.get<PageResult<RegularApplication>>(
-    '/api/v1/regular-applications',
-    { params },
-  );
+export async function getRegularApplicationList(
+  params: RegularApplicationQuery,
+): Promise<PageResult<RegularApplication>> {
+  return request.get('/api/v1/regular-applications', { params });
 }
 
-export async function createRegularApplication(data: Partial<RegularApplication>) {
-  return request.post<RegularApplication>('/api/v1/regular-applications', data);
+export async function applyRegularApplication(
+  employeeId: number,
+  data: RegularApplicationApplyRequest,
+): Promise<RegularApplicationApplyResult> {
+  return request.post(`/api/v1/regular-applications/${employeeId}/apply`, data);
 }
 
-export async function getTransferApplicationList(params: ApplicationQuery) {
-  return request.get<PageResult<TransferApplication>>(
-    '/api/v1/transfer-applications',
-    { params },
-  );
+export async function getTransferApplicationList(
+  params: TransferApplicationQuery,
+): Promise<PageResult<TransferApplication>> {
+  return request.get('/api/v1/transfer-applications', { params });
 }
 
 export async function createTransferApplication(
-  data: Partial<TransferApplication>,
-) {
-  return request.post<TransferApplication>(
-    '/api/v1/transfer-applications',
-    data,
-  );
+  data: TransferApplicationCreateRequest,
+): Promise<TransferApplicationCreateResult> {
+  return request.post('/api/v1/transfer-applications', data);
 }
 
-export async function getLeaveApplicationList(params: ApplicationQuery) {
-  return request.get<PageResult<LeaveApplication>>(
-    '/api/v1/leave-applications',
-    { params },
-  );
+export async function getLeaveApplicationList(
+  params: LeaveApplicationQuery,
+): Promise<PageResult<LeaveApplication>> {
+  return request.get('/api/v1/leave-applications', { params });
 }
 
-export async function createLeaveApplication(data: Partial<LeaveApplication>) {
-  return request.post<LeaveApplication>('/api/v1/leave-applications', data);
+export async function createLeaveApplication(
+  data: LeaveApplicationCreateRequest,
+): Promise<LeaveApplicationCreateResult> {
+  return request.post('/api/v1/leave-applications', data);
 }
