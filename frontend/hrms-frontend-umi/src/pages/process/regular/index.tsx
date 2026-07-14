@@ -1,97 +1,145 @@
 /**
  * 转正管理页面。
- * 当前提供待转正/已评估基础界面，后续接入 /api/v1/regular-applications。
+ * 接入待转正列表和发起转正评估接口。
  */
 
 import {
+  applyRegularApplication,
+  getRegularApplicationList,
+} from '@/services/process';
+import type {
+  RegularApplication,
+  RegularApplicationApplyRequest,
+} from '@/services/process';
+import { FileDoneOutlined } from '@ant-design/icons';
+import {
   DrawerForm,
   PageContainer,
+  ProFormDependency,
   ProFormDigit,
   ProFormRadio,
   ProFormTextArea,
   ProTable,
 } from '@ant-design/pro-components';
-import type { ProColumns } from '@ant-design/pro-components';
-import { FileDoneOutlined } from '@ant-design/icons';
+import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { Button, Space, Tabs, Tag, message } from 'antd';
-import React, { useMemo, useState } from 'react';
+import React, { useRef, useState } from 'react';
 
-interface RegularRow {
-  id: number;
-  employeeName: string;
-  departmentName: string;
-  positionName: string;
-  hireDate: string;
-  probationEndDate: string;
-  remainingDays: number;
-  status: 'pending' | 'evaluated';
-  result?: string;
-}
-
-const sampleRows: RegularRow[] = [
-  {
-    id: 1,
-    employeeName: '张晓雨',
-    departmentName: '技术部',
-    positionName: '前端开发工程师',
-    hireDate: '2026-04-15',
-    probationEndDate: '2026-07-15',
-    remainingDays: 1,
-    status: 'pending',
-  },
-  {
-    id: 2,
-    employeeName: '陈辰',
-    departmentName: '产品部',
-    positionName: '产品经理',
-    hireDate: '2026-03-20',
-    probationEndDate: '2026-06-20',
-    remainingDays: -24,
-    status: 'evaluated',
-    result: '转正',
-  },
+const departmentOptions = [
+  { label: '人力资源部', value: 1 },
+  { label: '技术部', value: 2 },
+  { label: '产品部', value: 3 },
+  { label: '财务部', value: 4 },
 ];
 
+const resultOptions = [
+  { label: '转正', value: 'pass' },
+  { label: '延长试用', value: 'extend' },
+  { label: '辞退', value: 'terminate' },
+];
+
+function renderRemainingDays(days?: number) {
+  if (days === undefined || days === null) {
+    return <Tag>未计算</Tag>;
+  }
+  if (days < 0) {
+    return <Tag color="red">已超期 {Math.abs(days)} 天</Tag>;
+  }
+  if (days <= 7) {
+    return <Tag color="gold">剩余 {days} 天</Tag>;
+  }
+  return <Tag color="green">剩余 {days} 天</Tag>;
+}
+
 const RegularPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('pending');
+  const actionRef = useRef<ActionType>();
+  const [activeTab, setActiveTab] = useState<'pending' | 'evaluated'>('pending');
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [currentRow, setCurrentRow] = useState<RegularRow>();
+  const [currentRow, setCurrentRow] = useState<RegularApplication>();
 
-  const rows = useMemo(
-    () => sampleRows.filter((item) => item.status === activeTab),
-    [activeTab],
-  );
-
-  const columns: ProColumns<RegularRow>[] = [
-    { title: '员工姓名', dataIndex: 'employeeName', width: 120 },
-    { title: '部门', dataIndex: 'departmentName', width: 120 },
-    { title: '职位', dataIndex: 'positionName', width: 160 },
-    { title: '入职日期', dataIndex: 'hireDate', valueType: 'date', width: 120 },
+  const columns: ProColumns<RegularApplication>[] = [
+    {
+      title: '关键词',
+      dataIndex: 'keyword',
+      hideInTable: true,
+      fieldProps: { placeholder: '员工姓名 / 工号' },
+    },
+    {
+      title: '部门',
+      dataIndex: 'departmentId',
+      hideInTable: true,
+      valueType: 'select',
+      fieldProps: { options: departmentOptions, allowClear: true },
+    },
+    {
+      title: '员工',
+      dataIndex: 'employeeName',
+      width: 150,
+      search: false,
+      render: (_, record) => (
+        <Space direction="vertical" size={0}>
+          <strong>{record.employeeName}</strong>
+          <span style={{ color: '#6b7280', fontSize: 12 }}>
+            {record.employeeNo || `ID ${record.employeeId}`}
+          </span>
+        </Space>
+      ),
+    },
+    {
+      title: '部门',
+      dataIndex: 'departmentName',
+      width: 120,
+      search: false,
+    },
+    {
+      title: '职位',
+      dataIndex: 'positionName',
+      width: 160,
+      search: false,
+    },
+    {
+      title: '入职日期',
+      dataIndex: 'hireDate',
+      valueType: 'date',
+      width: 120,
+      search: false,
+    },
     {
       title: '试用期结束',
       dataIndex: 'probationEndDate',
       valueType: 'date',
       width: 130,
+      search: false,
     },
     {
       title: '剩余天数',
       dataIndex: 'remainingDays',
-      width: 110,
+      width: 120,
+      search: false,
+      render: (_, record) => renderRemainingDays(record.remainingDays),
+    },
+    {
+      title: '状态',
+      dataIndex: 'approvalStatus',
+      width: 120,
+      search: false,
       render: (_, record) => {
-        if (record.remainingDays < 0) {
-          return <Tag color="red">已超期 {Math.abs(record.remainingDays)} 天</Tag>;
+        if (activeTab === 'pending') {
+          return <Tag color="gold">待转正</Tag>;
         }
-        if (record.remainingDays <= 7) {
-          return <Tag color="gold">剩余 {record.remainingDays} 天</Tag>;
-        }
-        return <Tag color="green">剩余 {record.remainingDays} 天</Tag>;
+        return (
+          <Tag color={record.approvalStatus === 2 ? 'success' : 'processing'}>
+            {record.approvalStatusDesc || '已评估'}
+          </Tag>
+        );
       },
     },
     {
-      title: '评估结果',
-      dataIndex: 'result',
-      width: 110,
-      renderText: (value) => value || '待评估',
+      title: '申请时间',
+      dataIndex: 'createTime',
+      valueType: 'dateTime',
+      width: 170,
+      search: false,
     },
     {
       title: '操作',
@@ -100,14 +148,15 @@ const RegularPage: React.FC = () => {
       render: (_, record) => (
         <Button
           size="small"
-          type={record.status === 'pending' ? 'primary' : 'default'}
+          type={activeTab === 'pending' ? 'primary' : 'default'}
           icon={<FileDoneOutlined />}
+          disabled={activeTab !== 'pending'}
           onClick={() => {
             setCurrentRow(record);
             setDrawerOpen(true);
           }}
         >
-          {record.status === 'pending' ? '发起转正' : '查看评估'}
+          发起转正
         </Button>
       ),
     },
@@ -122,47 +171,72 @@ const RegularPage: React.FC = () => {
     >
       <Tabs
         activeKey={activeTab}
-        onChange={setActiveTab}
+        onChange={(key) => {
+          setActiveTab(key as 'pending' | 'evaluated');
+          setTimeout(() => actionRef.current?.reload(), 0);
+        }}
         items={[
           { key: 'pending', label: '待转正' },
           { key: 'evaluated', label: '已评估' },
         ]}
       />
-      <ProTable<RegularRow>
-        rowKey="id"
-        search={false}
+
+      <ProTable<RegularApplication>
+        actionRef={actionRef}
+        rowKey={(record) => `${activeTab}-${record.employeeId}-${record.id || 'pending'}`}
         columns={columns}
-        dataSource={rows}
-        pagination={false}
-        toolBarRender={() => [
-          <Button key="scan" disabled>
-            每日扫描待转正员工
-          </Button>,
-        ]}
+        request={async (params) => {
+          const result = await getRegularApplicationList({
+            tab: activeTab,
+            pageNum: params.current || 1,
+            pageSize: params.pageSize || 20,
+            keyword: params.keyword as string,
+            departmentId: params.departmentId as number,
+          });
+          return {
+            data: result.records || [],
+            total: result.total || 0,
+            success: true,
+          };
+        }}
+        search={{ labelWidth: 88, span: 8 }}
+        pagination={{ defaultPageSize: 20, showSizeChanger: true }}
+        toolbar={{ title: activeTab === 'pending' ? '待转正员工' : '已评估记录' }}
       />
 
-      <DrawerForm
-        title="转正评估"
+      <DrawerForm<RegularApplicationApplyRequest>
+        title="发起转正评估"
         width={640}
         open={drawerOpen}
-        onOpenChange={setDrawerOpen}
+        onOpenChange={(open) => {
+          setDrawerOpen(open);
+          if (!open) {
+            setCurrentRow(undefined);
+          }
+        }}
         drawerProps={{ destroyOnClose: true }}
         submitter={{ searchConfig: { submitText: '提交审批' } }}
-        onFinish={async () => {
-          message.info('转正接口尚未接入，已保留提交审批入口');
+        initialValues={{ result: 'pass' }}
+        onFinish={async (values) => {
+          if (!currentRow) {
+            return false;
+          }
+          await applyRegularApplication(currentRow.employeeId, values);
+          message.success('已发起转正评估');
           setDrawerOpen(false);
+          actionRef.current?.reload();
           return true;
         }}
       >
         <Space direction="vertical" size={4} style={{ marginBottom: 16 }}>
           <strong>{currentRow?.employeeName}</strong>
           <span style={{ color: '#6b7280' }}>
-            {currentRow?.departmentName} / {currentRow?.positionName} / 入职：
-            {currentRow?.hireDate}
+            {currentRow?.departmentName || '-'} / {currentRow?.positionName || '-'} / 入职：
+            {currentRow?.hireDate || '-'}
           </span>
         </Space>
         <ProFormTextArea
-          name="evaluation"
+          name="evaluateOpinion"
           label="表现评价"
           rules={[{ required: true, message: '请输入表现评价' }]}
           fieldProps={{ rows: 4 }}
@@ -170,15 +244,34 @@ const RegularPage: React.FC = () => {
         <ProFormRadio.Group
           name="result"
           label="评估结果"
-          initialValue="pass"
-          options={[
-            { label: '转正', value: 'pass' },
-            { label: '延长试用', value: 'extend' },
-            { label: '辞退', value: 'terminate' },
-          ]}
+          options={resultOptions}
+          rules={[{ required: true, message: '请选择评估结果' }]}
         />
-        <ProFormDigit name="newSalary" label="转正后薪资" min={0} width="md" />
-        <ProFormDigit name="extendMonths" label="延长试用月数" min={1} max={6} width="sm" />
+        <ProFormDependency name={['result']}>
+          {({ result }) => (
+            <>
+              {result !== 'terminate' && (
+                <ProFormDigit
+                  name="salaryAdjustment"
+                  label="转正后薪资调整"
+                  min={0}
+                  width="md"
+                  fieldProps={{ precision: 2 }}
+                />
+              )}
+              {result === 'extend' && (
+                <ProFormDigit
+                  name="extendMonth"
+                  label="延长试用月数"
+                  min={1}
+                  max={6}
+                  width="sm"
+                  rules={[{ required: true, message: '请输入延长试用月数' }]}
+                />
+              )}
+            </>
+          )}
+        </ProFormDependency>
       </DrawerForm>
     </PageContainer>
   );
