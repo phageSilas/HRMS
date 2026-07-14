@@ -1,19 +1,16 @@
-package com.hrms.business.salary.entity;
+package com.hrms.business.salary.vo;
 
-import com.baomidou.mybatisplus.annotation.TableName;
-import com.hrms.common.entity.BaseEntity;
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
 
 /**
- * 薪资核算批次实体，对齐 hr_salary_batch 表。
+ * 薪资批次返回视图。
  */
 @Data
-@EqualsAndHashCode(callSuper = true)
-@TableName("hr_salary_batch")
-public class SalaryBatchEntity extends BaseEntity {
+public class SalaryBatchVO {
+
+    private Long id;
 
     private String batchNo;
 
