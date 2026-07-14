@@ -1,11 +1,13 @@
 package com.hrms.business.attendance.controller;
 
 import com.hrms.business.attendance.dto.AttendanceClockRequestDTO;
+import com.hrms.business.attendance.dto.AttendanceCorrectionCreateRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupQueryDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupCreateOrUpdateRequestDTO;
 import com.hrms.business.attendance.service.AttendanceService;
 import com.hrms.business.attendance.vo.AttendanceClockVO;
 import com.hrms.business.attendance.vo.AttendanceCalendarVO;
+import com.hrms.business.attendance.vo.AttendanceCorrectionCreateVO;
 import com.hrms.business.attendance.vo.AttendanceGroupPageVO;
 import com.hrms.common.web.PageResult;
 import com.hrms.common.web.Result;
@@ -97,6 +99,19 @@ public class AttendanceController {
     @GetMapping("/records/my-calendar")
     public Result<AttendanceCalendarVO> getMyCalendar(@RequestParam String yearMonth) {
         return Result.success(attendanceService.getMyCalendar(yearMonth));
+    }
+
+    /**
+     * 创建补卡申请。
+     *
+     * @param requestDTO 补卡申请请求
+     * @return 补卡申请创建结果
+     * 本方法使用的工具类: Result(hrms-common)
+     */
+    @PostMapping("/corrections")
+    public Result<AttendanceCorrectionCreateVO> createCorrection(
+            @Valid @RequestBody AttendanceCorrectionCreateRequestDTO requestDTO) {
+        return Result.success(attendanceService.createCorrection(requestDTO));
     }
 
     /**

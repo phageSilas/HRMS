@@ -3,9 +3,11 @@ package com.hrms.business.attendance.service;
 import com.hrms.business.attendance.dto.AttendanceGroupQueryDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupCreateOrUpdateRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceClockRequestDTO;
+import com.hrms.business.attendance.dto.AttendanceCorrectionCreateRequestDTO;
 import com.hrms.business.attendance.vo.AttendanceGroupPageVO;
 import com.hrms.business.attendance.vo.AttendanceClockVO;
 import com.hrms.business.attendance.vo.AttendanceCalendarVO;
+import com.hrms.business.attendance.vo.AttendanceCorrectionCreateVO;
 import com.hrms.common.web.PageResult;
 
 /**
@@ -59,6 +61,15 @@ public interface AttendanceService {
      * 本方法使用的工具类: 无
      */
     AttendanceCalendarVO getMyCalendar(String yearMonth);
+
+    /**
+     * 创建补卡申请。
+     *
+     * @param requestDTO 补卡申请请求
+     * @return 补卡申请创建结果
+     * 本方法使用的工具类: 无
+     */
+    AttendanceCorrectionCreateVO createCorrection(AttendanceCorrectionCreateRequestDTO requestDTO);
 
     /**
      * 获取月度考勤汇总。

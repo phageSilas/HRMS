@@ -9,14 +9,17 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hrms.business.attendance.cache.AttendanceCacheKeys;
 import com.hrms.business.attendance.convert.AttendanceGroupConvert;
 import com.hrms.business.attendance.dto.AttendanceClockRequestDTO;
+import com.hrms.business.attendance.dto.AttendanceCorrectionCreateRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupCreateOrUpdateRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupQueryDTO;
+import com.hrms.business.attendance.entity.AttendanceCorrectionEntity;
 import com.hrms.business.attendance.entity.AttendanceGroupEntity;
 import com.hrms.business.attendance.entity.AttendanceRecordEntity;
 import com.hrms.business.attendance.entity.EmployeeSnapshotEntity;
 import com.hrms.business.attendance.entity.LeaveRequestEntity;
 import com.hrms.business.attendance.enums.ClockPeriodEnum;
 import com.hrms.business.attendance.mapper.AttendanceGroupMapper;
+import com.hrms.business.attendance.mapper.AttendanceCorrectionMapper;
 import com.hrms.business.attendance.mapper.AttendanceRecordMapper;
 import com.hrms.business.attendance.mapper.EmployeeSnapshotMapper;
 import com.hrms.business.attendance.mapper.LeaveRequestMapper;
@@ -27,6 +30,7 @@ import com.hrms.business.attendance.service.AttendanceService;
 import com.hrms.business.attendance.vo.AttendanceClockVO;
 import com.hrms.business.attendance.vo.AttendanceCalendarDayVO;
 import com.hrms.business.attendance.vo.AttendanceCalendarVO;
+import com.hrms.business.attendance.vo.AttendanceCorrectionCreateVO;
 import com.hrms.business.attendance.vo.AttendanceGroupPageVO;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
@@ -69,9 +73,13 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     private static final ErrorCode ATTENDANCE_CLOCK_RANGE_INVALID = new ErrorCode(40055, "不在允许的打卡范围内");
 
+    private static final ErrorCode ATTENDANCE_CORRECTION_DUPLICATE = new ErrorCode(40056, "当前日期和类型已有审批中的补卡申请");
+
     private final AttendanceGroupMapper attendanceGroupMapper;
 
     private final AttendanceRecordMapper attendanceRecordMapper;
+
+    private final AttendanceCorrectionMapper attendanceCorrectionMapper;
 
     private final EmployeeSnapshotMapper employeeSnapshotMapper;
 
@@ -147,6 +155,117 @@ public class AttendanceServiceImpl implements AttendanceService {
         AttendanceCalendarVO calendar = buildCalendarFromDatabase(employee.getId(), parsedMonth);
         stringRedisTemplate.opsForValue().set(cacheKey, JSONUtil.toJsonStr(calendar), Duration.ofHours(6));
         return calendar;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public AttendanceCorrectionCreateVO createCorrection(AttendanceCorrectionCreateRequestDTO requestDTO) {
+        EmployeeSnapshotEntity employee = getCurrentEmployeeSnapshot();
+        ClockPeriodEnum period = ClockPeriodEnum.parse(requestDTO.getClockType());
+        if (period == null) {
+            throw new GlobalException(ErrorCode.PARAM_FORMAT_ERROR, "补卡类型不正确");
+        }
+        checkCorrectionDuplicate(employee.getId(), requestDTO.getDate(), period);
+        AttendanceRecordEntity record = getOrCreateCorrectionRecord(employee.getId(), requestDTO.getDate());
+        // approvalService.startAttendanceCorrectionApproval(correction); 本接口需要调用 hrms-business-approval 模块的补卡审批发起方法。
+        Long approvalInstanceId = tempStartCorrectionApproval(employee.getId(), record.getId(), requestDTO);
+
+        AttendanceCorrectionEntity correction = new AttendanceCorrectionEntity();
+        correction.setEmployeeId(employee.getId());
+        correction.setRecordId(record.getId());
+        correction.setCorrectionDate(requestDTO.getDate());
+        correction.setCorrectionType(period.name());
+        correction.setCorrectionReason(requestDTO.getReason());
+        correction.setApprovalInstanceId(approvalInstanceId);
+        correction.setApprovalStatus(1);
+        attendanceCorrectionMapper.insert(correction);
+        attendanceRecordMapper.updateCorrectionStatus(record.getId(), "PENDING");
+        evictCalendarCache(employee.getId(), requestDTO.getDate());
+        return buildCorrectionCreateVO(correction);
+    }
+
+    /**
+     * 校验补卡申请是否重复。
+     *
+     * @param employeeId 员工ID
+     * @param date       补卡日期
+     * @param period     补卡类型
+     * 本方法使用的工具类: GlobalException(hrms-common)
+     */
+    private void checkCorrectionDuplicate(Long employeeId, LocalDate date, ClockPeriodEnum period) {
+        Long count = attendanceCorrectionMapper.selectCount(new LambdaQueryWrapper<AttendanceCorrectionEntity>()
+                .eq(AttendanceCorrectionEntity::getEmployeeId, employeeId)
+                .eq(AttendanceCorrectionEntity::getCorrectionDate, date)
+                .eq(AttendanceCorrectionEntity::getCorrectionType, period.name())
+                .eq(AttendanceCorrectionEntity::getApprovalStatus, 1));
+        if (count != null && count > 0) {
+            throw new GlobalException(ATTENDANCE_CORRECTION_DUPLICATE);
+        }
+    }
+
+    /**
+     * 获取或创建补卡关联的打卡记录。
+     *
+     * @param employeeId 员工ID
+     * @param date       补卡日期
+     * @return 打卡记录
+     * 本方法使用的工具类: 无
+     */
+    private AttendanceRecordEntity getOrCreateCorrectionRecord(Long employeeId, LocalDate date) {
+        AttendanceRecordEntity existing = attendanceRecordMapper.selectByEmployeeAndDate(employeeId, date);
+        if (existing != null) {
+            return existing;
+        }
+        AttendanceGroupEntity group = tempResolveEmployeeAttendanceGroup(new EmployeeSnapshotEntity());
+        AttendanceRecordEntity record = new AttendanceRecordEntity();
+        record.setEmployeeId(employeeId);
+        record.setGroupId(group.getId());
+        record.setRecordDate(date);
+        record.setCorrectionStatus("PENDING");
+        record.setCreateTime(LocalDateTime.now());
+        record.setUpdateTime(LocalDateTime.now());
+        attendanceRecordMapper.insertClockIn(record);
+        return record;
+    }
+
+    /**
+     * 临时发起补卡审批。
+     *
+     * @param employeeId  员工ID
+     * @param recordId    打卡记录ID
+     * @param requestDTO  补卡申请请求
+     * @return 审批实例ID
+     * 本方法使用的工具类: IdUtil(hutool)
+     */
+    private Long tempStartCorrectionApproval(Long employeeId, Long recordId, AttendanceCorrectionCreateRequestDTO requestDTO) {
+        return IdUtil.getSnowflakeNextId();
+    }
+
+    /**
+     * 构建补卡创建响应。
+     *
+     * @param correction 补卡申请
+     * @return 创建响应
+     * 本方法使用的工具类: 无
+     */
+    private AttendanceCorrectionCreateVO buildCorrectionCreateVO(AttendanceCorrectionEntity correction) {
+        AttendanceCorrectionCreateVO vo = new AttendanceCorrectionCreateVO();
+        vo.setId(correction.getId());
+        vo.setRecordId(correction.getRecordId());
+        vo.setApprovalInstanceId(correction.getApprovalInstanceId());
+        vo.setApprovalStatus(correction.getApprovalStatus());
+        return vo;
+    }
+
+    /**
+     * 删除个人月历缓存。
+     *
+     * @param employeeId 员工ID
+     * @param date       日期
+     * 本方法使用的工具类: AttendanceCacheKeys(本模块cache包),StringRedisTemplate(spring-data-redis)
+     */
+    private void evictCalendarCache(Long employeeId, LocalDate date) {
+        stringRedisTemplate.delete(AttendanceCacheKeys.monthCalendar(employeeId, YearMonth.from(date).toString()));
     }
 
     /**

@@ -137,4 +137,19 @@ public interface AttendanceRecordMapper extends BaseMapper<AttendanceRecordEntit
     List<AttendanceRecordEntity> selectByEmployeeAndDateRange(@Param("employeeId") Long employeeId,
                                                               @Param("startDate") LocalDate startDate,
                                                               @Param("endDate") LocalDate endDate);
+
+    /**
+     * 更新补卡状态。
+     *
+     * @param id               打卡记录ID
+     * @param correctionStatus 补卡状态
+     * @return 影响行数
+     * 本方法使用的工具类: 无
+     */
+    @Update("""
+            UPDATE hr_attendance_record
+            SET correction_status = #{correctionStatus}, update_time = NOW()
+            WHERE id = #{id}
+            """)
+    int updateCorrectionStatus(@Param("id") Long id, @Param("correctionStatus") String correctionStatus);
 }
