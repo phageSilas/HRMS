@@ -233,6 +233,10 @@ application-secret.properties
 .env.local
 .env.*.local
 
+# Dev profile (environment-specific config)
+application-dev.yml
+application-dev.properties
+
 # SSL certificates
 ssl/
 *.p12
