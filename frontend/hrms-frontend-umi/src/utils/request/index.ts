@@ -34,8 +34,8 @@ request.interceptors.response.use(
   (response: AxiosResponse) => {
     const { code, message: msg, data } = response.data;
 
-    // 成功
-    if (code === 0) {
+    // 成功：后端统一成功码为 20000，兼容早期前端 mock 的 0。
+    if (code === 20000 || code === 0) {
       return data;
     }
 
