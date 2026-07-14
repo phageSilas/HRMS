@@ -1,14 +1,19 @@
 package com.hrms.business.personnel.controller;
 
+import com.hrms.business.personnel.dto.TransferApplicationCreateRequestDTO;
 import com.hrms.business.personnel.dto.TransferApplicationQueryDTO;
 import com.hrms.business.personnel.service.TransferApplicationService;
+import com.hrms.business.personnel.vo.TransferApplicationCreateVO;
 import com.hrms.business.personnel.vo.TransferApplicationPageVO;
 import com.hrms.common.web.PageResult;
 import com.hrms.common.web.Result;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -34,6 +39,20 @@ public class TransferApplicationController {
     @Operation(summary = "调岗申请列表")
     public Result<PageResult<TransferApplicationPageVO>> pageTransferApplications(TransferApplicationQueryDTO queryDTO) {
         return Result.success(transferApplicationService.pageTransferApplications(queryDTO));
+    }
+
+    /**
+     * 创建调岗申请。
+     *
+     * @param requestDTO 调岗申请创建参数
+     * @return 调岗申请创建结果
+     * 本方法使用的工具类: 无
+     */
+    @PostMapping
+    @Operation(summary = "创建调岗申请")
+    public Result<TransferApplicationCreateVO> createTransferApplication(
+            @Valid @RequestBody TransferApplicationCreateRequestDTO requestDTO) {
+        return Result.success(transferApplicationService.createTransferApplication(requestDTO));
     }
 
 }
