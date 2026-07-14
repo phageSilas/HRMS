@@ -11,9 +11,11 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.PathVariable;
 
 /**
  * 考勤管理控制器。
@@ -49,6 +51,21 @@ public class AttendanceController {
     public Result<AttendanceGroupPageVO> createAttendanceGroup(
             @Valid @RequestBody AttendanceGroupCreateOrUpdateRequestDTO requestDTO) {
         return Result.success(attendanceService.createAttendanceGroup(requestDTO));
+    }
+
+    /**
+     * 更新考勤组。
+     *
+     * @param id         考勤组ID
+     * @param requestDTO 更新请求
+     * @return 更新后的考勤组
+     * 本方法使用的工具类: Result(hrms-common)
+     */
+    @PutMapping("/groups/{id}")
+    public Result<AttendanceGroupPageVO> updateAttendanceGroup(
+            @PathVariable Long id,
+            @Valid @RequestBody AttendanceGroupCreateOrUpdateRequestDTO requestDTO) {
+        return Result.success(attendanceService.updateAttendanceGroup(id, requestDTO));
     }
 
     /**

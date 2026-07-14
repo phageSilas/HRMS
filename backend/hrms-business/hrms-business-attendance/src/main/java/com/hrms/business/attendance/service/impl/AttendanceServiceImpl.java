@@ -11,6 +11,8 @@ import com.hrms.business.attendance.entity.AttendanceGroupEntity;
 import com.hrms.business.attendance.mapper.AttendanceGroupMapper;
 import com.hrms.business.attendance.service.AttendanceService;
 import com.hrms.business.attendance.vo.AttendanceGroupPageVO;
+import com.hrms.common.exception.ErrorCode;
+import com.hrms.common.exception.GlobalException;
 import com.hrms.common.web.PageResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +28,8 @@ import java.util.List;
 @RequiredArgsConstructor
 @Slf4j
 public class AttendanceServiceImpl implements AttendanceService {
+
+    private static final ErrorCode ATTENDANCE_GROUP_NOT_FOUND = new ErrorCode(40052, "考勤组不存在");
 
     private final AttendanceGroupMapper attendanceGroupMapper;
 
@@ -52,6 +56,30 @@ public class AttendanceServiceImpl implements AttendanceService {
         attendanceGroupMapper.insert(entity);
         evictGroupRuleCache(entity.getId());
         return AttendanceGroupConvert.toPageVO(entity);
+    }
+
+    @Override
+    public AttendanceGroupPageVO updateAttendanceGroup(Long id, AttendanceGroupCreateOrUpdateRequestDTO requestDTO) {
+        AttendanceGroupEntity entity = getRequiredAttendanceGroup(id);
+        AttendanceGroupConvert.fillEntity(entity, requestDTO);
+        attendanceGroupMapper.updateById(entity);
+        evictGroupRuleCache(id);
+        return AttendanceGroupConvert.toPageVO(entity);
+    }
+
+    /**
+     * 查询必定存在的考勤组。
+     *
+     * @param id 考勤组ID
+     * @return 考勤组实体
+     * 本方法使用的工具类: GlobalException(hrms-common)
+     */
+    private AttendanceGroupEntity getRequiredAttendanceGroup(Long id) {
+        AttendanceGroupEntity entity = attendanceGroupMapper.selectById(id);
+        if (entity == null) {
+            throw new GlobalException(ATTENDANCE_GROUP_NOT_FOUND);
+        }
+        return entity;
     }
 
     /**

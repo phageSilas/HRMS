@@ -29,6 +29,16 @@ public interface AttendanceService {
     AttendanceGroupPageVO createAttendanceGroup(AttendanceGroupCreateOrUpdateRequestDTO requestDTO);
 
     /**
+     * 更新考勤组。
+     *
+     * @param id         考勤组ID
+     * @param requestDTO 更新请求
+     * @return 更新后的考勤组
+     * 本方法使用的工具类: 无
+     */
+    AttendanceGroupPageVO updateAttendanceGroup(Long id, AttendanceGroupCreateOrUpdateRequestDTO requestDTO);
+
+    /**
      * 获取月度考勤汇总。
      *
      * @param employeeId 员工ID
