@@ -1,21 +1,28 @@
 package com.hrms.business.personnel.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hrms.business.personnel.convert.LeaveApplicationConvert;
+import com.hrms.business.personnel.dto.LeaveApplicationCreateRequestDTO;
 import com.hrms.business.personnel.dto.LeaveApplicationQueryDTO;
 import com.hrms.business.personnel.entity.EmployeeSnapshotEntity;
 import com.hrms.business.personnel.entity.LeaveApplicationEntity;
+import com.hrms.business.personnel.enums.ApplicationStatusEnum;
 import com.hrms.business.personnel.enums.LeaveTypeEnum;
 import com.hrms.business.personnel.mapper.EmployeeSnapshotMapper;
 import com.hrms.business.personnel.mapper.LeaveApplicationMapper;
 import com.hrms.business.personnel.service.LeaveApplicationService;
+import com.hrms.business.personnel.vo.LeaveApplicationCreateVO;
 import com.hrms.business.personnel.vo.LeaveApplicationPageVO;
+import com.hrms.common.exception.ErrorCode;
+import com.hrms.common.exception.GlobalException;
 import com.hrms.common.web.PageResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collections;
 import java.util.List;
@@ -30,6 +37,10 @@ import java.util.stream.Stream;
 @Service
 @RequiredArgsConstructor
 public class LeaveApplicationServiceImpl implements LeaveApplicationService {
+
+    private static final ErrorCode EMPLOYEE_NOT_FOUND = new ErrorCode(40060, "员工不存在");
+
+    private static final ErrorCode LEAVE_APPLICATION_DUPLICATE = new ErrorCode(40081, "员工已有进行中的离职申请");
 
     private static final Long IMPOSSIBLE_EMPLOYEE_ID = -1L;
 
@@ -59,6 +70,75 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
                         employeeSnapshotMap.get(entity.getHandoverEmployeeId())))
                 .toList();
         return PageResult.of(records, page.getTotal(), pageNum, pageSize);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public LeaveApplicationCreateVO createLeaveApplication(LeaveApplicationCreateRequestDTO requestDTO) {
+        EmployeeSnapshotEntity employeeSnapshot = getRequiredEmployeeSnapshot(requestDTO.getEmployeeId());
+        getRequiredEmployeeSnapshot(requestDTO.getHandoverEmployeeId());
+        assertNoProcessingLeaveApplication(requestDTO.getEmployeeId());
+
+        LeaveApplicationEntity entity = new LeaveApplicationEntity();
+        entity.setEmployeeId(employeeSnapshot.getId());
+        entity.setLeaveType(LeaveTypeEnum.fromValue(requestDTO.getLeaveType()).getCode());
+        entity.setLeaveReason(requestDTO.getLeaveReason());
+        entity.setApplyDate(java.time.LocalDate.now());
+        entity.setExpectedLastWorkDate(requestDTO.getLastWorkDate());
+        entity.setHandoverEmployeeId(requestDTO.getHandoverEmployeeId());
+        entity.setHandoverStatus(0);
+        entity.setRemark(requestDTO.getRemark());
+        // approvalService.startApproval("LEAVE", entity.getId()); 本接口需要调用 hrms-business-approval 模块的离职审批发起接口
+        entity.setApprovalInstanceId(tempStartLeaveApproval(employeeSnapshot));
+        entity.setApprovalStatus(ApplicationStatusEnum.APPROVING.getCode());
+        leaveApplicationMapper.insert(entity);
+
+        LeaveApplicationCreateVO vo = new LeaveApplicationCreateVO();
+        vo.setId(entity.getId());
+        return vo;
+    }
+
+    /**
+     * 临时发起离职审批。
+     *
+     * @param employeeSnapshot 员工快照
+     * @return 审批实例ID
+     * 本方法使用的工具类: IdUtil(hutool)
+     */
+    private Long tempStartLeaveApproval(EmployeeSnapshotEntity employeeSnapshot) {
+        return IdUtil.getSnowflakeNextId();
+    }
+
+    /**
+     * 查询必须存在的员工快照。
+     *
+     * @param employeeId 员工ID
+     * @return 员工快照
+     * 本方法使用的工具类: 无
+     */
+    private EmployeeSnapshotEntity getRequiredEmployeeSnapshot(Long employeeId) {
+        // employeeService.getEmployeeSnapshot(employeeId); 本接口需要调用 hrms-business-employee 模块的员工快照详情接口
+        EmployeeSnapshotEntity employeeSnapshot = employeeSnapshotMapper.selectById(employeeId);
+        if (employeeSnapshot == null) {
+            throw new GlobalException(EMPLOYEE_NOT_FOUND);
+        }
+        return employeeSnapshot;
+    }
+
+    /**
+     * 校验员工没有进行中的离职申请。
+     *
+     * @param employeeId 员工ID
+     * 本方法使用的工具类: 无
+     */
+    private void assertNoProcessingLeaveApplication(Long employeeId) {
+        Long count = leaveApplicationMapper.selectCount(new LambdaQueryWrapper<LeaveApplicationEntity>()
+                .eq(LeaveApplicationEntity::getEmployeeId, employeeId)
+                .in(LeaveApplicationEntity::getApprovalStatus,
+                        ApplicationStatusEnum.DRAFT.getCode(), ApplicationStatusEnum.APPROVING.getCode()));
+        if (count != null && count > 0) {
+            throw new GlobalException(LEAVE_APPLICATION_DUPLICATE);
+        }
     }
 
     /**
