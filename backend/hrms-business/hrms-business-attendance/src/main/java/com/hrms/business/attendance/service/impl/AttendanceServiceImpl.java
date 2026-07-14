@@ -24,7 +24,7 @@ import com.hrms.business.attendance.enums.ClockPeriodEnum;
 import com.hrms.business.attendance.mapper.AttendanceGroupMapper;
 import com.hrms.business.attendance.mapper.AttendanceCorrectionMapper;
 import com.hrms.business.attendance.mapper.AttendanceRecordMapper;
-import com.hrms.business.attendance.mapper.EmployeeSnapshotMapper;
+import com.hrms.business.attendance.mapper.AttendanceEmployeeSnapshotMapper;
 import com.hrms.business.attendance.mapper.LeaveRequestMapper;
 import com.hrms.business.attendance.mapper.DictDataMapper;
 import com.hrms.business.attendance.mq.AttendanceClockCreatedEvent;
@@ -95,7 +95,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     private final AttendanceCorrectionMapper attendanceCorrectionMapper;
 
-    private final EmployeeSnapshotMapper employeeSnapshotMapper;
+    private final AttendanceEmployeeSnapshotMapper employeeSnapshotMapper;
 
     private final LeaveRequestMapper leaveRequestMapper;
 
