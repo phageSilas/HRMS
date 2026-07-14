@@ -184,14 +184,5 @@ public class AttendanceController {
         return request.getRemoteAddr();
     }
 
-    /**
-     * 获取考勤记录占位接口。
-     *
-     * @return 空结果
-     * 本方法使用的工具类: Result(hrms-common)
-     */
-    @GetMapping
-    public Result<Object> list() {
-        return Result.success();
-    }
+
 }

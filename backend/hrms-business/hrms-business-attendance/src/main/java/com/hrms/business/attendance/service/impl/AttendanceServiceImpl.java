@@ -107,6 +107,11 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     private final AttendanceClockEventHandler attendanceClockEventHandler;
 
+    /**
+     * 分页查询考勤组。
+     * @param queryDTO 查询参数
+     * @return
+     */
     @Override
     public PageResult<AttendanceGroupPageVO> pageAttendanceGroups(AttendanceGroupQueryDTO queryDTO) {
         Page<AttendanceGroupEntity> page = Page.of(queryDTO.getPageNum(), queryDTO.getPageSize());
@@ -122,13 +127,26 @@ public class AttendanceServiceImpl implements AttendanceService {
         return PageResult.of(records, resultPage.getTotal(), queryDTO.getPageNum(), queryDTO.getPageSize());
     }
 
+    /**
+     * 创建考勤组。
+     * @param requestDTO 创建参数
+     * @return
+     */
     @Override
     public AttendanceGroupPageVO createAttendanceGroup(AttendanceGroupCreateOrUpdateRequestDTO requestDTO) {
         AttendanceGroupEntity entity = AttendanceGroupConvert.toEntity(requestDTO);
         attendanceGroupMapper.insert(entity);
         evictGroupRuleCache(entity.getId());
         return AttendanceGroupConvert.toPageVO(entity);
+
     }
+
+    /**
+     * 更新考勤组。
+     * @param id 考勤组ID
+     * @param requestDTO 更新参数
+      * @return 更新后的考勤组
+     */
 
     @Override
     public AttendanceGroupPageVO updateAttendanceGroup(Long id, AttendanceGroupCreateOrUpdateRequestDTO requestDTO) {
@@ -139,6 +157,12 @@ public class AttendanceServiceImpl implements AttendanceService {
         return AttendanceGroupConvert.toPageVO(entity);
     }
 
+    /**
+     * 考勤打卡。
+     * @param requestDTO 打卡参数
+     * @param clientIp 客户端IP
+     * @return 打卡结果
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public AttendanceClockVO clock(AttendanceClockRequestDTO requestDTO, String clientIp) {
@@ -159,6 +183,11 @@ public class AttendanceServiceImpl implements AttendanceService {
         return buildClockVO(record, period, status, now);
     }
 
+    /**
+     * 获取个人日历。
+     * @param yearMonth 年月，格式为 yyyy-MM
+     * @return 日历数据
+     */
     @Override
     public AttendanceCalendarVO getMyCalendar(String yearMonth) {
         EmployeeSnapshotEntity employee = getCurrentEmployeeSnapshot();
@@ -172,6 +201,11 @@ public class AttendanceServiceImpl implements AttendanceService {
         stringRedisTemplate.opsForValue().set(cacheKey, JSONUtil.toJsonStr(calendar), Duration.ofHours(6));
         return calendar;
     }
+    /**
+     * 创建补卡申请。
+     * @param requestDTO 创建参数
+     * @return 补卡申请结果
+     */
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -200,6 +234,10 @@ public class AttendanceServiceImpl implements AttendanceService {
         return buildCorrectionCreateVO(correction);
     }
 
+    /**
+     * 列出假期类型。
+     * @return 假期类型列表
+     */
     @Override
     public List<LeaveTypeVO> listLeaveTypes() {
         return dictDataMapper.selectList(new LambdaQueryWrapper<DictDataEntity>()
@@ -213,6 +251,10 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .toList();
     }
 
+    /**
+     * 列出假期余额。
+     * @return 假期余额列表
+     */
     @Override
     public List<LeaveBalanceVO> listLeaveBalances() {
         EmployeeSnapshotEntity employee = getCurrentEmployeeSnapshot();
@@ -270,6 +312,11 @@ public class AttendanceServiceImpl implements AttendanceService {
         return vo;
     }
 
+    /**
+     * 创建请假申请。
+     * @param requestDTO 创建参数
+     * @return 请假申请结果
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public LeaveCreateVO createLeave(LeaveCreateRequestDTO requestDTO) {
@@ -297,6 +344,11 @@ public class AttendanceServiceImpl implements AttendanceService {
         return buildLeaveCreateVO(entity);
     }
 
+    /**
+     * 生成月度统计。
+     * @param requestDTO 生成参数
+     * @return 月度统计结果
+     */
     @Override
     public MonthlyStatGenerateVO generateMonthlyStat(MonthlyStatGenerateRequestDTO requestDTO) {
         String lockKey = AttendanceCacheKeys.monthStatGenerateLock(requestDTO.getMonth());
@@ -332,6 +384,14 @@ public class AttendanceServiceImpl implements AttendanceService {
         log.info("temp publish attendance.stat.generate: {}", JSONUtil.toJsonStr(requestDTO));
     }
 
+    /**
+     * 获取薪资考勤数据。
+     *
+     * @param month    月份
+     * @param employeeIds 员工ID
+     * @return 薪资考勤数据
+     * 本方法使用的工具类: JSONUtil(hutool)
+     */
     @Override
     public List<AttendancePayrollSourceVO> getPayrollSource(String month, List<Long> employeeIds) {
         List<EmployeeSnapshotEntity> employees = findStatEmployees(employeeIds);
@@ -1069,18 +1129,5 @@ public class AttendanceServiceImpl implements AttendanceService {
         } catch (Exception ex) {
             log.warn("delete attendance group rule cache failed, groupId={}", groupId, ex);
         }
-    }
-
-    @Override
-    public Object getMonthlySummary(Long employeeId, Integer year, Integer month) {
-        return null;
-    }
-
-    @Override
-    public void checkIn(Long employeeId, Integer type) {
-    }
-
-    @Override
-    public void applyLeave(Long employeeId, String leaveType, String startDate, String endDate, String reason) {
     }
 }
