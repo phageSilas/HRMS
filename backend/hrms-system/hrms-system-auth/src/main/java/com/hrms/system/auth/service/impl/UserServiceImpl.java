@@ -11,6 +11,7 @@ import com.hrms.system.auth.mapper.UserMapper;
 import com.hrms.system.auth.mapper.UserRoleMapper;
 import com.hrms.system.auth.service.RoleService;
 import com.hrms.system.auth.service.UserService;
+import com.hrms.system.auth.vo.UserDetailVO;
 import com.hrms.system.auth.vo.UserListVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -111,6 +112,40 @@ public class UserServiceImpl implements UserService {
         }).collect(Collectors.toList());
 
         return PageResult.of(records, userPage.getTotal(), (int) userPage.getCurrent(), (int) userPage.getSize());
+    }
+
+    @Override
+    public UserDetailVO getUserDetail(Long id) {
+        // 查询用户
+        UserEntity user = userMapper.selectById(id);
+        if (user == null || user.getIsDeleted() == 1) {
+            return null;
+        }
+
+        // 查询用户角色
+        List<Long> roleIds = userRoleMapper.selectList(
+                        new LambdaQueryWrapper<UserRoleEntity>()
+                                .eq(UserRoleEntity::getUserId, id))
+                .stream()
+                .map(UserRoleEntity::getRoleId)
+                .collect(Collectors.toList());
+
+        // 构建VO
+        UserDetailVO vo = new UserDetailVO();
+        vo.setId(user.getId());
+        vo.setUsername(user.getUsername());
+        vo.setRealName(user.getRealName());
+        vo.setPhone(user.getPhone());
+        vo.setEmail(user.getEmail());
+        vo.setStatus(user.getStatus());
+        vo.setRoleIds(roleIds);
+        vo.setEmployeeId(user.getEmployeeId());
+        // TODO: employeeNo, deptId 需要从员工模块查询
+        vo.setCreateTime(user.getCreateTime());
+        vo.setLastLoginTime(user.getLastLoginTime());
+        vo.setRemark(user.getRemark());
+
+        return vo;
     }
 
 }

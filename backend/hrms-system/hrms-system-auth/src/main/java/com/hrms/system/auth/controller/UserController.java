@@ -4,11 +4,13 @@ import com.hrms.common.web.PageResult;
 import com.hrms.common.web.Result;
 import com.hrms.system.auth.dto.UserQueryDTO;
 import com.hrms.system.auth.service.UserService;
+import com.hrms.system.auth.vo.UserDetailVO;
 import com.hrms.system.auth.vo.UserListVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -31,6 +33,16 @@ public class UserController {
     public Result<PageResult<UserListVO>> list(UserQueryDTO queryDTO) {
         PageResult<UserListVO> pageResult = userService.listUsers(queryDTO);
         return Result.success(pageResult);
+    }
+
+    /**
+     * 用户详情查询
+     */
+    @GetMapping("/{id}")
+    @Operation(summary = "用户详情查询", description = "根据ID查询用户详情")
+    public Result<UserDetailVO> getById(@PathVariable Long id) {
+        UserDetailVO userDetail = userService.getUserDetail(id);
+        return Result.success(userDetail);
     }
 
 }
