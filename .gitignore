@@ -277,9 +277,4 @@ openspec/
 docs/
 AGENTS.md
 CodeMap.md
-backend/.mvn/
-#backend/hrms-server/src/main/resources/
-
-# 忽略各环境配置文件（含真实密码/密钥）
 backend/hrms-server/src/main/resources/application-dev.yml
-backend/hrms-server/src/main/resources/application-prod.yml
