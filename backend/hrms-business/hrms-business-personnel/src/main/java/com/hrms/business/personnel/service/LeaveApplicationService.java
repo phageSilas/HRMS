@@ -1,6 +1,8 @@
 package com.hrms.business.personnel.service;
 
+import com.hrms.business.personnel.dto.LeaveApplicationCreateRequestDTO;
 import com.hrms.business.personnel.dto.LeaveApplicationQueryDTO;
+import com.hrms.business.personnel.vo.LeaveApplicationCreateVO;
 import com.hrms.business.personnel.vo.LeaveApplicationPageVO;
 import com.hrms.common.web.PageResult;
 
@@ -17,5 +19,14 @@ public interface LeaveApplicationService {
      * 本方法使用的工具类: 无
      */
     PageResult<LeaveApplicationPageVO> pageLeaveApplications(LeaveApplicationQueryDTO queryDTO);
+
+    /**
+     * 创建离职申请。
+     *
+     * @param requestDTO 离职申请创建参数
+     * @return 离职申请创建结果
+     * 本方法使用的工具类: 无
+     */
+    LeaveApplicationCreateVO createLeaveApplication(LeaveApplicationCreateRequestDTO requestDTO);
 
 }
