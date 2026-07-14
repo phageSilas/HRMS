@@ -2,6 +2,7 @@ package com.hrms.business.attendance.controller;
 
 import com.hrms.business.attendance.service.AttendanceService;
 import com.hrms.business.attendance.vo.LeaveTypeVO;
+import com.hrms.business.attendance.vo.LeaveBalanceVO;
 import com.hrms.common.web.Result;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -31,5 +32,16 @@ public class LeaveController {
     @GetMapping("/types")
     public Result<List<LeaveTypeVO>> listLeaveTypes() {
         return Result.success(attendanceService.listLeaveTypes());
+    }
+
+    /**
+     * 查询当前员工假期余额。
+     *
+     * @return 假期余额列表
+     * 本方法使用的工具类: Result(hrms-common),List(JDK)
+     */
+    @GetMapping("/balances")
+    public Result<List<LeaveBalanceVO>> listLeaveBalances() {
+        return Result.success(attendanceService.listLeaveBalances());
     }
 }

@@ -34,6 +34,7 @@ import com.hrms.business.attendance.vo.AttendanceCalendarDayVO;
 import com.hrms.business.attendance.vo.AttendanceCalendarVO;
 import com.hrms.business.attendance.vo.AttendanceCorrectionCreateVO;
 import com.hrms.business.attendance.vo.LeaveTypeVO;
+import com.hrms.business.attendance.vo.LeaveBalanceVO;
 import com.hrms.business.attendance.vo.AttendanceGroupPageVO;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
@@ -59,6 +60,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.math.RoundingMode;
 
 /**
  * 考勤管理服务实现。
@@ -200,6 +202,63 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .stream()
                 .map(this::toLeaveTypeVO)
                 .toList();
+    }
+
+    @Override
+    public List<LeaveBalanceVO> listLeaveBalances() {
+        EmployeeSnapshotEntity employee = getCurrentEmployeeSnapshot();
+        LocalDate yearStart = LocalDate.now().withDayOfYear(1);
+        LocalDate yearEnd = LocalDate.now().withDayOfYear(LocalDate.now().lengthOfYear());
+        Map<String, BigDecimal> usedDays = leaveRequestMapper.selectList(new LambdaQueryWrapper<LeaveRequestEntity>()
+                        .eq(LeaveRequestEntity::getEmployeeId, employee.getId())
+                        .in(LeaveRequestEntity::getApprovalStatus, List.of(1, 2))
+                        .ge(LeaveRequestEntity::getStartTime, yearStart.atStartOfDay())
+                        .le(LeaveRequestEntity::getStartTime, yearEnd.atTime(LocalTime.MAX)))
+                .stream()
+                .collect(Collectors.groupingBy(LeaveRequestEntity::getLeaveType,
+                        Collectors.reducing(BigDecimal.ZERO, LeaveRequestEntity::getTotalDays, BigDecimal::add)));
+        return List.of(
+                buildLeaveBalance("annual", "年假", calculateAnnualTotal(employee), usedDays.getOrDefault("annual", BigDecimal.ZERO)),
+                buildLeaveBalance("sick", "病假", BigDecimal.valueOf(10), usedDays.getOrDefault("sick", BigDecimal.ZERO)),
+                buildLeaveBalance("personal", "事假", BigDecimal.valueOf(5), usedDays.getOrDefault("personal", BigDecimal.ZERO))
+        );
+    }
+
+    /**
+     * 临时计算年假总额度。
+     *
+     * @param employee 员工快照
+     * @return 年假总额度
+     * 本方法使用的工具类: BigDecimal(JDK)
+     */
+    private BigDecimal calculateAnnualTotal(EmployeeSnapshotEntity employee) {
+        // leaveAccountService.getBalance(employee.getId()); 本接口后续应替换为正式假期余额表或员工假期账户接口。
+        if (employee.getHireDate() == null || employee.getHireDate().isAfter(LocalDate.now())) {
+            return BigDecimal.ZERO;
+        }
+        int months = Math.max(1, LocalDate.now().getMonthValue() - employee.getHireDate().getMonthValue() + 1);
+        return BigDecimal.valueOf(5).multiply(BigDecimal.valueOf(months))
+                .divide(BigDecimal.valueOf(12), 1, RoundingMode.DOWN);
+    }
+
+    /**
+     * 构建假期余额。
+     *
+     * @param type      请假类型
+     * @param name      类型名称
+     * @param totalDays 总额度
+     * @param usedDays  已用天数
+     * @return 假期余额
+     * 本方法使用的工具类: BigDecimal(JDK)
+     */
+    private LeaveBalanceVO buildLeaveBalance(String type, String name, BigDecimal totalDays, BigDecimal usedDays) {
+        LeaveBalanceVO vo = new LeaveBalanceVO();
+        vo.setLeaveType(type);
+        vo.setLeaveTypeName(name);
+        vo.setTotalDays(totalDays);
+        vo.setUsedDays(usedDays);
+        vo.setRemainingDays(totalDays.subtract(usedDays).max(BigDecimal.ZERO));
+        return vo;
     }
 
     /**

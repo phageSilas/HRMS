@@ -9,6 +9,7 @@ import com.hrms.business.attendance.vo.AttendanceClockVO;
 import com.hrms.business.attendance.vo.AttendanceCalendarVO;
 import com.hrms.business.attendance.vo.AttendanceCorrectionCreateVO;
 import com.hrms.business.attendance.vo.LeaveTypeVO;
+import com.hrms.business.attendance.vo.LeaveBalanceVO;
 
 import java.util.List;
 import com.hrms.common.web.PageResult;
@@ -81,6 +82,14 @@ public interface AttendanceService {
      * 本方法使用的工具类: List(JDK)
      */
     List<LeaveTypeVO> listLeaveTypes();
+
+    /**
+     * 查询当前员工假期余额。
+     *
+     * @return 假期余额列表
+     * 本方法使用的工具类: List(JDK)
+     */
+    List<LeaveBalanceVO> listLeaveBalances();
 
     /**
      * 获取月度考勤汇总。
