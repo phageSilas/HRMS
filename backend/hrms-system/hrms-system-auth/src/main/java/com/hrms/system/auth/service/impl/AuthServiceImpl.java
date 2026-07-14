@@ -8,17 +8,26 @@ import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.system.auth.entity.UserEntity;
 import com.hrms.system.auth.mapper.UserMapper;
 import com.hrms.system.auth.service.AuthService;
+import com.hrms.system.auth.vo.MenuVO;
 import com.hrms.system.auth.vo.CurrentUserVO;
 import com.hrms.system.auth.vo.LoginVO;
 import com.hrms.system.auth.vo.UserVO;
+import com.hrms.system.auth.entity.MenuEntity;
+import com.hrms.system.auth.entity.RoleEntity;
+import com.hrms.system.auth.entity.UserRoleEntity;
+import com.hrms.system.auth.mapper.UserRoleMapper;
+import com.hrms.system.auth.service.RoleService;
+import com.hrms.system.auth.service.MenuService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * 认证服务实现（开发环境使用内存缓存，生产环境应使用 Redis）
@@ -29,6 +38,9 @@ import java.util.concurrent.TimeUnit;
 public class AuthServiceImpl implements AuthService {
 
     private final UserMapper userMapper;
+    private final UserRoleMapper userRoleMapper;
+    private final RoleService roleService;
+    private final MenuService menuService;
     private final JwtUtils jwtUtils;
     private final PasswordEncoder passwordEncoder;
 
@@ -72,16 +84,22 @@ public class AuthServiceImpl implements AuthService {
         // 4. 清除登录失败记录
         clearLoginFailed(username);
 
-        // 5. 生成 Token
-        // TODO: 查询用户角色和权限
+        // 5. 查询用户角色
+        List<Long> roleIds = userRoleMapper.selectRoleIdsByUserId(user.getId());
+        List<String> roleCodes = roleService.getRolesByUserId(user.getId())
+            .stream()
+            .map(RoleEntity::getRoleCode)
+            .collect(Collectors.toList());
+
+        // 6. 生成 Token（包含真实角色ID）
         String token = jwtUtils.generateToken(
             user.getId(),
             user.getUsername(),
             user.getId(), // TODO: 使用实际部门ID
-            Collections.singletonList(1L) // TODO: 使用实际角色ID
+            roleIds
         );
 
-        // 6. 构建响应
+        // 构建响应
         LoginVO loginVO = new LoginVO();
         loginVO.setToken(token);
         loginVO.setTokenType("Bearer");
@@ -95,6 +113,7 @@ public class AuthServiceImpl implements AuthService {
         userVO.setPhone(user.getPhone());
         userVO.setAvatar(user.getAvatarUrl());
         userVO.setStatus(user.getStatus());
+        userVO.setRoles(roleCodes); // 设置真实角色
         loginVO.setUser(userVO);
 
         return loginVO;
@@ -143,14 +162,60 @@ public class AuthServiceImpl implements AuthService {
         currentUserVO.setAvatar(user.getAvatarUrl());
         currentUserVO.setStatus(user.getStatus());
 
-        // TODO: 查询用户角色和权限
-        currentUserVO.setRoles(Collections.singletonList("ADMIN"));
-        currentUserVO.setPermissions(Collections.singletonList("*:*"));
+        // 查询用户角色
+        List<RoleEntity> roles = roleService.getRolesByUserId(userId);
+        List<String> roleCodes = roles.stream()
+            .map(RoleEntity::getRoleCode)
+            .collect(Collectors.toList());
+        currentUserVO.setRoles(roleCodes);
 
-        // TODO: 查询用户菜单树
-        currentUserVO.setMenus(Collections.emptyList());
+        // 查询用户权限
+        List<Long> roleIds = roles.stream()
+            .map(RoleEntity::getId)
+            .collect(Collectors.toList());
+        List<String> permissions = menuService.getPermissionsByRoleIds(roleIds);
+        currentUserVO.setPermissions(permissions);
+
+        // 查询用户菜单树
+        List<MenuEntity> menuEntities = menuService.getMenusByRoleIds(roleIds);
+        List<MenuVO> menuVOs = menuEntities.stream()
+            .map(entity -> {
+                MenuVO vo = new MenuVO();
+                vo.setId(entity.getId());
+                vo.setName(entity.getMenuName());
+                vo.setPath(entity.getPath());
+                vo.setComponent(entity.getComponent());
+                vo.setIcon(entity.getIcon());
+                vo.setSort(entity.getSortNo());
+                vo.setParentId(entity.getParentId());
+                return vo;
+            })
+            .collect(Collectors.toList());
+        currentUserVO.setMenus(menuVOs);
 
         return currentUserVO;
+    }
+
+    @Override
+    public Integer getDataScope(Long userId) {
+        // 查询用户角色
+        List<RoleEntity> roles = roleService.getRolesByUserId(userId);
+        if (roles.isEmpty()) {
+            return 1; // 默认仅本人
+        }
+
+        // 检查是否有超级管理员角色
+        boolean isAdmin = roles.stream()
+            .anyMatch(role -> "ADMIN".equals(role.getRoleCode()) || "ROLE_ADMIN".equals(role.getRoleCode()));
+        if (isAdmin) {
+            return 4; // 超级管理员返回全部权限
+        }
+
+        // 取最大数据权限范围
+        return roles.stream()
+            .mapToInt(RoleEntity::getDataScope)
+            .max()
+            .orElse(1);
     }
 
     /**
