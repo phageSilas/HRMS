@@ -1,6 +1,7 @@
 package com.hrms.business.attendance.controller;
 
 import com.hrms.business.attendance.dto.AttendanceGroupQueryDTO;
+import com.hrms.business.attendance.dto.AttendanceGroupCreateOrUpdateRequestDTO;
 import com.hrms.business.attendance.service.AttendanceService;
 import com.hrms.business.attendance.vo.AttendanceGroupPageVO;
 import com.hrms.common.web.PageResult;
@@ -9,8 +10,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestBody;
 
 /**
  * 考勤管理控制器。
@@ -33,6 +36,19 @@ public class AttendanceController {
     @GetMapping("/groups")
     public Result<PageResult<AttendanceGroupPageVO>> pageAttendanceGroups(@Valid AttendanceGroupQueryDTO queryDTO) {
         return Result.success(attendanceService.pageAttendanceGroups(queryDTO));
+    }
+
+    /**
+     * 创建考勤组。
+     *
+     * @param requestDTO 创建请求
+     * @return 创建后的考勤组
+     * 本方法使用的工具类: Result(hrms-common)
+     */
+    @PostMapping("/groups")
+    public Result<AttendanceGroupPageVO> createAttendanceGroup(
+            @Valid @RequestBody AttendanceGroupCreateOrUpdateRequestDTO requestDTO) {
+        return Result.success(attendanceService.createAttendanceGroup(requestDTO));
     }
 
     /**

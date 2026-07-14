@@ -1,6 +1,7 @@
 package com.hrms.business.attendance.service;
 
 import com.hrms.business.attendance.dto.AttendanceGroupQueryDTO;
+import com.hrms.business.attendance.dto.AttendanceGroupCreateOrUpdateRequestDTO;
 import com.hrms.business.attendance.vo.AttendanceGroupPageVO;
 import com.hrms.common.web.PageResult;
 
@@ -17,6 +18,15 @@ public interface AttendanceService {
      * 本方法使用的工具类: PageResult(hrms-common)
      */
     PageResult<AttendanceGroupPageVO> pageAttendanceGroups(AttendanceGroupQueryDTO queryDTO);
+
+    /**
+     * 创建考勤组。
+     *
+     * @param requestDTO 创建请求
+     * @return 创建后的考勤组
+     * 本方法使用的工具类: 无
+     */
+    AttendanceGroupPageVO createAttendanceGroup(AttendanceGroupCreateOrUpdateRequestDTO requestDTO);
 
     /**
      * 获取月度考勤汇总。
