@@ -1,8 +1,18 @@
 /**
  * 调岗申请页面。
- * 当前提供原岗位/新岗位对比表单，后续接入 /api/v1/transfer-applications。
+ * 接入调岗申请分页和创建接口。
  */
 
+import {
+  ApprovalStatus,
+  createTransferApplication,
+  getTransferApplicationList,
+} from '@/services/process';
+import type {
+  TransferApplication,
+  TransferApplicationCreateRequest,
+} from '@/services/process';
+import { PlusOutlined } from '@ant-design/icons';
 import {
   DrawerForm,
   PageContainer,
@@ -14,98 +24,113 @@ import {
   ProFormTextArea,
   ProTable,
 } from '@ant-design/pro-components';
-import type { ProColumns } from '@ant-design/pro-components';
-import { PlusOutlined } from '@ant-design/icons';
+import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { Button, Space, Tag, message } from 'antd';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 
-interface TransferRow {
-  id: number;
-  employeeName: string;
-  employeeNo: string;
-  fromDeptName: string;
-  fromPostName: string;
-  toDeptName: string;
-  toPostName: string;
-  effectiveDate: string;
-  approvalStatus: number;
-  reason: string;
-  createTime: string;
-}
-
-const statusMap: Record<number, { text: string; color: string }> = {
-  0: { text: '草稿', color: 'default' },
-  1: { text: '审批中', color: 'processing' },
-  2: { text: '已通过', color: 'success' },
-  3: { text: '已拒绝', color: 'error' },
+const statusMeta: Record<number, { text: string; color: string }> = {
+  [ApprovalStatus.DRAFT]: { text: '草稿', color: 'default' },
+  [ApprovalStatus.APPROVING]: { text: '审批中', color: 'processing' },
+  [ApprovalStatus.APPROVED]: { text: '已通过', color: 'success' },
+  [ApprovalStatus.REJECTED]: { text: '已拒绝', color: 'error' },
+  [ApprovalStatus.WITHDRAWN]: { text: '已撤回', color: 'default' },
 };
 
-const sampleRows: TransferRow[] = [
-  {
-    id: 1,
-    employeeName: '刘洋',
-    employeeNo: 'EMP000128',
-    fromDeptName: '技术部',
-    fromPostName: 'Java 开发工程师',
-    toDeptName: '平台架构部',
-    toPostName: '高级开发工程师',
-    effectiveDate: '2026-08-01',
-    approvalStatus: 1,
-    reason: '业务线调整与岗位晋升',
-    createTime: '2026-07-12 10:18:00',
-  },
-];
-
 const departmentOptions = [
-  { label: '技术部', value: 2 },
-  { label: '平台架构部', value: 5 },
-  { label: '产品部', value: 3 },
   { label: '人力资源部', value: 1 },
+  { label: '技术部', value: 2 },
+  { label: '产品部', value: 3 },
+  { label: '财务部', value: 4 },
+  { label: '平台架构部', value: 5 },
 ];
 
 const positionOptions = [
+  { label: 'HR 专员', value: 101 },
+  { label: 'Java 开发工程师', value: 102 },
+  { label: '前端开发工程师', value: 103 },
+  { label: '产品经理', value: 104 },
   { label: '高级开发工程师', value: 201 },
   { label: '技术负责人', value: 202 },
-  { label: '产品经理', value: 203 },
-  { label: 'HR 专员', value: 204 },
 ];
 
-const employeeOptions = [
-  { label: '刘洋（EMP000128）', value: 128 },
-  { label: '陈辰（EMP000109）', value: 109 },
-  { label: '张晓雨（EMP000137）', value: 137 },
+const leaderOptions = [
+  { label: '王敏（1001）', value: 1001 },
+  { label: '李强（1002）', value: 1002 },
+  { label: '赵琳（1003）', value: 1003 },
 ];
 
 const TransferPage: React.FC = () => {
+  const actionRef = useRef<ActionType>();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const columns: ProColumns<TransferRow>[] = [
+  const columns: ProColumns<TransferApplication>[] = [
+    {
+      title: '关键词',
+      dataIndex: 'keyword',
+      hideInTable: true,
+      fieldProps: { placeholder: '员工姓名 / 工号' },
+    },
+    {
+      title: '原部门',
+      dataIndex: 'departmentId',
+      hideInTable: true,
+      valueType: 'select',
+      fieldProps: { options: departmentOptions, allowClear: true },
+    },
+    {
+      title: '状态',
+      dataIndex: 'approvalStatus',
+      hideInTable: true,
+      valueType: 'select',
+      valueEnum: {
+        [ApprovalStatus.DRAFT]: { text: '草稿' },
+        [ApprovalStatus.APPROVING]: { text: '审批中' },
+        [ApprovalStatus.APPROVED]: { text: '已通过' },
+        [ApprovalStatus.REJECTED]: { text: '已拒绝' },
+      },
+    },
     {
       title: '员工',
       dataIndex: 'employeeName',
       width: 150,
+      search: false,
       render: (_, record) => (
         <Space direction="vertical" size={0}>
-          <strong>{record.employeeName}</strong>
-          <span style={{ color: '#6b7280', fontSize: 12 }}>{record.employeeNo}</span>
+          <strong>{record.employeeName || `员工 ${record.employeeId}`}</strong>
+          <span style={{ color: '#6b7280', fontSize: 12 }}>
+            {record.employeeNo || `ID ${record.employeeId}`}
+          </span>
         </Space>
       ),
     },
-    { title: '原部门', dataIndex: 'fromDeptName', width: 120 },
-    { title: '原职位', dataIndex: 'fromPostName', width: 160 },
-    { title: '新部门', dataIndex: 'toDeptName', width: 120 },
-    { title: '新职位', dataIndex: 'toPostName', width: 160 },
-    { title: '生效日期', dataIndex: 'effectiveDate', valueType: 'date', width: 120 },
+    { title: '原部门', dataIndex: 'fromDeptName', width: 120, search: false },
+    { title: '原职位', dataIndex: 'fromPostName', width: 160, search: false },
+    { title: '新部门', dataIndex: 'toDeptName', width: 120, search: false },
+    { title: '新职位', dataIndex: 'toPostName', width: 160, search: false },
+    {
+      title: '生效日期',
+      dataIndex: 'effectiveDate',
+      valueType: 'date',
+      width: 120,
+      search: false,
+    },
     {
       title: '状态',
       dataIndex: 'approvalStatus',
       width: 110,
+      search: false,
       render: (_, record) => {
-        const meta = statusMap[record.approvalStatus] || statusMap[0];
-        return <Tag color={meta.color}>{meta.text}</Tag>;
+        const meta = statusMeta[record.approvalStatus ?? ApprovalStatus.DRAFT] || statusMeta[0];
+        return <Tag color={meta.color}>{record.approvalStatusDesc || meta.text}</Tag>;
       },
     },
-    { title: '申请时间', dataIndex: 'createTime', valueType: 'dateTime', width: 170 },
+    {
+      title: '申请时间',
+      dataIndex: 'createTime',
+      valueType: 'dateTime',
+      width: 170,
+      search: false,
+    },
   ];
 
   return (
@@ -115,14 +140,27 @@ const TransferPage: React.FC = () => {
         subTitle: '原岗位与新岗位对比、审批发起与生效跟踪',
       }}
     >
-      <ProTable<TransferRow>
+      <ProTable<TransferApplication>
+        actionRef={actionRef}
         rowKey="id"
         columns={columns}
-        dataSource={sampleRows}
-        search={{
-          labelWidth: 88,
+        scroll={{ x: 1180 }}
+        request={async (params) => {
+          const result = await getTransferApplicationList({
+            pageNum: params.current || 1,
+            pageSize: params.pageSize || 20,
+            keyword: params.keyword as string,
+            departmentId: params.departmentId as number,
+            approvalStatus: params.approvalStatus as number,
+          });
+          return {
+            data: result.records || [],
+            total: result.total || 0,
+            success: true,
+          };
         }}
-        pagination={false}
+        search={{ labelWidth: 88, span: 8 }}
+        pagination={{ defaultPageSize: 20, showSizeChanger: true }}
         toolbar={{
           title: '调岗申请列表',
           actions: [
@@ -138,41 +176,48 @@ const TransferPage: React.FC = () => {
         }}
       />
 
-      <DrawerForm
+      <DrawerForm<TransferApplicationCreateRequest & {
+        employeeName?: string;
+        employeeNo?: string;
+        fromDeptName?: string;
+        fromPostName?: string;
+      }>
         title="新建调岗申请"
         width={760}
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
         drawerProps={{ destroyOnClose: true }}
         submitter={{ searchConfig: { submitText: '提交审批' } }}
-        onFinish={async () => {
-          message.info('调岗接口尚未接入，已保留提交审批入口');
+        onFinish={async (values) => {
+          const payload: TransferApplicationCreateRequest = {
+            employeeId: values.employeeId,
+            toDeptId: values.toDeptId,
+            toPostId: values.toPostId,
+            toJobLevel: values.toJobLevel,
+            toLeaderId: values.toLeaderId,
+            effectiveDate: values.effectiveDate,
+            salaryAdjustment: values.salaryAdjustment,
+            reason: values.reason,
+          };
+          await createTransferApplication(payload);
+          message.success('调岗申请已提交');
           setDrawerOpen(false);
+          actionRef.current?.reload();
           return true;
         }}
       >
         <ProFormGroup title="员工与原岗位">
-          <ProFormSelect
+          <ProFormDigit
             name="employeeId"
-            label="员工"
-            width="md"
-            options={employeeOptions}
-            rules={[{ required: true, message: '请选择调岗员工' }]}
+            label="员工 ID"
+            width="sm"
+            min={1}
+            rules={[{ required: true, message: '请输入调岗员工 ID' }]}
           />
-          <ProFormText
-            name="fromDeptName"
-            label="原部门"
-            width="md"
-            disabled
-            initialValue="技术部"
-          />
-          <ProFormText
-            name="fromPostName"
-            label="原职位"
-            width="md"
-            disabled
-            initialValue="Java 开发工程师"
-          />
+          <ProFormText name="employeeName" label="员工姓名" width="md" />
+          <ProFormText name="employeeNo" label="员工工号" width="md" />
+          <ProFormText name="fromDeptName" label="原部门" width="md" disabled />
+          <ProFormText name="fromPostName" label="原职位" width="md" disabled />
         </ProFormGroup>
         <ProFormGroup title="新岗位">
           <ProFormSelect
@@ -203,7 +248,7 @@ const TransferPage: React.FC = () => {
             name="toLeaderId"
             label="新汇报人"
             width="md"
-            options={employeeOptions}
+            options={leaderOptions}
           />
           <ProFormDatePicker
             name="effectiveDate"
