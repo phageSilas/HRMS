@@ -10,7 +10,8 @@ import type { PageResult } from '@/types/api';
 export interface PendingQuery {
   businessType?: string;
   keyword?: string;
-  dateRange?: string[];
+  startDate?: string;
+  endDate?: string;
   pageNum?: number;
   pageSize?: number;
 }

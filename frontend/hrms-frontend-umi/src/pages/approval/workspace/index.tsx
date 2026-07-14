@@ -21,14 +21,16 @@ const { RangePicker } = DatePicker;
 
 // ============ 常量定义 ============
 
-/** 业务类型筛选选项 */
+/** 业务类型筛选选项（与后端 ApprovalTypeEnum 对齐） */
 const BUSINESS_TYPE_OPTIONS = [
   { label: '全部', value: '' },
-  { label: '请假申请', value: 'LEAVE' },
+  { label: '入职申请', value: 'ENTRY' },
   { label: '转正申请', value: 'REGULAR' },
   { label: '调岗申请', value: 'TRANSFER' },
-  { label: '离职申请', value: 'RESIGN' },
-  { label: '入职申请', value: 'ENTRY' },
+  { label: '离职审批', value: 'LEAVE' },
+  { label: '请假审批', value: 'LEAVE_REQUEST' },
+  { label: '补卡审批', value: 'CORRECTION' },
+  { label: '薪资批次审批', value: 'SALARY' },
 ];
 
 /** 审批状态筛选选项（用于「我发起的」标签页） */
@@ -39,11 +41,24 @@ const STATUS_OPTIONS = [
   { label: '已驳回', value: 'REJECTED' },
 ];
 
-/** 状态 Tag 颜色映射 */
+/** 状态 Tag 颜色映射（与后端 ApprovalStatusEnum 对齐） */
 const STATUS_COLOR_MAP: Record<string, string> = {
   PENDING: 'processing',
   APPROVED: 'success',
   REJECTED: 'error',
+  DRAFT: 'default',
+  WITHDRAWN: 'warning',
+  CANCELLED: 'default',
+};
+
+/** 状态码 → 中文名映射（用于后端未返回 statusName 时的降级） */
+const STATUS_LABEL_MAP: Record<string, string> = {
+  PENDING: '审批中',
+  APPROVED: '已通过',
+  REJECTED: '已驳回',
+  DRAFT: '草稿',
+  WITHDRAWN: '已撤回',
+  CANCELLED: '已取消',
 };
 
 // ============ 工具函数 ============
@@ -58,7 +73,8 @@ const STATUS_COLOR_MAP: Record<string, string> = {
  *  - < 24 小时：黄色 #faad14（即将到期）
  *  - 其他：无色
  */
-const getDeadlineColor = (deadline: string): string | undefined => {
+const getDeadlineColor = (deadline?: string | null): string | undefined => {
+  if (!deadline) return undefined; // 无截止时间时不标色（如我发起的 Tab）
   const now = Date.now();
   const deadlineTime = new Date(deadline).getTime();
   const diffHours = (deadlineTime - now) / (1000 * 60 * 60);
@@ -92,7 +108,7 @@ const TABLE_COLUMNS: ProColumns<ApprovalTask>[] = [
   },
   {
     title: '当前节点',
-    dataIndex: 'currentNodeName',
+    dataIndex: 'nodeName',
     width: 120,
   },
   {
@@ -100,8 +116,8 @@ const TABLE_COLUMNS: ProColumns<ApprovalTask>[] = [
     dataIndex: 'statusName',
     width: 100,
     render: (_, record) => (
-      <Tag color={STATUS_COLOR_MAP[record.status]}>
-        {record.statusName}
+      <Tag color={STATUS_COLOR_MAP[record.status] || 'default'}>
+        {record.statusName || STATUS_LABEL_MAP[record.status] || record.status}
       </Tag>
     ),
   },
@@ -141,17 +157,23 @@ const WorkspacePage: React.FC = () => {
 
   // ============ 待审批搜索/重置 ============
 
+  /** 将 DatePicker 的 dateRange 值转为后端需要的 startDate/endDate */
+  const formatDateRange = (dateRange: any[]) => {
+    if (!dateRange || dateRange.length !== 2) return {};
+    return {
+      startDate: dateRange[0].format('YYYY-MM-DD HH:mm:ss'),
+      endDate: dateRange[1].format('YYYY-MM-DD HH:mm:ss'),
+    };
+  };
+
   const handlePendingSearch = useCallback(async () => {
     try {
       const values = await pendingFormInstance.validateFields();
       const params: Partial<PendingQuery> = {};
       if (values.businessType) params.businessType = values.businessType;
       if (values.keyword) params.keyword = values.keyword;
-      if (values.dateRange && values.dateRange.length === 2) {
-        params.dateRange = [
-          values.dateRange[0].format('YYYY-MM-DD HH:mm:ss'),
-          values.dateRange[1].format('YYYY-MM-DD HH:mm:ss'),
-        ];
+      if (values.dateRange) {
+        Object.assign(params, formatDateRange(values.dateRange));
       }
       setPendingSearch(params);
     } catch {
@@ -172,11 +194,8 @@ const WorkspacePage: React.FC = () => {
       const params: Partial<PendingQuery> = {};
       if (values.businessType) params.businessType = values.businessType;
       if (values.keyword) params.keyword = values.keyword;
-      if (values.dateRange && values.dateRange.length === 2) {
-        params.dateRange = [
-          values.dateRange[0].format('YYYY-MM-DD HH:mm:ss'),
-          values.dateRange[1].format('YYYY-MM-DD HH:mm:ss'),
-        ];
+      if (values.dateRange) {
+        Object.assign(params, formatDateRange(values.dateRange));
       }
       setHistorySearch(params);
     } catch {

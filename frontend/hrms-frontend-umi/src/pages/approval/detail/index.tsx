@@ -33,6 +33,7 @@ const STATUS_COLOR_MAP: Record<string, string> = {
   APPROVED: 'success',
   REJECTED: 'error',
   DRAFT: 'default',
+  WITHDRAWN: 'warning',
   CANCELLED: 'default',
 };
 
@@ -226,7 +227,7 @@ const DetailPage: React.FC = () => {
 
             {/* 申请内容 */}
             <Card title="申请内容">
-              {Object.entries(detail.formData).length > 0 ? (
+              {detail.formData && Object.entries(detail.formData).length > 0 ? (
                 <Descriptions column={1}>
                   {Object.entries(detail.formData).map(([key, value]) => (
                     <Descriptions.Item label={key} key={key}>
