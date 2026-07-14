@@ -1,12 +1,15 @@
 package com.hrms.business.attendance.controller;
 
+import com.hrms.business.attendance.dto.AttendanceClockRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupQueryDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupCreateOrUpdateRequestDTO;
 import com.hrms.business.attendance.service.AttendanceService;
+import com.hrms.business.attendance.vo.AttendanceClockVO;
 import com.hrms.business.attendance.vo.AttendanceGroupPageVO;
 import com.hrms.common.web.PageResult;
 import com.hrms.common.web.Result;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -66,6 +69,39 @@ public class AttendanceController {
             @PathVariable Long id,
             @Valid @RequestBody AttendanceGroupCreateOrUpdateRequestDTO requestDTO) {
         return Result.success(attendanceService.updateAttendanceGroup(id, requestDTO));
+    }
+
+    /**
+     * 当前登录员工打卡。
+     *
+     * @param requestDTO     打卡请求
+     * @param servletRequest HTTP 请求
+     * @return 打卡结果
+     * 本方法使用的工具类: Result(hrms-common)
+     */
+    @PostMapping("/clock")
+    public Result<AttendanceClockVO> clock(@RequestBody AttendanceClockRequestDTO requestDTO,
+                                           HttpServletRequest servletRequest) {
+        return Result.success(attendanceService.clock(requestDTO, resolveClientIp(servletRequest)));
+    }
+
+    /**
+     * 解析客户端 IP。
+     *
+     * @param request HTTP 请求
+     * @return 客户端 IP
+     * 本方法使用的工具类: 无
+     */
+    private String resolveClientIp(HttpServletRequest request) {
+        String forwardedFor = request.getHeader("X-Forwarded-For");
+        if (forwardedFor != null && !forwardedFor.isBlank()) {
+            return forwardedFor.split(",")[0].trim();
+        }
+        String realIp = request.getHeader("X-Real-IP");
+        if (realIp != null && !realIp.isBlank()) {
+            return realIp;
+        }
+        return request.getRemoteAddr();
     }
 
     /**

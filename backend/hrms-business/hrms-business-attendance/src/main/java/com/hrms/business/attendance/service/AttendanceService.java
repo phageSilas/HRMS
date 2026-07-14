@@ -2,7 +2,9 @@ package com.hrms.business.attendance.service;
 
 import com.hrms.business.attendance.dto.AttendanceGroupQueryDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupCreateOrUpdateRequestDTO;
+import com.hrms.business.attendance.dto.AttendanceClockRequestDTO;
 import com.hrms.business.attendance.vo.AttendanceGroupPageVO;
+import com.hrms.business.attendance.vo.AttendanceClockVO;
 import com.hrms.common.web.PageResult;
 
 /**
@@ -37,6 +39,16 @@ public interface AttendanceService {
      * 本方法使用的工具类: 无
      */
     AttendanceGroupPageVO updateAttendanceGroup(Long id, AttendanceGroupCreateOrUpdateRequestDTO requestDTO);
+
+    /**
+     * 当前登录员工打卡。
+     *
+     * @param requestDTO 打卡请求
+     * @param clientIp   客户端 IP
+     * @return 打卡结果
+     * 本方法使用的工具类: 无
+     */
+    AttendanceClockVO clock(AttendanceClockRequestDTO requestDTO, String clientIp);
 
     /**
      * 获取月度考勤汇总。

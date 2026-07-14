@@ -2,12 +2,115 @@ package com.hrms.business.attendance.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.hrms.business.attendance.entity.AttendanceRecordEntity;
+import org.apache.ibatis.annotations.Insert;
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Options;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
+import java.time.LocalDate;
 
 /**
- * 考勤记录 Mapper
+ * 考勤记录 Mapper。
  */
-
+@Mapper
 public interface AttendanceRecordMapper extends BaseMapper<AttendanceRecordEntity> {
 
+    /**
+     * 按员工和日期查询打卡记录。
+     *
+     * @param employeeId 员工ID
+     * @param recordDate 打卡日期
+     * @return 打卡记录
+     * 本方法使用的工具类: 无
+     */
+    @Select("""
+            SELECT id, employee_id, group_id, record_date, clock_in_time, clock_out_time,
+                   clock_in_status, clock_out_status, clock_in_ip, clock_out_ip,
+                   clock_in_gps, clock_out_gps, device_info, correction_status,
+                   create_time, update_time
+            FROM hr_attendance_record
+            WHERE employee_id = #{employeeId}
+              AND record_date = #{recordDate}
+            LIMIT 1
+            """)
+    AttendanceRecordEntity selectByEmployeeAndDate(@Param("employeeId") Long employeeId,
+                                                   @Param("recordDate") LocalDate recordDate);
+
+    /**
+     * 插入上班打卡记录。
+     *
+     * @param entity 打卡记录
+     * @return 影响行数
+     * 本方法使用的工具类: 无
+     */
+    @Insert("""
+            INSERT INTO hr_attendance_record
+            (employee_id, group_id, record_date, clock_in_time, clock_in_status,
+             clock_in_ip, clock_in_gps, device_info, correction_status, create_time, update_time)
+            VALUES
+            (#{employeeId}, #{groupId}, #{recordDate}, #{clockInTime}, #{clockInStatus},
+             #{clockInIp}, #{clockInGps}, #{deviceInfo}, #{correctionStatus}, #{createTime}, #{updateTime})
+            """)
+    @Options(useGeneratedKeys = true, keyProperty = "id")
+    int insertClockIn(AttendanceRecordEntity entity);
+
+    /**
+     * 插入下班打卡记录。
+     *
+     * @param entity 打卡记录
+     * @return 影响行数
+     * 本方法使用的工具类: 无
+     */
+    @Insert("""
+            INSERT INTO hr_attendance_record
+            (employee_id, group_id, record_date, clock_out_time, clock_out_status,
+             clock_out_ip, clock_out_gps, device_info, correction_status, create_time, update_time)
+            VALUES
+            (#{employeeId}, #{groupId}, #{recordDate}, #{clockOutTime}, #{clockOutStatus},
+             #{clockOutIp}, #{clockOutGps}, #{deviceInfo}, #{correctionStatus}, #{createTime}, #{updateTime})
+            """)
+    @Options(useGeneratedKeys = true, keyProperty = "id")
+    int insertClockOut(AttendanceRecordEntity entity);
+
+    /**
+     * 更新上班打卡字段。
+     *
+     * @param entity 打卡记录
+     * @return 影响行数
+     * 本方法使用的工具类: 无
+     */
+    @Update("""
+            UPDATE hr_attendance_record
+            SET clock_in_time = #{clockInTime},
+                clock_in_status = #{clockInStatus},
+                clock_in_ip = #{clockInIp},
+                clock_in_gps = #{clockInGps},
+                device_info = #{deviceInfo},
+                update_time = #{updateTime}
+            WHERE id = #{id}
+              AND clock_in_time IS NULL
+            """)
+    int updateClockIn(AttendanceRecordEntity entity);
+
+    /**
+     * 更新下班打卡字段。
+     *
+     * @param entity 打卡记录
+     * @return 影响行数
+     * 本方法使用的工具类: 无
+     */
+    @Update("""
+            UPDATE hr_attendance_record
+            SET clock_out_time = #{clockOutTime},
+                clock_out_status = #{clockOutStatus},
+                clock_out_ip = #{clockOutIp},
+                clock_out_gps = #{clockOutGps},
+                device_info = #{deviceInfo},
+                update_time = #{updateTime}
+            WHERE id = #{id}
+              AND clock_out_time IS NULL
+            """)
+    int updateClockOut(AttendanceRecordEntity entity);
 }
