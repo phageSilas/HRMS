@@ -25,7 +25,7 @@ export default defineConfig({
       target: 'http://localhost:8080',
       changeOrigin: true,
     },
-    '/approval': {
+    '/api/v1/approval': {
       target: 'http://localhost:8080',
       changeOrigin: true,
     },
@@ -139,10 +139,10 @@ export default defineConfig({
       icon: 'check-circle',
       access: 'approval',
       routes: [
-        { path: '/approval', redirect: '/approval/pending' },
-        { path: '/approval/pending', name: '待办任务', component: '@/pages/approval/pending' },
-        { path: '/approval/done', name: '已办任务', component: '@/pages/approval/done' },
+        { path: '/approval', redirect: '/approval/workspace' },
+        { path: '/approval/workspace', name: '审批工作台', component: '@/pages/approval/workspace' },
         { path: '/approval/detail/:id', name: '审批详情', component: '@/pages/approval/detail', hideInMenu: true },
+        { path: '/approval/delegation', name: '审批配置', component: '@/pages/approval/delegation' },
       ],
     },
 

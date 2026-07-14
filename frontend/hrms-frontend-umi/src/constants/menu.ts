@@ -86,8 +86,8 @@ export const menuConfig: MenuItem[] = [
     path: '/approval',
     access: 'approval',
     children: [
-      { key: 'approval-pending', name: '待办任务', icon: '', path: '/approval/pending' },
-      { key: 'approval-done', name: '已办任务', icon: '', path: '/approval/done' },
+      { key: 'approval-workspace', name: '审批工作台', icon: '', path: '/approval/workspace' },
+      { key: 'approval-delegation', name: '审批配置', icon: '', path: '/approval/delegation' },
     ],
   },
   {

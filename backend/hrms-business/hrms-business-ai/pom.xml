@@ -34,7 +34,7 @@
         <!-- MyBatis-Plus -->
         <dependency>
             <groupId>com.baomidou</groupId>
-            <artifactId>mybatis-plus-boot-starter</artifactId>
+            <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
         </dependency>
 
         <!-- MySQL -->
@@ -43,11 +43,12 @@
             <artifactId>mysql-connector-java</artifactId>
         </dependency>
 
-        <!-- Spring Boot Starter Data Redis -->
+        <!-- TODO: 后续对接时放开 Redis 依赖
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
+        -->
 
         <!-- SpringDoc OpenAPI -->
         <dependency>
