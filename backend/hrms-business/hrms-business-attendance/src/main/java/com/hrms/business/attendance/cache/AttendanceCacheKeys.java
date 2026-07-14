@@ -39,6 +39,18 @@ public final class AttendanceCacheKeys {
     }
 
     /**
+     * 构建员工月度日历缓存 Key。
+     *
+     * @param employeeId 员工ID
+     * @param yearMonth  月份，格式 yyyy-MM
+     * @return Redis Key
+     * 本方法使用的工具类: 无
+     */
+    public static String monthCalendar(Long employeeId, String yearMonth) {
+        return "attendance:calendar:month:" + employeeId + ":" + yearMonth;
+    }
+
+    /**
      * 构建打卡消息幂等 Key。
      *
      * @param messageId 消息ID

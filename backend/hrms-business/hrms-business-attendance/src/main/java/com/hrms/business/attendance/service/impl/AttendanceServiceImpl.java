@@ -14,15 +14,19 @@ import com.hrms.business.attendance.dto.AttendanceGroupQueryDTO;
 import com.hrms.business.attendance.entity.AttendanceGroupEntity;
 import com.hrms.business.attendance.entity.AttendanceRecordEntity;
 import com.hrms.business.attendance.entity.EmployeeSnapshotEntity;
+import com.hrms.business.attendance.entity.LeaveRequestEntity;
 import com.hrms.business.attendance.enums.ClockPeriodEnum;
 import com.hrms.business.attendance.mapper.AttendanceGroupMapper;
 import com.hrms.business.attendance.mapper.AttendanceRecordMapper;
 import com.hrms.business.attendance.mapper.EmployeeSnapshotMapper;
+import com.hrms.business.attendance.mapper.LeaveRequestMapper;
 import com.hrms.business.attendance.mq.AttendanceClockCreatedEvent;
 import com.hrms.business.attendance.mq.AttendanceClockEventHandler;
 import com.hrms.business.attendance.mq.AttendanceMqConstants;
 import com.hrms.business.attendance.service.AttendanceService;
 import com.hrms.business.attendance.vo.AttendanceClockVO;
+import com.hrms.business.attendance.vo.AttendanceCalendarDayVO;
+import com.hrms.business.attendance.vo.AttendanceCalendarVO;
 import com.hrms.business.attendance.vo.AttendanceGroupPageVO;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
@@ -37,11 +41,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.YearMonth;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * 考勤管理服务实现。
@@ -64,6 +74,8 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final AttendanceRecordMapper attendanceRecordMapper;
 
     private final EmployeeSnapshotMapper employeeSnapshotMapper;
+
+    private final LeaveRequestMapper leaveRequestMapper;
 
     private final StringRedisTemplate stringRedisTemplate;
 
@@ -121,6 +133,114 @@ public class AttendanceServiceImpl implements AttendanceService {
         AttendanceClockCreatedEvent event = buildClockCreatedEvent(record, period, status, now, requestDTO.getDeviceInfo());
         publishClockCreatedEvent(event);
         return buildClockVO(record, period, status, now);
+    }
+
+    @Override
+    public AttendanceCalendarVO getMyCalendar(String yearMonth) {
+        EmployeeSnapshotEntity employee = getCurrentEmployeeSnapshot();
+        YearMonth parsedMonth = YearMonth.parse(yearMonth);
+        String cacheKey = AttendanceCacheKeys.monthCalendar(employee.getId(), parsedMonth.toString());
+        String cached = stringRedisTemplate.opsForValue().get(cacheKey);
+        if (StrUtil.isNotBlank(cached)) {
+            return JSONUtil.toBean(cached, AttendanceCalendarVO.class);
+        }
+        AttendanceCalendarVO calendar = buildCalendarFromDatabase(employee.getId(), parsedMonth);
+        stringRedisTemplate.opsForValue().set(cacheKey, JSONUtil.toJsonStr(calendar), Duration.ofHours(6));
+        return calendar;
+    }
+
+    /**
+     * 从数据库构建个人月度打卡日历。
+     *
+     * @param employeeId  员工ID
+     * @param parsedMonth 月份
+     * @return 月度日历
+     * 本方法使用的工具类: Collectors(JDK),IntStream(JDK)
+     */
+    private AttendanceCalendarVO buildCalendarFromDatabase(Long employeeId, YearMonth parsedMonth) {
+        LocalDate startDate = parsedMonth.atDay(1);
+        LocalDate endDate = parsedMonth.atEndOfMonth();
+        Map<LocalDate, AttendanceRecordEntity> recordMap = attendanceRecordMapper
+                .selectByEmployeeAndDateRange(employeeId, startDate, endDate)
+                .stream()
+                .collect(Collectors.toMap(AttendanceRecordEntity::getRecordDate, record -> record));
+        Set<LocalDate> leaveDates = findApprovedLeaveDates(employeeId, startDate, endDate);
+        List<AttendanceCalendarDayVO> days = IntStream.rangeClosed(1, parsedMonth.lengthOfMonth())
+                .mapToObj(day -> buildCalendarDay(parsedMonth.atDay(day), recordMap.get(parsedMonth.atDay(day)), leaveDates))
+                .toList();
+        AttendanceCalendarVO calendar = new AttendanceCalendarVO();
+        calendar.setEmployeeId(employeeId);
+        calendar.setYearMonth(parsedMonth.toString());
+        calendar.setDays(days);
+        return calendar;
+    }
+
+    /**
+     * 查询审批通过的请假日期集合。
+     *
+     * @param employeeId 员工ID
+     * @param startDate  月初
+     * @param endDate    月末
+     * @return 请假日期集合
+     * 本方法使用的工具类: Collectors(JDK)
+     */
+    private Set<LocalDate> findApprovedLeaveDates(Long employeeId, LocalDate startDate, LocalDate endDate) {
+        List<LeaveRequestEntity> leaves = leaveRequestMapper.selectList(new LambdaQueryWrapper<LeaveRequestEntity>()
+                .eq(LeaveRequestEntity::getEmployeeId, employeeId)
+                .eq(LeaveRequestEntity::getApprovalStatus, 2)
+                .le(LeaveRequestEntity::getStartTime, endDate.atTime(LocalTime.MAX))
+                .ge(LeaveRequestEntity::getEndTime, startDate.atStartOfDay()));
+        return leaves.stream()
+                .flatMap(leave -> leave.getStartTime().toLocalDate()
+                        .datesUntil(leave.getEndTime().toLocalDate().plusDays(1)))
+                .filter(date -> !date.isBefore(startDate) && !date.isAfter(endDate))
+                .collect(Collectors.toSet());
+    }
+
+    /**
+     * 构建单日打卡日历。
+     *
+     * @param date       日期
+     * @param record     打卡记录
+     * @param leaveDates 请假日期集合
+     * @return 单日打卡日历
+     * 本方法使用的工具类: 无
+     */
+    private AttendanceCalendarDayVO buildCalendarDay(LocalDate date, AttendanceRecordEntity record, Set<LocalDate> leaveDates) {
+        AttendanceCalendarDayVO day = new AttendanceCalendarDayVO();
+        day.setDate(date);
+        day.setLeave(leaveDates.contains(date));
+        if (record != null) {
+            day.setClockInTime(record.getClockInTime());
+            day.setClockOutTime(record.getClockOutTime());
+            day.setClockInStatus(record.getClockInStatus());
+            day.setClockOutStatus(record.getClockOutStatus());
+        }
+        day.setDayStatus(resolveDayStatus(day));
+        return day;
+    }
+
+    /**
+     * 计算单日综合状态。
+     *
+     * @param day 单日打卡日历
+     * @return 综合状态
+     * 本方法使用的工具类: 无
+     */
+    private String resolveDayStatus(AttendanceCalendarDayVO day) {
+        if (Boolean.TRUE.equals(day.getLeave())) {
+            return "LEAVE";
+        }
+        if ("LATE".equals(day.getClockInStatus())) {
+            return "LATE";
+        }
+        if ("EARLY_LEAVE".equals(day.getClockOutStatus())) {
+            return "EARLY_LEAVE";
+        }
+        if (day.getClockInTime() != null || day.getClockOutTime() != null) {
+            return "NORMAL";
+        }
+        return "NONE";
     }
 
     /**

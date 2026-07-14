@@ -5,6 +5,7 @@ import com.hrms.business.attendance.dto.AttendanceGroupCreateOrUpdateRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceClockRequestDTO;
 import com.hrms.business.attendance.vo.AttendanceGroupPageVO;
 import com.hrms.business.attendance.vo.AttendanceClockVO;
+import com.hrms.business.attendance.vo.AttendanceCalendarVO;
 import com.hrms.common.web.PageResult;
 
 /**
@@ -49,6 +50,15 @@ public interface AttendanceService {
      * 本方法使用的工具类: 无
      */
     AttendanceClockVO clock(AttendanceClockRequestDTO requestDTO, String clientIp);
+
+    /**
+     * 查询当前员工个人月度打卡日历。
+     *
+     * @param yearMonth 月份，格式 yyyy-MM
+     * @return 个人月度打卡日历
+     * 本方法使用的工具类: 无
+     */
+    AttendanceCalendarVO getMyCalendar(String yearMonth);
 
     /**
      * 获取月度考勤汇总。

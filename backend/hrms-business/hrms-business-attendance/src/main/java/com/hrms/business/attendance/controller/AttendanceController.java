@@ -5,6 +5,7 @@ import com.hrms.business.attendance.dto.AttendanceGroupQueryDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupCreateOrUpdateRequestDTO;
 import com.hrms.business.attendance.service.AttendanceService;
 import com.hrms.business.attendance.vo.AttendanceClockVO;
+import com.hrms.business.attendance.vo.AttendanceCalendarVO;
 import com.hrms.business.attendance.vo.AttendanceGroupPageVO;
 import com.hrms.common.web.PageResult;
 import com.hrms.common.web.Result;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 
 /**
  * 考勤管理控制器。
@@ -83,6 +85,18 @@ public class AttendanceController {
     public Result<AttendanceClockVO> clock(@RequestBody AttendanceClockRequestDTO requestDTO,
                                            HttpServletRequest servletRequest) {
         return Result.success(attendanceService.clock(requestDTO, resolveClientIp(servletRequest)));
+    }
+
+    /**
+     * 查询当前员工个人月度打卡日历。
+     *
+     * @param yearMonth 月份，格式 yyyy-MM
+     * @return 个人月度打卡日历
+     * 本方法使用的工具类: Result(hrms-common)
+     */
+    @GetMapping("/records/my-calendar")
+    public Result<AttendanceCalendarVO> getMyCalendar(@RequestParam String yearMonth) {
+        return Result.success(attendanceService.getMyCalendar(yearMonth));
     }
 
     /**

@@ -10,6 +10,7 @@ import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * 考勤记录 Mapper。
@@ -113,4 +114,27 @@ public interface AttendanceRecordMapper extends BaseMapper<AttendanceRecordEntit
               AND clock_out_time IS NULL
             """)
     int updateClockOut(AttendanceRecordEntity entity);
+
+    /**
+     * 查询员工日期范围内的打卡记录。
+     *
+     * @param employeeId 员工ID
+     * @param startDate  开始日期
+     * @param endDate    结束日期
+     * @return 打卡记录列表
+     * 本方法使用的工具类: 无
+     */
+    @Select("""
+            SELECT id, employee_id, group_id, record_date, clock_in_time, clock_out_time,
+                   clock_in_status, clock_out_status, clock_in_ip, clock_out_ip,
+                   clock_in_gps, clock_out_gps, device_info, correction_status,
+                   create_time, update_time
+            FROM hr_attendance_record
+            WHERE employee_id = #{employeeId}
+              AND record_date BETWEEN #{startDate} AND #{endDate}
+            ORDER BY record_date ASC
+            """)
+    List<AttendanceRecordEntity> selectByEmployeeAndDateRange(@Param("employeeId") Long employeeId,
+                                                              @Param("startDate") LocalDate startDate,
+                                                              @Param("endDate") LocalDate endDate);
 }
