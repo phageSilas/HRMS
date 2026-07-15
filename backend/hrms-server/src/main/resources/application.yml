@@ -36,19 +36,19 @@ spring:
       connection-timeout: 30000
       pool-name: HikariPool
 
-  # TODO: 后续放开 Redis 配置
-  # data:
-  #   redis:
-  #     host: ${REDIS_HOST}
-  #     port: ${REDIS_PORT}
-  #     password: ${REDIS_PASSWORD}
-  #     database: 0
-  #     timeout: 3000ms
-  #     lettuce:
-  #       pool:
-  #         max-active: 20
-  #         max-idle: 10
-  #         min-idle: 5
+  # Redis 配置
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:123456}
+      database: 0
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 20
+          max-idle: 10
+          min-idle: 5
 
   # TODO: 后续放开 RabbitMQ 配置
   # rabbitmq:

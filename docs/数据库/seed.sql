@@ -109,3 +109,28 @@ INSERT IGNORE INTO `sys_post` (`id`, `post_name`, `post_code`, `sequence_code`, 
                                                                                                                                                                                                       (1, '部门经理', 'DM', 'M', 1, 3, 1, 1, NOW(), NOW(), 0, 0),
                                                                                                                                                                                                       (2, '开发工程师', 'DEV', 'P', 1, 3, 1, 2, NOW(), NOW(), 0, 0),
                                                                                                                                                                                                       (3, '人力资源专员', 'HR', 'S', 1, 3, 1, 3, NOW(), NOW(), 0, 0);
+
+-- ----------------------------------------
+-- 10. 字段权限配置 (sys_field_permission)
+-- ----------------------------------------
+INSERT IGNORE INTO `sys_field_permission` (`biz_type`, `field_name`, `field_desc`, `role_id`, `viewable`, `editable`, `flow_required`) VALUES
+-- ADMIN 角色：员工模块全部可见可编辑
+('employee', 'name', '姓名', 1, 1, 1, 0),
+('employee', 'gender', '性别', 1, 1, 1, 0),
+('employee', 'phone', '手机号', 1, 1, 1, 0),
+('employee', 'email', '邮箱', 1, 1, 1, 0),
+('employee', 'idCardNo', '身份证号', 1, 1, 1, 0),
+('employee', 'deptId', '部门ID', 1, 1, 1, 1),
+('employee', 'postId', '职位ID', 1, 1, 1, 1),
+('employee', 'entryDate', '入职日期', 1, 1, 1, 0),
+('employee', 'bankAccount', '银行卡号', 1, 1, 1, 0),
+-- HR 角色：员工模块部分可见可编辑
+('employee', 'name', '姓名', 2, 1, 1, 0),
+('employee', 'gender', '性别', 2, 1, 0, 0),
+('employee', 'phone', '手机号', 2, 1, 0, 0),
+('employee', 'email', '邮箱', 2, 1, 1, 0),
+('employee', 'idCardNo', '身份证号', 2, 1, 0, 0),
+('employee', 'deptId', '部门ID', 2, 1, 0, 1),
+('employee', 'postId', '职位ID', 2, 1, 0, 1),
+('employee', 'entryDate', '入职日期', 2, 1, 0, 0),
+('employee', 'bankAccount', '银行卡号', 2, 0, 0, 0);
