@@ -7,8 +7,9 @@ import { message } from 'antd';
  */
 
 // 创建 axios 实例
+// 走 Umi 代理（开发环境 proxy 配置见 .umirc.ts），不设 baseURL 直连后端
 const request: AxiosInstance = axios.create({
-  baseURL: process.env.API_BASE_URL || 'http://localhost:8080',
+  baseURL: process.env.API_BASE_URL || '',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',

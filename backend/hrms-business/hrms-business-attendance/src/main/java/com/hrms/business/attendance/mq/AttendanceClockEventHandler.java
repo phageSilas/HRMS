@@ -26,11 +26,6 @@ public class AttendanceClockEventHandler {
      * 本方法使用的工具类: JSONUtil(hutool),StringRedisTemplate(spring-data-redis),AttendanceCacheKeys(本模块cache包)
      */
     public void handleClockCreatedEvent(AttendanceClockCreatedEvent event) {
-        String idempotentKey = AttendanceCacheKeys.clockMessageIdempotent(event.getMessageId());
-        Boolean firstHandle = stringRedisTemplate.opsForValue().setIfAbsent(idempotentKey, "1", Duration.ofHours(2));
-        if (Boolean.FALSE.equals(firstHandle)) {
-            return;
-        }
         refreshDailyRecordCache(event);
         tempCheckAttendanceException(event);
     }

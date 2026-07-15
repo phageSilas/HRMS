@@ -11,8 +11,12 @@ export default defineConfig({
   },
   // Mock 配置（开发环境自动加载）
   // mock: {},  // 已切换到真实后端（2026-07-10）
-  // 代理配置（后端集成时使用）
+  // 代理配置（全量转发至后端 /api/v1/* 和其他模块前缀）
   proxy: {
+    '/api/v1': {
+      target: 'http://localhost:8080',
+      changeOrigin: true,
+    },
     '/auth': {
       target: 'http://localhost:8080',
       changeOrigin: true,
@@ -22,6 +26,10 @@ export default defineConfig({
       changeOrigin: true,
     },
     '/departments': {
+      target: 'http://localhost:8080',
+      changeOrigin: true,
+    },
+    '/leave-requests': {
       target: 'http://localhost:8080',
       changeOrigin: true,
     },
@@ -225,16 +233,16 @@ export default defineConfig({
       icon: 'check-circle',
       access: 'approval',
       routes: [
-        { path: '/approval', redirect: '/approval/pending' },
+        { path: '/approval', redirect: '/approval/workspace' },
         {
-          path: '/approval/pending',
-          name: '待办任务',
-          component: '@/pages/approval/pending',
+          path: '/approval/workspace',
+          name: '审批工作台',
+          component: '@/pages/approval/workspace',
         },
         {
-          path: '/approval/done',
-          name: '已办任务',
-          component: '@/pages/approval/done',
+          path: '/approval/delegation',
+          name: '审批配置',
+          component: '@/pages/approval/delegation',
         },
         {
           path: '/approval/detail/:id',
@@ -255,7 +263,32 @@ export default defineConfig({
         {
           path: '/profile/index',
           name: '我的首页',
-          component: '@/pages/profile',
+          component: '@/pages/profile/index',
+        },
+        {
+          path: '/profile/archive',
+          name: '我的档案',
+          component: '@/pages/profile/archive',
+        },
+        {
+          path: '/profile/attendance',
+          name: '我的考勤',
+          component: '@/pages/profile/attendance',
+        },
+        {
+          path: '/profile/leave',
+          name: '我的请假',
+          component: '@/pages/profile/leave',
+        },
+        {
+          path: '/profile/salary',
+          name: '我的薪资',
+          component: '@/pages/profile/salary',
+        },
+        {
+          path: '/profile/security',
+          name: '账号安全',
+          component: '@/pages/profile/security',
         },
       ],
     },
