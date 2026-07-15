@@ -10,6 +10,7 @@ import com.hrms.system.auth.vo.ResetPasswordVO;
 import com.hrms.system.auth.vo.UserCreateResultVO;
 import com.hrms.system.auth.vo.UserDetailVO;
 import com.hrms.system.auth.vo.UserListVO;
+import com.hrms.system.log.annotation.OperateLog;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -53,6 +54,7 @@ public class UserController {
      */
     @PostMapping
     @Operation(summary = "创建用户", description = "创建新用户并关联角色")
+    @OperateLog(title = "用户管理", businessType = "INSERT")
     public Result<UserCreateResultVO> create(@Valid @RequestBody UserCreateDTO createDTO) {
         UserCreateResultVO result = userService.createUser(createDTO);
         return Result.success(result);
@@ -63,6 +65,7 @@ public class UserController {
      */
     @PutMapping("/{id}")
     @Operation(summary = "更新用户", description = "根据ID更新用户信息")
+    @OperateLog(title = "用户管理", businessType = "UPDATE")
     public Result<Void> update(@PathVariable Long id, @Valid @RequestBody UserUpdateDTO updateDTO) {
         userService.updateUser(id, updateDTO);
         return Result.success();
@@ -73,6 +76,7 @@ public class UserController {
      */
     @DeleteMapping("/{id}")
     @Operation(summary = "删除用户", description = "根据ID逻辑删除用户")
+    @OperateLog(title = "用户管理", businessType = "DELETE")
     public Result<Void> delete(@PathVariable Long id) {
         userService.deleteUser(id);
         return Result.success();

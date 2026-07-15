@@ -3,6 +3,7 @@ package com.hrms.system.auth.controller;
 import com.hrms.common.web.Result;
 import com.hrms.system.auth.entity.MenuEntity;
 import com.hrms.system.auth.service.MenuService;
+import com.hrms.system.log.annotation.OperateLog;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +27,7 @@ public class MenuController {
      */
     @PostMapping
     @Operation(summary = "创建菜单", description = "创建新菜单")
+    @OperateLog(title = "菜单管理", businessType = "INSERT")
     public Result<Long> create(@RequestBody MenuEntity menu) {
         Long id = menuService.create(menu);
         return Result.success(id);
@@ -36,6 +38,7 @@ public class MenuController {
      */
     @PutMapping("/{id}")
     @Operation(summary = "更新菜单", description = "根据ID更新菜单信息")
+    @OperateLog(title = "菜单管理", businessType = "UPDATE")
     public Result<Void> update(@PathVariable Long id, @RequestBody MenuEntity menu) {
         menu.setId(id);
         menuService.update(menu);
@@ -47,6 +50,7 @@ public class MenuController {
      */
     @DeleteMapping("/{id}")
     @Operation(summary = "删除菜单", description = "根据ID删除菜单")
+    @OperateLog(title = "菜单管理", businessType = "DELETE")
     public Result<Void> delete(@PathVariable Long id) {
         menuService.delete(id);
         return Result.success();

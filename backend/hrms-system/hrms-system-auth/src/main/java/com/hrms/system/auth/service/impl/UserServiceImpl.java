@@ -237,10 +237,8 @@ public class UserServiceImpl implements UserService {
 
         // 5. 更新角色关联（全量覆盖）
         if (updateDTO.getRoleIds() != null) {
-            // 删除旧关联
-            userRoleMapper.delete(
-                    new LambdaQueryWrapper<UserRoleEntity>()
-                            .eq(UserRoleEntity::getUserId, id));
+            // 物理删除旧关联（使用自定义SQL或deleteById）
+            userRoleMapper.deleteByUserId(id);
 
             // 插入新关联
             for (Long roleId : updateDTO.getRoleIds()) {

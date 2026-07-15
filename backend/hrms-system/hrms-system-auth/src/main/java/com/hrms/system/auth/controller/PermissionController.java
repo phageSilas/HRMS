@@ -2,6 +2,8 @@ package com.hrms.system.auth.controller;
 
 import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.Result;
+import com.hrms.system.auth.entity.RoleEntity;
+import com.hrms.system.auth.service.FieldPermissionService;
 import com.hrms.system.auth.service.RoleService;
 import com.hrms.system.auth.vo.DataScopeVO;
 import com.hrms.system.auth.vo.FieldPermissionVO;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 权限查询控制器
@@ -26,6 +29,7 @@ import java.util.List;
 public class PermissionController {
 
     private final RoleService roleService;
+    private final FieldPermissionService fieldPermissionService;
 
     /**
      * 获取字段权限
@@ -34,13 +38,15 @@ public class PermissionController {
     @Operation(summary = "获取字段权限", description = "根据业务类型获取可查看、可编辑、流程必填字段列表")
     public Result<FieldPermissionVO> getFieldPermissions(
             @RequestParam @Parameter(description = "业务类型", required = true) String bizType) {
-        // TODO: 后续根据业务类型从配置或数据库查询字段权限
-        // 目前返回默认字段权限（所有字段可见可编辑）
-        FieldPermissionVO vo = new FieldPermissionVO();
-        vo.setBizType(bizType);
-        vo.setViewableFields(List.of("*"));
-        vo.setEditableFields(List.of("*"));
-        vo.setFlowRequiredFields(List.of());
+        // 获取当前用户角色ID列表
+        Long userId = SecurityContextHolder.getUserId();
+        List<Long> roleIds = roleService.getRolesByUserId(userId)
+                .stream()
+                .map(RoleEntity::getId)
+                .collect(Collectors.toList());
+
+        // 从数据库查询字段权限
+        FieldPermissionVO vo = fieldPermissionService.getFieldPermissions(bizType, roleIds);
         return Result.success(vo);
     }
 

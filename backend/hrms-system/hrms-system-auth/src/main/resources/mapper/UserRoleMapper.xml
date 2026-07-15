@@ -9,4 +9,10 @@
           AND is_deleted = 0
     </select>
 
+    <!-- 根据用户 ID 物理删除角色关联 -->
+    <delete id="deleteByUserId">
+        DELETE FROM sys_user_role
+        WHERE user_id = #{userId}
+    </delete>
+
 </mapper>

@@ -24,6 +24,13 @@
             <version>${project.version}</version>
         </dependency>
 
+        <!-- 依赖 hrms-system-log -->
+        <dependency>
+            <groupId>com.hrms</groupId>
+            <artifactId>hrms-system-log</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <!-- Spring Boot Starter Web -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
