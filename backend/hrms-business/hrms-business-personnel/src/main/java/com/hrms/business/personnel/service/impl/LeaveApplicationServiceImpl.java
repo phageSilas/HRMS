@@ -5,8 +5,10 @@ import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.hrms.business.employee.dto.EmployeeQueryDTO;
 import com.hrms.business.employee.entity.EmployeeEntity;
 import com.hrms.business.employee.service.EmployeeService;
+import com.hrms.business.employee.vo.EmployeeListVO;
 import com.hrms.business.personnel.convert.LeaveApplicationConvert;
 import com.hrms.business.personnel.dto.LeaveApplicationCreateRequestDTO;
 import com.hrms.business.personnel.dto.LeaveApplicationQueryDTO;
@@ -209,15 +211,16 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
      * 本方法使用的工具类: StrUtil(hutool)
      */
     private List<Long> listEmployeeIdsByQuery(LeaveApplicationQueryDTO queryDTO) {
-        LambdaQueryWrapper<EmployeeSnapshotEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(queryDTO.getDepartmentId() != null, EmployeeSnapshotEntity::getDeptId, queryDTO.getDepartmentId());
-        wrapper.and(StrUtil.isNotBlank(queryDTO.getKeyword()), keywordWrapper -> keywordWrapper
-                .like(EmployeeSnapshotEntity::getEmployeeName, queryDTO.getKeyword())
-                .or()
-                .like(EmployeeSnapshotEntity::getEmployeeNo, queryDTO.getKeyword()));
         // employeeService.listEmployeeIdsByQuery(queryDTO); 本接口需要调用 hrms-business-employee 模块的员工条件查询接口
-        return employeeSnapshotMapper.selectList(wrapper).stream()
-                .map(EmployeeSnapshotEntity::getId)
+        // TODO 跨模块调用已完成：当前调用 EmployeeService#listEmployees(employeeQueryDTO) 按部门和关键词查询员工列表。
+        EmployeeQueryDTO employeeQueryDTO = new EmployeeQueryDTO();
+        employeeQueryDTO.setKeyword(queryDTO.getKeyword());
+        employeeQueryDTO.setDeptIds(queryDTO.getDepartmentId() == null ? null : List.of(queryDTO.getDepartmentId()));
+        employeeQueryDTO.setPageNum(1);
+        employeeQueryDTO.setPageSize(MAX_PAGE_SIZE);
+        return employeeService.listEmployees(employeeQueryDTO).getRecords().stream()
+                .map(EmployeeListVO::getId)
+                .filter(id -> id != null)
                 .toList();
     }
 
