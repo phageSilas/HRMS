@@ -342,8 +342,6 @@ public class AttendanceServiceImpl implements AttendanceService {
         if (totalDays.compareTo(BigDecimal.ZERO) <= 0 || totalDays.compareTo(BigDecimal.valueOf(30)) > 0) {
             throw new GlobalException(LEAVE_DAYS_INVALID);
         }
-        // approvalService.startLeaveApproval(leaveRequest); 本接口需要调用 hrms-business-approval 模块的请假审批发起方法。
-        Long approvalInstanceId = tempStartLeaveApproval(employee.getId(), requestDTO);
         LeaveRequestEntity entity = new LeaveRequestEntity();
         entity.setEmployeeId(employee.getId());
         entity.setLeaveType(leaveType);
@@ -353,9 +351,20 @@ public class AttendanceServiceImpl implements AttendanceService {
         entity.setTotalHours(totalDays.multiply(BigDecimal.valueOf(8)));
         entity.setLeaveReason(requestDTO.getReason());
         entity.setAttachmentUrl(resolveAttachment(requestDTO));
-        entity.setApprovalInstanceId(approvalInstanceId);
         entity.setApprovalStatus(1);
         leaveRequestMapper.insert(entity);
+        // approvalService.startLeaveApproval(leaveRequest); 本接口需要调用 hrms-business-approval 模块的请假审批发起方法。
+        // TODO 跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起请假审批。
+        Long approvalInstanceId = approvalEngine.startApproval(
+                ApprovalTypeEnum.LEAVE_REQUEST.getCode(),
+                entity.getId(),
+                JSONUtil.toJsonStr(entity),
+                SecurityContextHolder.getUserId(),
+                employee.getDeptId(),
+                employee.getId()
+        );
+        entity.setApprovalInstanceId(approvalInstanceId);
+        leaveRequestMapper.updateById(entity);
         evictCalendarCache(employee.getId(), requestDTO.getStartDate());
         return buildLeaveCreateVO(entity);
     }
