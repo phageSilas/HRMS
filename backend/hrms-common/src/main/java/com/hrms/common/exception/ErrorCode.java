@@ -104,6 +104,17 @@ public class ErrorCode implements Serializable {
      * 字典错误系列 (40030-40039)
      */
     public static final ErrorCode DICT_TYPE_NOT_FOUND = new ErrorCode(40030, "字典类型编码不存在");
+
+    /**
+     * 员工模块错误系列 (40031-40039)
+     */
+    public static final ErrorCode EMPLOYEE_PHONE_EXISTS = new ErrorCode(40031, "手机号已被占用");
+    public static final ErrorCode EMPLOYEE_DEPT_NOT_FOUND = new ErrorCode(40032, "所属部门不存在");
+    public static final ErrorCode EMPLOYEE_POST_NOT_FOUND = new ErrorCode(40033, "职位不存在");
+    public static final ErrorCode EMPLOYEE_NOT_FOUND = new ErrorCode(40034, "员工不存在");
+    public static final ErrorCode EMPLOYEE_CANNOT_DELETE = new ErrorCode(40035, "该员工已转正，无法删除");
+    public static final ErrorCode EMPLOYEE_HAS_BUSINESS = new ErrorCode(40036, "该员工存在业务记录，无法删除");
+
     public static final ErrorCode BUSINESS_ERROR = new ErrorCode(50100, "业务处理失败");
 
 }
