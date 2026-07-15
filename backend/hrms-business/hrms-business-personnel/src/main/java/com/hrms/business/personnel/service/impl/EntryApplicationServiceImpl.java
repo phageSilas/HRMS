@@ -53,6 +53,11 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
 
     private final EntryApplicationMapper entryApplicationMapper;
 
+    /**
+     * 分页查询入职申请。
+     * @param queryDTO 入职申请查询参数
+     * @return 入职申请分页列表
+     */
     @Override
     public PageResult<EntryApplicationPageVO> pageEntryApplications(EntryApplicationQueryDTO queryDTO) {
         int pageNum = normalizePageNum(queryDTO.getPageNum());
@@ -67,6 +72,11 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         return PageResult.of(records, page.getTotal(), pageNum, pageSize);
     }
 
+    /**
+     * 创建入职申请。
+     * @param requestDTO 入职申请创建参数
+     * @return 入职申请详情
+     */
     @Override
     public EntryApplicationPageVO createEntryApplication(EntryApplicationCreateOrUpdateRequestDTO requestDTO) {
         checkPhoneAvailable(requestDTO.getPhone(), null);
@@ -76,6 +86,11 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         return EntryApplicationConvert.toPageVO(entity);
     }
 
+    /**
+     * 更新入职申请。
+     * @param id 入职申请ID
+     * @param requestDTO 入职申请更新参数
+     */
     @Override
     public void updateEntryApplication(Long id, EntryApplicationCreateOrUpdateRequestDTO requestDTO) {
         EntryApplicationEntity entity = getRequiredEntryApplication(id);
@@ -85,6 +100,11 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         entryApplicationMapper.updateById(entity);
     }
 
+    /**
+     * 提交入职申请。
+     * @param id 入职申请ID
+     * @return 入职申请提交结果
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public EntryApplicationSubmitVO submitEntryApplication(Long id) {
@@ -112,6 +132,12 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         return IdUtil.getSnowflakeNextId();
     }
 
+    /**
+     * 确认入职申请。
+     * @param id 入职申请ID
+     * @param requestDTO 入职申请确认参数
+     * @return 入职申请确认结果
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public EntryApplicationConfirmVO confirmEntryApplication(Long id, EntryApplicationConfirmRequestDTO requestDTO) {
