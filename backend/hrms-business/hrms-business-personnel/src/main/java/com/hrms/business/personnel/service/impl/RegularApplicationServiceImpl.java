@@ -5,6 +5,11 @@ import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import cn.hutool.json.JSONUtil;
+import com.hrms.business.approval.enums.ApprovalTypeEnum;
+import com.hrms.business.approval.service.ApprovalEngine;
+import com.hrms.business.employee.entity.EmployeeEntity;
+import com.hrms.business.employee.service.EmployeeService;
 import com.hrms.business.personnel.convert.RegularApplicationConvert;
 import com.hrms.business.personnel.dto.RegularApplicationApplyRequestDTO;
 import com.hrms.business.personnel.dto.RegularApplicationQueryDTO;
@@ -19,6 +24,7 @@ import com.hrms.business.personnel.vo.RegularApplicationApplyVO;
 import com.hrms.business.personnel.vo.RegularApplicationPageVO;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
+import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -56,6 +62,10 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
     private final RegularApplicationMapper regularApplicationMapper;
 
     private final EmployeeSnapshotMapper employeeSnapshotMapper;
+
+    private final EmployeeService employeeService;
+
+    private final ApprovalEngine approvalEngine;
 
     /**
      * 分页查询转正申请。
@@ -98,11 +108,20 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
         entity.setExtendMonth(requestDTO.getExtendMonth());
         entity.setSalaryAdjustment(requestDTO.getSalaryAdjustment());
         entity.setEvaluateOpinion(requestDTO.getEvaluateOpinion());
-        // approvalService.startApproval("REGULAR", entity.getId()); 本接口需要调用 hrms-business-approval 模块的转正审批发起接口
-        Long approvalInstanceId = tempStartRegularApproval(employeeSnapshot);
-        entity.setApprovalInstanceId(approvalInstanceId);
         entity.setApprovalStatus(ApplicationStatusEnum.APPROVING.getCode());
         regularApplicationMapper.insert(entity);
+
+        // TODO 跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起转正审批。
+        Long approvalInstanceId = approvalEngine.startApproval(
+                ApprovalTypeEnum.REGULAR.getCode(),
+                entity.getId(),
+                JSONUtil.toJsonStr(entity),
+                SecurityContextHolder.getUserId(),
+                employeeSnapshot.getDeptId(),
+                employeeId
+        );
+        entity.setApprovalInstanceId(approvalInstanceId);
+        regularApplicationMapper.updateById(entity);
 
         return RegularApplicationApplyVO.builder()
                 .success(Boolean.TRUE)
@@ -129,12 +148,35 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
      * 本方法使用的工具类: 无
      */
     private EmployeeSnapshotEntity getRequiredEmployeeSnapshot(Long employeeId) {
-        // employeeService.getEmployeeSnapshot(employeeId); 本接口需要调用 hrms-business-employee 模块的员工快照详情接口
-        EmployeeSnapshotEntity employeeSnapshot = employeeSnapshotMapper.selectById(employeeId);
-        if (employeeSnapshot == null) {
+        // TODO 跨模块调用已完成：当前调用 EmployeeService#getEmployeeBrief(employeeId) 获取员工简要信息。
+        EmployeeEntity employee = employeeService.getEmployeeBrief(employeeId);
+        if (employee == null) {
             throw new GlobalException(EMPLOYEE_NOT_FOUND);
         }
-        return employeeSnapshot;
+        return toEmployeeSnapshot(employee);
+    }
+
+    /**
+     * 将员工模块实体转换为本模块员工快照。
+     *
+     * @param employee 员工模块实体
+     * @return 本模块员工快照
+     * 本方法使用的工具类: 无
+     */
+    private EmployeeSnapshotEntity toEmployeeSnapshot(EmployeeEntity employee) {
+        EmployeeSnapshotEntity snapshot = new EmployeeSnapshotEntity();
+        snapshot.setId(employee.getId());
+        snapshot.setEmployeeNo(employee.getEmployeeNo());
+        snapshot.setEmployeeName(employee.getEmployeeName());
+        snapshot.setDeptId(employee.getDeptId());
+        snapshot.setPostId(employee.getPostId());
+        snapshot.setLeaderId(employee.getLeaderId());
+        snapshot.setJobLevel(employee.getJobLevel());
+        snapshot.setEmploymentStatus(employee.getEmploymentStatus());
+        snapshot.setHireDate(employee.getHireDate());
+        snapshot.setProbationMonth(employee.getProbationMonth());
+        snapshot.setBaseSalary(employee.getBaseSalary());
+        return snapshot;
     }
 
     /**
@@ -226,8 +268,11 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
         if (CollUtil.isEmpty(employeeIds)) {
             return Collections.emptyMap();
         }
-        // employeeService.listEmployeeSnapshots(employeeIds); 本接口需要调用 hrms-business-employee 模块的员工快照批量查询接口
-        return employeeSnapshotMapper.selectBatchIds(employeeIds).stream()
+        // TODO 跨模块调用已完成：当前员工模块暂无批量快照接口，暂用 EmployeeService#getEmployeeBrief(employeeId) 循环补全。
+        return employeeIds.stream()
+                .map(employeeService::getEmployeeBrief)
+                .filter(employee -> employee != null)
+                .map(this::toEmployeeSnapshot)
                 .collect(Collectors.toMap(EmployeeSnapshotEntity::getId, Function.identity(), (left, right) -> left));
     }
 

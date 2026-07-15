@@ -6,6 +6,8 @@ import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.hrms.business.approval.enums.ApprovalTypeEnum;
+import com.hrms.business.approval.service.ApprovalEngine;
 import com.hrms.business.attendance.cache.AttendanceCacheKeys;
 import com.hrms.business.attendance.convert.AttendanceGroupConvert;
 import com.hrms.business.attendance.dto.AttendanceClockRequestDTO;
@@ -18,6 +20,7 @@ import com.hrms.business.attendance.entity.AttendanceCorrectionEntity;
 import com.hrms.business.attendance.entity.AttendanceGroupEntity;
 import com.hrms.business.attendance.entity.AttendanceRecordEntity;
 import com.hrms.business.attendance.entity.EmployeeSnapshotEntity;
+import com.hrms.business.attendance.entity.LeaveBalanceEntity;
 import com.hrms.business.attendance.entity.LeaveRequestEntity;
 import com.hrms.business.attendance.entity.DictDataEntity;
 import com.hrms.business.attendance.enums.ClockPeriodEnum;
@@ -25,6 +28,7 @@ import com.hrms.business.attendance.mapper.AttendanceGroupMapper;
 import com.hrms.business.attendance.mapper.AttendanceCorrectionMapper;
 import com.hrms.business.attendance.mapper.AttendanceRecordMapper;
 import com.hrms.business.attendance.mapper.AttendanceEmployeeSnapshotMapper;
+import com.hrms.business.attendance.mapper.LeaveBalanceMapper;
 import com.hrms.business.attendance.mapper.LeaveRequestMapper;
 import com.hrms.business.attendance.mapper.AttendanceDictDataMapper;
 import com.hrms.business.attendance.mq.AttendanceClockCreatedProducer;
@@ -62,12 +66,12 @@ import java.time.LocalTime;
 import java.time.YearMonth;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-import java.math.RoundingMode;
 import java.util.Collections;
 
 /**
@@ -98,6 +102,8 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     private final AttendanceEmployeeSnapshotMapper employeeSnapshotMapper;
 
+    private final LeaveBalanceMapper leaveBalanceMapper;
+
     private final LeaveRequestMapper leaveRequestMapper;
 
     private final AttendanceDictDataMapper dictDataMapper;
@@ -109,6 +115,8 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final AttendanceMonthlyStatGenerateProducer attendanceMonthlyStatGenerateProducer;
 
     private final AttendanceClockEventHandler attendanceClockEventHandler;
+
+    private final ApprovalEngine approvalEngine;
 
     /**
      * 分页查询考勤组。
@@ -220,8 +228,6 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
         checkCorrectionDuplicate(employee.getId(), requestDTO.getDate(), period);
         AttendanceRecordEntity record = getOrCreateCorrectionRecord(employee.getId(), requestDTO.getDate());
-        // approvalService.startAttendanceCorrectionApproval(correction); 本接口需要调用 hrms-business-approval 模块的补卡审批发起方法。
-        Long approvalInstanceId = tempStartCorrectionApproval(employee.getId(), record.getId(), requestDTO);
 
         AttendanceCorrectionEntity correction = new AttendanceCorrectionEntity();
         correction.setEmployeeId(employee.getId());
@@ -229,9 +235,20 @@ public class AttendanceServiceImpl implements AttendanceService {
         correction.setCorrectionDate(requestDTO.getDate());
         correction.setCorrectionType(period.name());
         correction.setCorrectionReason(requestDTO.getReason());
-        correction.setApprovalInstanceId(approvalInstanceId);
         correction.setApprovalStatus(1);
         attendanceCorrectionMapper.insert(correction);
+
+        // TODO 跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起补卡审批。
+        Long approvalInstanceId = approvalEngine.startApproval(
+                ApprovalTypeEnum.CORRECTION.getCode(),
+                correction.getId(),
+                JSONUtil.toJsonStr(correction),
+                SecurityContextHolder.getUserId(),
+                employee.getDeptId(),
+                employee.getId()
+        );
+        correction.setApprovalInstanceId(approvalInstanceId);
+        attendanceCorrectionMapper.updateById(correction);
         attendanceRecordMapper.updateCorrectionStatus(record.getId(), "PENDING");
         evictCalendarCache(employee.getId(), requestDTO.getDate());
         return buildCorrectionCreateVO(correction);
@@ -261,38 +278,111 @@ public class AttendanceServiceImpl implements AttendanceService {
     @Override
     public List<LeaveBalanceVO> listLeaveBalances() {
         EmployeeSnapshotEntity employee = getCurrentEmployeeSnapshot();
-        LocalDate yearStart = LocalDate.now().withDayOfYear(1);
-        LocalDate yearEnd = LocalDate.now().withDayOfYear(LocalDate.now().lengthOfYear());
-        Map<String, BigDecimal> usedDays = leaveRequestMapper.selectList(new LambdaQueryWrapper<LeaveRequestEntity>()
-                        .eq(LeaveRequestEntity::getEmployeeId, employee.getId())
-                        .in(LeaveRequestEntity::getApprovalStatus, List.of(1, 2))
-                        .ge(LeaveRequestEntity::getStartTime, yearStart.atStartOfDay())
-                        .le(LeaveRequestEntity::getStartTime, yearEnd.atTime(LocalTime.MAX)))
-                .stream()
-                .collect(Collectors.groupingBy(LeaveRequestEntity::getLeaveType,
-                        Collectors.reducing(BigDecimal.ZERO, LeaveRequestEntity::getTotalDays, BigDecimal::add)));
-        return List.of(
-                buildLeaveBalance("annual", "年假", calculateAnnualTotal(employee), usedDays.getOrDefault("annual", BigDecimal.ZERO)),
-                buildLeaveBalance("sick", "病假", BigDecimal.valueOf(10), usedDays.getOrDefault("sick", BigDecimal.ZERO)),
-                buildLeaveBalance("personal", "事假", BigDecimal.valueOf(5), usedDays.getOrDefault("personal", BigDecimal.ZERO))
-        );
+        int currentYear = LocalDate.now().getYear();
+        List<LeaveBalanceEntity> balances = leaveBalanceMapper.selectList(new LambdaQueryWrapper<LeaveBalanceEntity>()
+                .eq(LeaveBalanceEntity::getEmployeeId, employee.getId())
+                .eq(LeaveBalanceEntity::getBalanceYear, currentYear)
+                .eq(LeaveBalanceEntity::getStatus, 1)
+                .eq(LeaveBalanceEntity::getIsDeleted, 0)
+                .orderByAsc(LeaveBalanceEntity::getLeaveType)
+                .orderByAsc(LeaveBalanceEntity::getId));
+        Map<String, LeaveBalanceVO> balanceMap = new LinkedHashMap<>();
+        for (LeaveBalanceEntity balance : balances) {
+            LeaveBalanceVO vo = toLeaveBalanceVO(balance);
+            balanceMap.putIfAbsent(vo.getLeaveType(), vo);
+        }
+        appendDefaultLeaveBalance(balanceMap, "annual", "年假");
+        appendDefaultLeaveBalance(balanceMap, "sick", "病假");
+        appendDefaultLeaveBalance(balanceMap, "personal", "事假");
+        return List.copyOf(balanceMap.values());
+    }
+
+//    /**
+//     * 已停用：临时计算年假总额度，仅作历史临时算法参考；当前已替换为 hr_leave_balance 表读取。
+//     *
+//     * @param employee 员工快照
+//     * @return 年假总额度
+//     * 本方法使用的工具类: BigDecimal(JDK)
+//     */
+//    private BigDecimal calculateAnnualTotal(EmployeeSnapshotEntity employee) {
+//        if (employee.getHireDate() == null || employee.getHireDate().isAfter(LocalDate.now())) {
+//            return BigDecimal.ZERO;
+//        }
+//        int months = Math.max(1, LocalDate.now().getMonthValue() - employee.getHireDate().getMonthValue() + 1);
+//        return BigDecimal.valueOf(5).multiply(BigDecimal.valueOf(months))
+//                .divide(BigDecimal.valueOf(12), 1, RoundingMode.DOWN);
+//    }
+
+    /**
+     * 将假期余额表记录转换为接口视图。
+     *
+     * @param balance 假期余额记录
+     * @return 假期余额视图
+     * 本方法使用的工具类: StrUtil(hutool)
+     */
+    private LeaveBalanceVO toLeaveBalanceVO(LeaveBalanceEntity balance) {
+        String leaveType = normalizeLeaveType(balance.getLeaveType());
+        return LeaveBalanceVO.builder()
+                .leaveType(leaveType)
+                .leaveTypeName(resolveLeaveTypeName(leaveType))
+                .totalDays(defaultZero(balance.getTotalDays()))
+                .usedDays(defaultZero(balance.getUsedDays()))
+                .remainingDays(defaultZero(balance.getRemainingDays()))
+                .build();
     }
 
     /**
-     * 临时计算年假总额度。
+     * 为缺失的基础假期类型补默认 0 余额。
      *
-     * @param employee 员工快照
-     * @return 年假总额度
+     * @param balanceMap 已有余额映射
+     * @param leaveType  假期类型
+     * @param typeName   假期类型名称
      * 本方法使用的工具类: BigDecimal(JDK)
      */
-    private BigDecimal calculateAnnualTotal(EmployeeSnapshotEntity employee) {
-        // leaveAccountService.getBalance(employee.getId()); 本接口后续应替换为正式假期余额表或员工假期账户接口。
-        if (employee.getHireDate() == null || employee.getHireDate().isAfter(LocalDate.now())) {
-            return BigDecimal.ZERO;
-        }
-        int months = Math.max(1, LocalDate.now().getMonthValue() - employee.getHireDate().getMonthValue() + 1);
-        return BigDecimal.valueOf(5).multiply(BigDecimal.valueOf(months))
-                .divide(BigDecimal.valueOf(12), 1, RoundingMode.DOWN);
+    private void appendDefaultLeaveBalance(Map<String, LeaveBalanceVO> balanceMap, String leaveType, String typeName) {
+        balanceMap.putIfAbsent(leaveType, buildLeaveBalance(leaveType, typeName, BigDecimal.ZERO, BigDecimal.ZERO));
+    }
+
+    /**
+     * 规范化假期类型为前端兼容的小写值。
+     *
+     * @param leaveType 数据库假期类型
+     * @return 小写假期类型
+     * 本方法使用的工具类: StrUtil(hutool)
+     */
+    private String normalizeLeaveType(String leaveType) {
+        return StrUtil.blankToDefault(leaveType, "").toLowerCase();
+    }
+
+    /**
+     * 解析假期类型名称。
+     *
+     * @param leaveType 小写假期类型
+     * @return 假期类型名称
+     * 本方法使用的工具类: 无
+     */
+    private String resolveLeaveTypeName(String leaveType) {
+        return switch (leaveType) {
+            case "annual" -> "年假";
+            case "sick" -> "病假";
+            case "personal" -> "事假";
+            case "compassionate" -> "调休";
+            case "marriage" -> "婚假";
+            case "maternity" -> "产假";
+            case "funeral" -> "丧假";
+            default -> leaveType;
+        };
+    }
+
+    /**
+     * 空金额按 0 处理。
+     *
+     * @param value 金额或天数
+     * @return 非空金额或天数
+     * 本方法使用的工具类: BigDecimal(JDK)
+     */
+    private BigDecimal defaultZero(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 
     /**
@@ -329,8 +419,6 @@ public class AttendanceServiceImpl implements AttendanceService {
         if (totalDays.compareTo(BigDecimal.ZERO) <= 0 || totalDays.compareTo(BigDecimal.valueOf(30)) > 0) {
             throw new GlobalException(LEAVE_DAYS_INVALID);
         }
-        // approvalService.startLeaveApproval(leaveRequest); 本接口需要调用 hrms-business-approval 模块的请假审批发起方法。
-        Long approvalInstanceId = tempStartLeaveApproval(employee.getId(), requestDTO);
         LeaveRequestEntity entity = new LeaveRequestEntity();
         entity.setEmployeeId(employee.getId());
         entity.setLeaveType(leaveType);
@@ -340,9 +428,20 @@ public class AttendanceServiceImpl implements AttendanceService {
         entity.setTotalHours(totalDays.multiply(BigDecimal.valueOf(8)));
         entity.setLeaveReason(requestDTO.getReason());
         entity.setAttachmentUrl(resolveAttachment(requestDTO));
-        entity.setApprovalInstanceId(approvalInstanceId);
         entity.setApprovalStatus(1);
         leaveRequestMapper.insert(entity);
+
+        // TODO 跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起请假审批。
+        Long approvalInstanceId = approvalEngine.startApproval(
+                ApprovalTypeEnum.LEAVE_REQUEST.getCode(),
+                entity.getId(),
+                JSONUtil.toJsonStr(entity),
+                SecurityContextHolder.getUserId(),
+                employee.getDeptId(),
+                employee.getId()
+        );
+        entity.setApprovalInstanceId(approvalInstanceId);
+        leaveRequestMapper.updateById(entity);
         evictCalendarCache(employee.getId(), requestDTO.getStartDate());
         return buildLeaveCreateVO(entity);
     }

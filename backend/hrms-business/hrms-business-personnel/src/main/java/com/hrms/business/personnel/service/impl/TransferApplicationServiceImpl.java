@@ -3,8 +3,15 @@ package com.hrms.business.personnel.service.impl;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.hrms.business.approval.enums.ApprovalTypeEnum;
+import com.hrms.business.approval.service.ApprovalEngine;
+import com.hrms.business.employee.dto.EmployeeQueryDTO;
+import com.hrms.business.employee.entity.EmployeeEntity;
+import com.hrms.business.employee.service.EmployeeService;
+import com.hrms.business.employee.vo.EmployeeListVO;
 import com.hrms.business.personnel.convert.TransferApplicationConvert;
 import com.hrms.business.personnel.dto.TransferApplicationCreateRequestDTO;
 import com.hrms.business.personnel.dto.TransferApplicationQueryDTO;
@@ -18,6 +25,7 @@ import com.hrms.business.personnel.vo.TransferApplicationCreateVO;
 import com.hrms.business.personnel.vo.TransferApplicationPageVO;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
+import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -51,6 +59,10 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
     private final TransferApplicationMapper transferApplicationMapper;
 
     private final EmployeeSnapshotMapper employeeSnapshotMapper;
+
+    private final EmployeeService employeeService;
+
+    private final ApprovalEngine approvalEngine;
 
     /**
      * 分页查询调岗申请。
@@ -100,10 +112,20 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
         entity.setSalaryAdjustment(requestDTO.getSalaryAdjustment());
         entity.setEffectiveDate(requestDTO.getEffectiveDate());
         entity.setReason(requestDTO.getReason());
-        // approvalService.startApproval("TRANSFER", entity.getId()); 本接口需要调用 hrms-business-approval 模块的调岗审批发起接口
-        entity.setApprovalInstanceId(tempStartTransferApproval(employeeSnapshot));
         entity.setApprovalStatus(ApplicationStatusEnum.APPROVING.getCode());
         transferApplicationMapper.insert(entity);
+
+        // TODO 跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起调岗审批。
+        Long approvalInstanceId = approvalEngine.startApproval(
+                ApprovalTypeEnum.TRANSFER.getCode(),
+                entity.getId(),
+                JSONUtil.toJsonStr(entity),
+                SecurityContextHolder.getUserId(),
+                employeeSnapshot.getDeptId(),
+                requestDTO.getEmployeeId()
+        );
+        entity.setApprovalInstanceId(approvalInstanceId);
+        transferApplicationMapper.updateById(entity);
 
         return TransferApplicationCreateVO.builder()
                 .id(entity.getId())
@@ -130,12 +152,35 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
      * 本方法使用的工具类: 无
      */
     private EmployeeSnapshotEntity getRequiredEmployeeSnapshot(Long employeeId) {
-        // employeeService.getEmployeeSnapshot(employeeId); 本接口需要调用 hrms-business-employee 模块的员工快照详情接口
-        EmployeeSnapshotEntity employeeSnapshot = employeeSnapshotMapper.selectById(employeeId);
-        if (employeeSnapshot == null) {
+        // TODO 跨模块调用已完成：当前调用 EmployeeService#getEmployeeBrief(employeeId) 获取员工简要信息。
+        EmployeeEntity employee = employeeService.getEmployeeBrief(employeeId);
+        if (employee == null) {
             throw new GlobalException(EMPLOYEE_NOT_FOUND);
         }
-        return employeeSnapshot;
+        return toEmployeeSnapshot(employee);
+    }
+
+    /**
+     * 将员工模块实体转换为本模块员工快照。
+     *
+     * @param employee 员工模块实体
+     * @return 本模块员工快照
+     * 本方法使用的工具类: 无
+     */
+    private EmployeeSnapshotEntity toEmployeeSnapshot(EmployeeEntity employee) {
+        EmployeeSnapshotEntity snapshot = new EmployeeSnapshotEntity();
+        snapshot.setId(employee.getId());
+        snapshot.setEmployeeNo(employee.getEmployeeNo());
+        snapshot.setEmployeeName(employee.getEmployeeName());
+        snapshot.setDeptId(employee.getDeptId());
+        snapshot.setPostId(employee.getPostId());
+        snapshot.setLeaderId(employee.getLeaderId());
+        snapshot.setJobLevel(employee.getJobLevel());
+        snapshot.setEmploymentStatus(employee.getEmploymentStatus());
+        snapshot.setHireDate(employee.getHireDate());
+        snapshot.setProbationMonth(employee.getProbationMonth());
+        snapshot.setBaseSalary(employee.getBaseSalary());
+        return snapshot;
     }
 
     /**
@@ -185,13 +230,14 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
         if (StrUtil.isBlank(keyword)) {
             return Collections.emptyList();
         }
-        // employeeService.listEmployeeIdsByKeyword(keyword); 本接口需要调用 hrms-business-employee 模块的员工关键词查询接口
-        return employeeSnapshotMapper.selectList(new LambdaQueryWrapper<EmployeeSnapshotEntity>()
-                        .like(EmployeeSnapshotEntity::getEmployeeName, keyword)
-                        .or()
-                        .like(EmployeeSnapshotEntity::getEmployeeNo, keyword))
-                .stream()
-                .map(EmployeeSnapshotEntity::getId)
+        // TODO 跨模块调用已完成：当前调用 EmployeeService#listEmployees(queryDTO) 按关键词查询员工列表。
+        EmployeeQueryDTO queryDTO = new EmployeeQueryDTO();
+        queryDTO.setKeyword(keyword);
+        queryDTO.setPageNum(1);
+        queryDTO.setPageSize(MAX_PAGE_SIZE);
+        return employeeService.listEmployees(queryDTO).getRecords().stream()
+                .map(EmployeeListVO::getId)
+                .filter(id -> id != null)
                 .toList();
     }
 
@@ -206,8 +252,11 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
         if (CollUtil.isEmpty(employeeIds)) {
             return Collections.emptyMap();
         }
-        // employeeService.listEmployeeSnapshots(employeeIds); 本接口需要调用 hrms-business-employee 模块的员工快照批量查询接口
-        return employeeSnapshotMapper.selectBatchIds(employeeIds).stream()
+        // TODO 跨模块调用已完成：当前员工模块暂无批量快照接口，暂用 EmployeeService#getEmployeeBrief(employeeId) 循环补全。
+        return employeeIds.stream()
+                .map(employeeService::getEmployeeBrief)
+                .filter(employee -> employee != null)
+                .map(this::toEmployeeSnapshot)
                 .collect(Collectors.toMap(EmployeeSnapshotEntity::getId, Function.identity(), (left, right) -> left));
     }
 
