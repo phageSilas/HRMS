@@ -91,10 +91,10 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
         entity.setApprovalStatus(ApplicationStatusEnum.APPROVING.getCode());
         regularApplicationMapper.insert(entity);
 
-        RegularApplicationApplyVO vo = new RegularApplicationApplyVO();
-        vo.setSuccess(Boolean.TRUE);
-        vo.setApprovalId(approvalInstanceId);
-        return vo;
+        return RegularApplicationApplyVO.builder()
+                .success(Boolean.TRUE)
+                .approvalId(approvalInstanceId)
+                .build();
     }
 
     /**

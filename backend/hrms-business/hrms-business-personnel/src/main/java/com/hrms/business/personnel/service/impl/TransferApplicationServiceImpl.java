@@ -93,10 +93,10 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
         entity.setApprovalStatus(ApplicationStatusEnum.APPROVING.getCode());
         transferApplicationMapper.insert(entity);
 
-        TransferApplicationCreateVO vo = new TransferApplicationCreateVO();
-        vo.setId(entity.getId());
-        vo.setApprovalStatus(entity.getApprovalStatus());
-        return vo;
+        return TransferApplicationCreateVO.builder()
+                .id(entity.getId())
+                .approvalStatus(entity.getApprovalStatus())
+                .build();
     }
 
     /**

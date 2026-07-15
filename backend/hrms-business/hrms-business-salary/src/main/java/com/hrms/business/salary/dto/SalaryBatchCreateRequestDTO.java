@@ -1,6 +1,9 @@
 package com.hrms.business.salary.dto;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.util.List;
 
@@ -8,6 +11,9 @@ import java.util.List;
  * 创建薪资核算批次请求参数。
  */
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class SalaryBatchCreateRequestDTO {
 
     private String salaryMonth;

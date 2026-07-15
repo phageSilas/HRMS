@@ -2,7 +2,10 @@ package com.hrms.business.salary.dto;
 
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -11,6 +14,9 @@ import java.time.LocalDate;
  * 员工薪资档案设置请求参数。
  */
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class EmployeeSalaryProfileRequestDTO {
 
     private Long templateId;

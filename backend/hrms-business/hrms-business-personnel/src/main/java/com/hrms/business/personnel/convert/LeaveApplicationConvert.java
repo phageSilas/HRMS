@@ -26,23 +26,21 @@ public final class LeaveApplicationConvert {
     public static LeaveApplicationPageVO toPageVO(LeaveApplicationEntity entity,
                                                   EmployeeSnapshotEntity employeeSnapshot,
                                                   EmployeeSnapshotEntity handoverSnapshot) {
-        LeaveApplicationPageVO vo = new LeaveApplicationPageVO();
-        vo.setId(entity.getId());
-        vo.setEmployeeId(entity.getEmployeeId());
-        if (employeeSnapshot != null) {
-            vo.setEmployeeName(employeeSnapshot.getEmployeeName());
-            vo.setDepartmentName(tempResolveDeptName(employeeSnapshot.getDeptId()));
-        }
-        vo.setLeaveType(LeaveTypeEnum.getValueByCode(entity.getLeaveType()));
-        vo.setLeaveTypeName(LeaveTypeEnum.getDescByCode(entity.getLeaveType()));
-        vo.setLastWorkDate(entity.getLastWorkDate() == null ? entity.getExpectedLastWorkDate() : entity.getLastWorkDate());
-        vo.setLeaveDate(entity.getLastWorkDate() == null ? entity.getExpectedLastWorkDate() : entity.getLastWorkDate());
-        vo.setHandoverEmployeeName(handoverSnapshot == null ? null : handoverSnapshot.getEmployeeName());
-        vo.setReason(entity.getLeaveReason());
-        vo.setApprovalStatus(entity.getApprovalStatus());
-        vo.setApprovalStatusDesc(ApplicationStatusEnum.getDescByCode(entity.getApprovalStatus()));
-        vo.setCreateTime(entity.getCreateTime());
-        return vo;
+        return LeaveApplicationPageVO.builder()
+                .id(entity.getId())
+                .employeeId(entity.getEmployeeId())
+                .employeeName(employeeSnapshot == null ? null : employeeSnapshot.getEmployeeName())
+                .departmentName(employeeSnapshot == null ? null : tempResolveDeptName(employeeSnapshot.getDeptId()))
+                .leaveType(LeaveTypeEnum.getValueByCode(entity.getLeaveType()))
+                .leaveTypeName(LeaveTypeEnum.getDescByCode(entity.getLeaveType()))
+                .lastWorkDate(entity.getLastWorkDate() == null ? entity.getExpectedLastWorkDate() : entity.getLastWorkDate())
+                .leaveDate(entity.getLastWorkDate() == null ? entity.getExpectedLastWorkDate() : entity.getLastWorkDate())
+                .handoverEmployeeName(handoverSnapshot == null ? null : handoverSnapshot.getEmployeeName())
+                .reason(entity.getLeaveReason())
+                .approvalStatus(entity.getApprovalStatus())
+                .approvalStatusDesc(ApplicationStatusEnum.getDescByCode(entity.getApprovalStatus()))
+                .createTime(entity.getCreateTime())
+                .build();
     }
 
     /**

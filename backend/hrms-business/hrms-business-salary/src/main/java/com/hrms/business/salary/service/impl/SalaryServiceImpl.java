@@ -337,9 +337,10 @@ public class SalaryServiceImpl implements SalaryService {
                 .orderByAsc(SalaryBatchItemEntity::getEmployeeId));
         Map<Long, SalaryEmployeeSnapshotEntity> employeeMap = listEmployeesByIds(
                 items.stream().map(SalaryBatchItemEntity::getEmployeeId).toList());
-        SalaryBatchPreviewVO vo = new SalaryBatchPreviewVO();
-        vo.setBatch(toBatchVO(batch));
-        vo.setItems(items.stream().map(item -> toBatchItemVO(item, employeeMap.get(item.getEmployeeId()))).toList());
+        SalaryBatchPreviewVO vo = SalaryBatchPreviewVO.builder()
+                .batch(toBatchVO(batch))
+                .items(items.stream().map(item -> toBatchItemVO(item, employeeMap.get(item.getEmployeeId()))).toList())
+                .build();
         if (redisTemplate != null) {
             redisTemplate.opsForValue().set(cacheKey, JSONUtil.toJsonStr(vo), 5, TimeUnit.MINUTES);
         }
@@ -425,11 +426,11 @@ public class SalaryServiceImpl implements SalaryService {
             redisTemplate.opsForValue().set(SalaryCacheKeys.payslipVerify(employeeId, requestDTO.getMonth()),
                     token, 30, TimeUnit.MINUTES);
         }
-        SalaryPayslipVerifyVO vo = new SalaryPayslipVerifyVO();
-        vo.setSuccess(true);
-        vo.setToken(token);
-        vo.setExpireTime(LocalDateTime.now().plusMinutes(30));
-        return vo;
+        return SalaryPayslipVerifyVO.builder()
+                .success(true)
+                .token(token)
+                .expireTime(LocalDateTime.now().plusMinutes(30))
+                .build();
     }
 
     /**
@@ -455,12 +456,11 @@ public class SalaryServiceImpl implements SalaryService {
                 SalaryCacheKeys.payslipVerify(employeeId, batch.getSalaryMonth())))) {
             throw new GlobalException(ErrorCode.FORBIDDEN, "请先完成工资条二次验证");
         }
-        SalaryPayslipDetailVO vo = new SalaryPayslipDetailVO();
         SalaryEmployeeSnapshotEntity employee = employeeSnapshotMapper.selectById(employeeId);
-        copyBatchItemFields(item, vo, employee);
-        vo.setSalaryMonth(batch.getSalaryMonth());
-        vo.setBatchNo(batch.getBatchNo());
-        return vo;
+        return payslipDetailBuilder(item, employee)
+                .salaryMonth(batch.getSalaryMonth())
+                .batchNo(batch.getBatchNo())
+                .build();
     }
 
     /**
@@ -487,12 +487,10 @@ public class SalaryServiceImpl implements SalaryService {
                 .eq(SalaryBatchItemEntity::getEmployeeId, employeeId)
                 .in(SalaryBatchItemEntity::getBatchId, batchMap.keySet()));
         return items.stream()
-                .map(item -> {
-                    SalaryTrendVO vo = new SalaryTrendVO();
-                    vo.setMonth(batchMap.get(item.getBatchId()).getSalaryMonth());
-                    vo.setNetSalary(item.getNetSalary());
-                    return vo;
-                })
+                .map(item -> SalaryTrendVO.builder()
+                        .month(batchMap.get(item.getBatchId()).getSalaryMonth())
+                        .netSalary(item.getNetSalary())
+                        .build())
                 .sorted(Comparator.comparing(SalaryTrendVO::getMonth))
                 .toList();
     }
@@ -690,18 +688,16 @@ public class SalaryServiceImpl implements SalaryService {
 
     private List<AttendancePayrollSourceVO> tempGetAttendanceMonthlySummary(String month, List<Long> employeeIds) {
         // 本方法未来替换为 hrms-business-attendance 的 AttendanceService#getPayrollSource(month, employeeIds)。
-        return employeeIds.stream().map(employeeId -> {
-            AttendancePayrollSourceVO vo = new AttendancePayrollSourceVO();
-            vo.setEmployeeId(employeeId);
-            vo.setShouldAttendDays(22);
-            vo.setActualAttendDays(22);
-            vo.setLateCount(0);
-            vo.setEarlyLeaveCount(0);
-            vo.setAbsenceDays(BigDecimal.ZERO);
-            vo.setLeaveDays(BigDecimal.ZERO);
-            vo.setOvertimeHours(BigDecimal.ZERO);
-            return vo;
-        }).toList();
+        return employeeIds.stream().map(employeeId -> AttendancePayrollSourceVO.builder()
+                .employeeId(employeeId)
+                .shouldAttendDays(22)
+                .actualAttendDays(22)
+                .lateCount(0)
+                .earlyLeaveCount(0)
+                .absenceDays(BigDecimal.ZERO)
+                .leaveDays(BigDecimal.ZERO)
+                .overtimeHours(BigDecimal.ZERO)
+                .build()).toList();
     }
 
     private void publishCalculateMessage(SalaryBatchCalculateMessage message) {
@@ -811,113 +807,135 @@ public class SalaryServiceImpl implements SalaryService {
     }
 
     private EmployeeSalaryProfileVO toProfileVO(EmployeeSalaryProfileEntity profile, SalaryEmployeeSnapshotEntity employee) {
-        EmployeeSalaryProfileVO vo = new EmployeeSalaryProfileVO();
-        vo.setId(profile.getId());
-        vo.setEmployeeId(profile.getEmployeeId());
-        vo.setEmployeeNo(employee.getEmployeeNo());
-        vo.setEmployeeName(employee.getEmployeeName());
-        vo.setTemplateId(profile.getTemplateId());
-        if (profile.getTemplateId() != null) {
-            SalaryTemplateEntity template = salaryTemplateMapper.selectById(profile.getTemplateId());
-            vo.setTemplateName(template == null ? null : template.getTemplateName());
-        }
-        vo.setBaseSalary(profile.getBaseSalary());
-        vo.setAllowance(profile.getAllowance());
-        vo.setPerformanceBase(profile.getPerformanceBase());
-        vo.setSocialInsuranceBase(profile.getSocialInsuranceBase());
-        vo.setHousingFundBase(profile.getHousingFundBase());
-        vo.setBankName(profile.getBankName());
-        vo.setBankAccountMasked(maskBankAccount(profile.getBankAccount()));
-        vo.setEffectiveDate(profile.getEffectiveDate());
-        vo.setRemark(profile.getRemark());
-        return vo;
+        SalaryTemplateEntity template = profile.getTemplateId() == null ? null : salaryTemplateMapper.selectById(profile.getTemplateId());
+        return EmployeeSalaryProfileVO.builder()
+                .id(profile.getId())
+                .employeeId(profile.getEmployeeId())
+                .employeeNo(employee.getEmployeeNo())
+                .employeeName(employee.getEmployeeName())
+                .templateId(profile.getTemplateId())
+                .templateName(template == null ? null : template.getTemplateName())
+                .baseSalary(profile.getBaseSalary())
+                .allowance(profile.getAllowance())
+                .performanceBase(profile.getPerformanceBase())
+                .socialInsuranceBase(profile.getSocialInsuranceBase())
+                .housingFundBase(profile.getHousingFundBase())
+                .bankName(profile.getBankName())
+                .bankAccountMasked(maskBankAccount(profile.getBankAccount()))
+                .effectiveDate(profile.getEffectiveDate())
+                .remark(profile.getRemark())
+                .build();
     }
 
     private SalaryTemplatePageVO toTemplateVO(SalaryTemplateEntity entity, List<SalaryTemplateItemEntity> items) {
-        SalaryTemplatePageVO vo = new SalaryTemplatePageVO();
-        vo.setId(entity.getId());
-        vo.setTemplateName(entity.getTemplateName());
-        vo.setTemplateCode(entity.getTemplateCode());
-        vo.setScopeType(entity.getScopeType());
-        vo.setScopeValue(entity.getScopeValue());
-        vo.setStatus(entity.getStatus());
-        vo.setRemark(entity.getRemark());
-        vo.setCreateTime(entity.getCreateTime());
-        vo.setItemCount(items.size());
-        vo.setItems(items.stream().map(this::toTemplateItemVO).toList());
-        return vo;
+        return SalaryTemplatePageVO.builder()
+                .id(entity.getId())
+                .templateName(entity.getTemplateName())
+                .templateCode(entity.getTemplateCode())
+                .scopeType(entity.getScopeType())
+                .scopeValue(entity.getScopeValue())
+                .status(entity.getStatus())
+                .remark(entity.getRemark())
+                .createTime(entity.getCreateTime())
+                .itemCount(items.size())
+                .items(items.stream().map(this::toTemplateItemVO).toList())
+                .build();
     }
 
     private SalaryTemplateItemVO toTemplateItemVO(SalaryTemplateItemEntity entity) {
-        SalaryTemplateItemVO vo = new SalaryTemplateItemVO();
-        vo.setId(entity.getId());
-        vo.setItemCode(entity.getItemCode());
-        vo.setItemName(entity.getItemName());
-        vo.setCategory(entity.getCategory());
-        vo.setCalcRule(entity.getCalcRule());
-        vo.setDefaultValue(entity.getDefaultValue());
-        vo.setSortNo(entity.getSortNo());
-        return vo;
+        return SalaryTemplateItemVO.builder()
+                .id(entity.getId())
+                .itemCode(entity.getItemCode())
+                .itemName(entity.getItemName())
+                .category(entity.getCategory())
+                .calcRule(entity.getCalcRule())
+                .defaultValue(entity.getDefaultValue())
+                .sortNo(entity.getSortNo())
+                .build();
     }
 
     private SalaryBatchVO toBatchVO(SalaryBatchEntity entity) {
-        SalaryBatchVO vo = new SalaryBatchVO();
-        vo.setId(entity.getId());
-        vo.setBatchNo(entity.getBatchNo());
-        vo.setSalaryMonth(entity.getSalaryMonth());
-        vo.setScopeType(entity.getScopeType());
-        vo.setScopeValue(entity.getScopeValue());
-        vo.setBatchStatus(entity.getBatchStatus());
-        vo.setApprovalInstanceId(entity.getApprovalInstanceId());
-        vo.setTotalCount(entity.getTotalCount());
-        vo.setTotalGrossSalary(entity.getTotalGrossSalary());
-        vo.setTotalNetSalary(entity.getTotalNetSalary());
-        vo.setYellowWarningCount(entity.getYellowWarningCount());
-        vo.setRedWarningCount(entity.getRedWarningCount());
-        vo.setBlockCount(entity.getBlockCount());
-        return vo;
+        return SalaryBatchVO.builder()
+                .id(entity.getId())
+                .batchNo(entity.getBatchNo())
+                .salaryMonth(entity.getSalaryMonth())
+                .scopeType(entity.getScopeType())
+                .scopeValue(entity.getScopeValue())
+                .batchStatus(entity.getBatchStatus())
+                .approvalInstanceId(entity.getApprovalInstanceId())
+                .totalCount(entity.getTotalCount())
+                .totalGrossSalary(entity.getTotalGrossSalary())
+                .totalNetSalary(entity.getTotalNetSalary())
+                .yellowWarningCount(entity.getYellowWarningCount())
+                .redWarningCount(entity.getRedWarningCount())
+                .blockCount(entity.getBlockCount())
+                .build();
     }
 
     private SalaryBatchItemVO toBatchItemVO(SalaryBatchItemEntity item, SalaryEmployeeSnapshotEntity employee) {
-        SalaryBatchItemVO vo = new SalaryBatchItemVO();
-        copyBatchItemFields(item, vo, employee);
-        return vo;
+        return batchItemBuilder(item, employee).build();
     }
 
-    private void copyBatchItemFields(SalaryBatchItemEntity item, SalaryBatchItemVO vo, SalaryEmployeeSnapshotEntity employee) {
-        vo.setId(item.getId());
-        vo.setBatchId(item.getBatchId());
-        vo.setEmployeeId(item.getEmployeeId());
-        vo.setEmployeeNo(employee == null ? null : employee.getEmployeeNo());
-        vo.setEmployeeName(employee == null ? null : employee.getEmployeeName());
-        vo.setBaseSalary(item.getBaseSalary());
-        vo.setAllowance(item.getAllowance());
-        vo.setPerformanceBonus(item.getPerformanceBonus());
-        vo.setOvertimePay(item.getOvertimePay());
-        vo.setLateDeduction(item.getLateDeduction());
-        vo.setLeaveDeduction(item.getLeaveDeduction());
-        vo.setSocialInsurance(item.getSocialInsurance());
-        vo.setHousingFund(item.getHousingFund());
-        vo.setIncomeTax(item.getIncomeTax());
-        vo.setGrossSalary(item.getGrossSalary());
-        vo.setDeductionTotal(item.getDeductionTotal());
-        vo.setNetSalary(item.getNetSalary());
-        vo.setWarningLevel(item.getWarningLevel());
-        vo.setWarningReason(item.getWarningReason());
+    private SalaryBatchItemVO.SalaryBatchItemVOBuilder<?, ?> batchItemBuilder(SalaryBatchItemEntity item,
+                                                                             SalaryEmployeeSnapshotEntity employee) {
+        return SalaryBatchItemVO.builder()
+                .id(item.getId())
+                .batchId(item.getBatchId())
+                .employeeId(item.getEmployeeId())
+                .employeeNo(employee == null ? null : employee.getEmployeeNo())
+                .employeeName(employee == null ? null : employee.getEmployeeName())
+                .baseSalary(item.getBaseSalary())
+                .allowance(item.getAllowance())
+                .performanceBonus(item.getPerformanceBonus())
+                .overtimePay(item.getOvertimePay())
+                .lateDeduction(item.getLateDeduction())
+                .leaveDeduction(item.getLeaveDeduction())
+                .socialInsurance(item.getSocialInsurance())
+                .housingFund(item.getHousingFund())
+                .incomeTax(item.getIncomeTax())
+                .grossSalary(item.getGrossSalary())
+                .deductionTotal(item.getDeductionTotal())
+                .netSalary(item.getNetSalary())
+                .warningLevel(item.getWarningLevel())
+                .warningReason(item.getWarningReason());
+    }
+
+    private SalaryPayslipDetailVO.SalaryPayslipDetailVOBuilder<?, ?> payslipDetailBuilder(SalaryBatchItemEntity item,
+                                                                                         SalaryEmployeeSnapshotEntity employee) {
+        return SalaryPayslipDetailVO.builder()
+                .id(item.getId())
+                .batchId(item.getBatchId())
+                .employeeId(item.getEmployeeId())
+                .employeeNo(employee == null ? null : employee.getEmployeeNo())
+                .employeeName(employee == null ? null : employee.getEmployeeName())
+                .baseSalary(item.getBaseSalary())
+                .allowance(item.getAllowance())
+                .performanceBonus(item.getPerformanceBonus())
+                .overtimePay(item.getOvertimePay())
+                .lateDeduction(item.getLateDeduction())
+                .leaveDeduction(item.getLeaveDeduction())
+                .socialInsurance(item.getSocialInsurance())
+                .housingFund(item.getHousingFund())
+                .incomeTax(item.getIncomeTax())
+                .grossSalary(item.getGrossSalary())
+                .deductionTotal(item.getDeductionTotal())
+                .netSalary(item.getNetSalary())
+                .warningLevel(item.getWarningLevel())
+                .warningReason(item.getWarningReason());
     }
 
     private SalaryPayslipListVO toPayslipListVO(SalaryBatchItemEntity item, SalaryBatchEntity batch) {
-        SalaryPayslipListVO vo = new SalaryPayslipListVO();
-        vo.setId(item.getId());
-        vo.setSalaryMonth(batch.getSalaryMonth());
-        vo.setGrossSalary(item.getGrossSalary());
-        vo.setDeductionTotal(item.getDeductionTotal());
-        vo.setNetSalary(item.getNetSalary());
-        vo.setBatchStatus(batch.getBatchStatus());
         StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
-        vo.setVerified(redisTemplate != null && Boolean.TRUE.equals(redisTemplate.hasKey(
-                SalaryCacheKeys.payslipVerify(item.getEmployeeId(), batch.getSalaryMonth()))));
-        return vo;
+        return SalaryPayslipListVO.builder()
+                .id(item.getId())
+                .salaryMonth(batch.getSalaryMonth())
+                .grossSalary(item.getGrossSalary())
+                .deductionTotal(item.getDeductionTotal())
+                .netSalary(item.getNetSalary())
+                .batchStatus(batch.getBatchStatus())
+                .verified(redisTemplate != null && Boolean.TRUE.equals(redisTemplate.hasKey(
+                        SalaryCacheKeys.payslipVerify(item.getEmployeeId(), batch.getSalaryMonth()))))
+                .build();
     }
 
     private String normalizeScopeType(String scopeType) {

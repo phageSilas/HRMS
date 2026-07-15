@@ -1,6 +1,9 @@
 package com.hrms.business.attendance.vo;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -9,6 +12,9 @@ import java.time.LocalTime;
  * 考勤组分页响应视图。
  */
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class AttendanceGroupPageVO {
 
     /**

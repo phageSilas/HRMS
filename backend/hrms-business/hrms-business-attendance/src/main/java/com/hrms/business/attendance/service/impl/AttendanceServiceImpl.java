@@ -303,13 +303,13 @@ public class AttendanceServiceImpl implements AttendanceService {
      * 本方法使用的工具类: BigDecimal(JDK)
      */
     private LeaveBalanceVO buildLeaveBalance(String type, String name, BigDecimal totalDays, BigDecimal usedDays) {
-        LeaveBalanceVO vo = new LeaveBalanceVO();
-        vo.setLeaveType(type);
-        vo.setLeaveTypeName(name);
-        vo.setTotalDays(totalDays);
-        vo.setUsedDays(usedDays);
-        vo.setRemainingDays(totalDays.subtract(usedDays).max(BigDecimal.ZERO));
-        return vo;
+        return LeaveBalanceVO.builder()
+                .leaveType(type)
+                .leaveTypeName(name)
+                .totalDays(totalDays)
+                .usedDays(usedDays)
+                .remainingDays(totalDays.subtract(usedDays).max(BigDecimal.ZERO))
+                .build();
     }
 
     /**
@@ -354,11 +354,11 @@ public class AttendanceServiceImpl implements AttendanceService {
         String lockKey = AttendanceCacheKeys.monthStatGenerateLock(requestDTO.getMonth());
         Boolean locked = stringRedisTemplate.opsForValue().setIfAbsent(lockKey, "1", Duration.ofMinutes(10));
         if (Boolean.FALSE.equals(locked)) {
-            MonthlyStatGenerateVO vo = new MonthlyStatGenerateVO();
-            vo.setMonth(requestDTO.getMonth());
-            vo.setEmployeeCount(0);
-            vo.setSuccess(false);
-            return vo;
+            return MonthlyStatGenerateVO.builder()
+                    .month(requestDTO.getMonth())
+                    .employeeCount(0)
+                    .success(false)
+                    .build();
         }
         List<AttendancePayrollSourceVO> stats = computePayrollSources(requestDTO.getMonth(), requestDTO.getEmployeeIds());
         stats.forEach(stat -> stringRedisTemplate.opsForValue().set(
@@ -367,11 +367,11 @@ public class AttendanceServiceImpl implements AttendanceService {
                 Duration.ofDays(35)));
         // attendanceStatGenerateProducer.send(requestDTO); 本接口后续替换为 attendance.stat.generate 生产者异步分片统计。
         tempPublishMonthlyStatGenerateMessage(requestDTO);
-        MonthlyStatGenerateVO vo = new MonthlyStatGenerateVO();
-        vo.setMonth(requestDTO.getMonth());
-        vo.setEmployeeCount(stats.size());
-        vo.setSuccess(true);
-        return vo;
+        return MonthlyStatGenerateVO.builder()
+                .month(requestDTO.getMonth())
+                .employeeCount(stats.size())
+                .success(true)
+                .build();
     }
 
     /**
@@ -474,18 +474,18 @@ public class AttendanceServiceImpl implements AttendanceService {
         int actualAttendDays = (int) records.stream()
                 .filter(record -> record.getClockInTime() != null || record.getClockOutTime() != null)
                 .count();
-        AttendancePayrollSourceVO vo = new AttendancePayrollSourceVO();
-        vo.setEmployeeId(employee.getId());
-        vo.setEmployeeNo(employee.getEmployeeNo());
-        vo.setEmployeeName(employee.getEmployeeName());
-        vo.setShouldAttendDays(shouldAttendDays);
-        vo.setActualAttendDays(actualAttendDays);
-        vo.setLateCount(lateCount);
-        vo.setEarlyLeaveCount(earlyLeaveCount);
-        vo.setLeaveDays(leaveDays);
-        vo.setAbsenceDays(BigDecimal.valueOf(Math.max(0, shouldAttendDays - actualAttendDays)).subtract(leaveDays).max(BigDecimal.ZERO));
-        vo.setOvertimeHours(BigDecimal.ZERO);
-        return vo;
+        return AttendancePayrollSourceVO.builder()
+                .employeeId(employee.getId())
+                .employeeNo(employee.getEmployeeNo())
+                .employeeName(employee.getEmployeeName())
+                .shouldAttendDays(shouldAttendDays)
+                .actualAttendDays(actualAttendDays)
+                .lateCount(lateCount)
+                .earlyLeaveCount(earlyLeaveCount)
+                .leaveDays(leaveDays)
+                .absenceDays(BigDecimal.valueOf(Math.max(0, shouldAttendDays - actualAttendDays)).subtract(leaveDays).max(BigDecimal.ZERO))
+                .overtimeHours(BigDecimal.ZERO)
+                .build();
     }
 
     /**
@@ -592,11 +592,11 @@ public class AttendanceServiceImpl implements AttendanceService {
      * 本方法使用的工具类: 无
      */
     private LeaveCreateVO buildLeaveCreateVO(LeaveRequestEntity entity) {
-        LeaveCreateVO vo = new LeaveCreateVO();
-        vo.setId(entity.getId());
-        vo.setApprovalInstanceId(entity.getApprovalInstanceId());
-        vo.setApprovalStatus(entity.getApprovalStatus());
-        return vo;
+        return LeaveCreateVO.builder()
+                .id(entity.getId())
+                .approvalInstanceId(entity.getApprovalInstanceId())
+                .approvalStatus(entity.getApprovalStatus())
+                .build();
     }
 
     /**
@@ -607,11 +607,11 @@ public class AttendanceServiceImpl implements AttendanceService {
      * 本方法使用的工具类: 无
      */
     private LeaveTypeVO toLeaveTypeVO(DictDataEntity entity) {
-        LeaveTypeVO vo = new LeaveTypeVO();
-        vo.setId(entity.getId());
-        vo.setLabel(entity.getDictLabel());
-        vo.setValue(entity.getDictValue());
-        return vo;
+        return LeaveTypeVO.builder()
+                .id(entity.getId())
+                .label(entity.getDictLabel())
+                .value(entity.getDictValue())
+                .build();
     }
 
     /**
@@ -679,12 +679,12 @@ public class AttendanceServiceImpl implements AttendanceService {
      * 本方法使用的工具类: 无
      */
     private AttendanceCorrectionCreateVO buildCorrectionCreateVO(AttendanceCorrectionEntity correction) {
-        AttendanceCorrectionCreateVO vo = new AttendanceCorrectionCreateVO();
-        vo.setId(correction.getId());
-        vo.setRecordId(correction.getRecordId());
-        vo.setApprovalInstanceId(correction.getApprovalInstanceId());
-        vo.setApprovalStatus(correction.getApprovalStatus());
-        return vo;
+        return AttendanceCorrectionCreateVO.builder()
+                .id(correction.getId())
+                .recordId(correction.getRecordId())
+                .approvalInstanceId(correction.getApprovalInstanceId())
+                .approvalStatus(correction.getApprovalStatus())
+                .build();
     }
 
     /**
@@ -717,11 +717,11 @@ public class AttendanceServiceImpl implements AttendanceService {
         List<AttendanceCalendarDayVO> days = IntStream.rangeClosed(1, parsedMonth.lengthOfMonth())
                 .mapToObj(day -> buildCalendarDay(parsedMonth.atDay(day), recordMap.get(parsedMonth.atDay(day)), leaveDates))
                 .toList();
-        AttendanceCalendarVO calendar = new AttendanceCalendarVO();
-        calendar.setEmployeeId(employeeId);
-        calendar.setYearMonth(parsedMonth.toString());
-        calendar.setDays(days);
-        return calendar;
+        return AttendanceCalendarVO.builder()
+                .employeeId(employeeId)
+                .yearMonth(parsedMonth.toString())
+                .days(days)
+                .build();
     }
 
     /**
@@ -756,17 +756,23 @@ public class AttendanceServiceImpl implements AttendanceService {
      * 本方法使用的工具类: 无
      */
     private AttendanceCalendarDayVO buildCalendarDay(LocalDate date, AttendanceRecordEntity record, Set<LocalDate> leaveDates) {
-        AttendanceCalendarDayVO day = new AttendanceCalendarDayVO();
-        day.setDate(date);
-        day.setLeave(leaveDates.contains(date));
-        if (record != null) {
-            day.setClockInTime(record.getClockInTime());
-            day.setClockOutTime(record.getClockOutTime());
-            day.setClockInStatus(record.getClockInStatus());
-            day.setClockOutStatus(record.getClockOutStatus());
-        }
-        day.setDayStatus(resolveDayStatus(day));
-        return day;
+        AttendanceCalendarDayVO day = AttendanceCalendarDayVO.builder()
+                .date(date)
+                .leave(leaveDates.contains(date))
+                .clockInTime(record == null ? null : record.getClockInTime())
+                .clockOutTime(record == null ? null : record.getClockOutTime())
+                .clockInStatus(record == null ? null : record.getClockInStatus())
+                .clockOutStatus(record == null ? null : record.getClockOutStatus())
+                .build();
+        return AttendanceCalendarDayVO.builder()
+                .date(day.getDate())
+                .leave(day.getLeave())
+                .clockInTime(day.getClockInTime())
+                .clockOutTime(day.getClockOutTime())
+                .clockInStatus(day.getClockInStatus())
+                .clockOutStatus(day.getClockOutStatus())
+                .dayStatus(resolveDayStatus(day))
+                .build();
     }
 
     /**
@@ -1088,15 +1094,15 @@ public class AttendanceServiceImpl implements AttendanceService {
      * 本方法使用的工具类: 无
      */
     private AttendanceClockVO buildClockVO(AttendanceRecordEntity record, ClockPeriodEnum period, String status, LocalDateTime clockTime) {
-        AttendanceClockVO vo = new AttendanceClockVO();
-        vo.setRecordId(record.getId());
-        vo.setEmployeeId(record.getEmployeeId());
-        vo.setGroupId(record.getGroupId());
-        vo.setRecordDate(record.getRecordDate());
-        vo.setPeriod(period.name());
-        vo.setStatus(status);
-        vo.setClockTime(clockTime);
-        return vo;
+        return AttendanceClockVO.builder()
+                .recordId(record.getId())
+                .employeeId(record.getEmployeeId())
+                .groupId(record.getGroupId())
+                .recordDate(record.getRecordDate())
+                .period(period.name())
+                .status(status)
+                .clockTime(clockTime)
+                .build();
     }
 
     /**

@@ -28,23 +28,23 @@ public final class RegularApplicationConvert {
      * 本方法使用的工具类: ChronoUnit(JDK)
      */
     public static RegularApplicationPageVO toPendingVO(EmployeeSnapshotEntity employeeSnapshot) {
-        RegularApplicationPageVO vo = new RegularApplicationPageVO();
-        vo.setEmployeeId(employeeSnapshot.getId());
-        vo.setEmployeeName(employeeSnapshot.getEmployeeName());
-        vo.setEmployeeNo(employeeSnapshot.getEmployeeNo());
-        vo.setDeptId(employeeSnapshot.getDeptId());
-        vo.setDepartmentName(tempResolveDeptName(employeeSnapshot.getDeptId()));
-        vo.setPostId(employeeSnapshot.getPostId());
-        vo.setPositionName(tempResolvePostName(employeeSnapshot.getPostId()));
-        vo.setHireDate(employeeSnapshot.getHireDate());
         LocalDate probationEndDate = calculateProbationEndDate(employeeSnapshot);
-        vo.setProbationEndDate(probationEndDate);
-        vo.setRemainingDays(probationEndDate == null ? null : ChronoUnit.DAYS.between(LocalDate.now(), probationEndDate));
-        vo.setEvaluationStatus(EVALUATION_PENDING);
-        vo.setApprovalStatus(ApplicationStatusEnum.DRAFT.getCode());
-        vo.setApprovalStatusDesc(ApplicationStatusEnum.DRAFT.getDesc());
-        vo.setCreateTime(employeeSnapshot.getCreateTime());
-        return vo;
+        return RegularApplicationPageVO.builder()
+                .employeeId(employeeSnapshot.getId())
+                .employeeName(employeeSnapshot.getEmployeeName())
+                .employeeNo(employeeSnapshot.getEmployeeNo())
+                .deptId(employeeSnapshot.getDeptId())
+                .departmentName(tempResolveDeptName(employeeSnapshot.getDeptId()))
+                .postId(employeeSnapshot.getPostId())
+                .positionName(tempResolvePostName(employeeSnapshot.getPostId()))
+                .hireDate(employeeSnapshot.getHireDate())
+                .probationEndDate(probationEndDate)
+                .remainingDays(probationEndDate == null ? null : ChronoUnit.DAYS.between(LocalDate.now(), probationEndDate))
+                .evaluationStatus(EVALUATION_PENDING)
+                .approvalStatus(ApplicationStatusEnum.DRAFT.getCode())
+                .approvalStatusDesc(ApplicationStatusEnum.DRAFT.getDesc())
+                .createTime(employeeSnapshot.getCreateTime())
+                .build();
     }
 
     /**
@@ -57,27 +57,25 @@ public final class RegularApplicationConvert {
      */
     public static RegularApplicationPageVO toEvaluatedVO(RegularApplicationEntity entity,
                                                          EmployeeSnapshotEntity employeeSnapshot) {
-        RegularApplicationPageVO vo = new RegularApplicationPageVO();
-        vo.setId(entity.getId());
-        vo.setEmployeeId(entity.getEmployeeId());
-        if (employeeSnapshot != null) {
-            vo.setEmployeeName(employeeSnapshot.getEmployeeName());
-            vo.setEmployeeNo(employeeSnapshot.getEmployeeNo());
-            vo.setDeptId(employeeSnapshot.getDeptId());
-            vo.setDepartmentName(tempResolveDeptName(employeeSnapshot.getDeptId()));
-            vo.setPostId(employeeSnapshot.getPostId());
-            vo.setPositionName(tempResolvePostName(employeeSnapshot.getPostId()));
-            vo.setHireDate(employeeSnapshot.getHireDate());
-        }
-        vo.setProbationEndDate(entity.getProbationEndDate());
-        vo.setRemainingDays(entity.getProbationEndDate() == null
-                ? null
-                : ChronoUnit.DAYS.between(LocalDate.now(), entity.getProbationEndDate()));
-        vo.setEvaluationStatus(EVALUATION_EVALUATED);
-        vo.setApprovalStatus(entity.getApprovalStatus());
-        vo.setApprovalStatusDesc(ApplicationStatusEnum.getDescByCode(entity.getApprovalStatus()));
-        vo.setCreateTime(entity.getCreateTime());
-        return vo;
+        return RegularApplicationPageVO.builder()
+                .id(entity.getId())
+                .employeeId(entity.getEmployeeId())
+                .employeeName(employeeSnapshot == null ? null : employeeSnapshot.getEmployeeName())
+                .employeeNo(employeeSnapshot == null ? null : employeeSnapshot.getEmployeeNo())
+                .deptId(employeeSnapshot == null ? null : employeeSnapshot.getDeptId())
+                .departmentName(employeeSnapshot == null ? null : tempResolveDeptName(employeeSnapshot.getDeptId()))
+                .postId(employeeSnapshot == null ? null : employeeSnapshot.getPostId())
+                .positionName(employeeSnapshot == null ? null : tempResolvePostName(employeeSnapshot.getPostId()))
+                .hireDate(employeeSnapshot == null ? null : employeeSnapshot.getHireDate())
+                .probationEndDate(entity.getProbationEndDate())
+                .remainingDays(entity.getProbationEndDate() == null
+                        ? null
+                        : ChronoUnit.DAYS.between(LocalDate.now(), entity.getProbationEndDate()))
+                .evaluationStatus(EVALUATION_EVALUATED)
+                .approvalStatus(entity.getApprovalStatus())
+                .approvalStatusDesc(ApplicationStatusEnum.getDescByCode(entity.getApprovalStatus()))
+                .createTime(entity.getCreateTime())
+                .build();
     }
 
     /**

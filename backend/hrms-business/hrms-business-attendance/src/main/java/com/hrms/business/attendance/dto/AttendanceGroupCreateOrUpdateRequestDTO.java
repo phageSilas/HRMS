@@ -3,7 +3,10 @@ package com.hrms.business.attendance.dto;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalTime;
 
@@ -11,6 +14,9 @@ import java.time.LocalTime;
  * 考勤组创建或更新请求参数。
  */
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class AttendanceGroupCreateOrUpdateRequestDTO {
 
     /**

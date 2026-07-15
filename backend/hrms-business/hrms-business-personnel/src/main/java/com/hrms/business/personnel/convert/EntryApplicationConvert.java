@@ -59,24 +59,22 @@ public final class EntryApplicationConvert {
      * @return 入职申请分页 VO
      */
     public static EntryApplicationPageVO toPageVO(EntryApplicationEntity entity) {
-        EntryApplicationPageVO vo = new EntryApplicationPageVO();
-        vo.setId(entity.getId());
-        vo.setCandidateName(entity.getCandidateName());
-        vo.setGender(entity.getGender());
-        vo.setPhone(entity.getPhone());
-        vo.setEmail(entity.getEmail());
-        vo.setDeptId(entity.getDeptId());
-        // orgService.getDeptName(entity.getDeptId()); 本接口需要调用 hrms-system-organization 模块的部门详情接口获取部门名称
-        vo.setDeptName(tempResolveDeptName(entity.getDeptId()));
-        vo.setPostId(entity.getPostId());
-        // orgService.getPostName(entity.getPostId()); 本接口需要调用 hrms-system-organization 模块的岗位详情接口获取岗位名称
-        vo.setPostName(tempResolvePostName(entity.getPostId()));
-        vo.setExpectedHireDate(entity.getExpectedHireDate());
-        vo.setApprovalStatus(entity.getApprovalStatus());
-        vo.setApprovalStatusDesc(ApplicationStatusEnum.getDescByCode(entity.getApprovalStatus()));
-        vo.setApprovalInstanceId(entity.getApprovalInstanceId());
-        vo.setCreateTime(entity.getCreateTime());
-        return vo;
+        return EntryApplicationPageVO.builder()
+                .id(entity.getId())
+                .candidateName(entity.getCandidateName())
+                .gender(entity.getGender())
+                .phone(entity.getPhone())
+                .email(entity.getEmail())
+                .deptId(entity.getDeptId())
+                .deptName(tempResolveDeptName(entity.getDeptId()))
+                .postId(entity.getPostId())
+                .postName(tempResolvePostName(entity.getPostId()))
+                .expectedHireDate(entity.getExpectedHireDate())
+                .approvalStatus(entity.getApprovalStatus())
+                .approvalStatusDesc(ApplicationStatusEnum.getDescByCode(entity.getApprovalStatus()))
+                .approvalInstanceId(entity.getApprovalInstanceId())
+                .createTime(entity.getCreateTime())
+                .build();
     }
 
     /**

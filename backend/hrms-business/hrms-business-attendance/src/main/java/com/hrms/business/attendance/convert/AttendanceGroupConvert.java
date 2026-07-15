@@ -24,19 +24,19 @@ public final class AttendanceGroupConvert {
         if (entity == null) {
             return null;
         }
-        AttendanceGroupPageVO vo = new AttendanceGroupPageVO();
-        vo.setId(entity.getId());
-        vo.setGroupName(entity.getGroupName());
-        vo.setShiftType(entity.getShiftType());
-        vo.setWorkStartTime(entity.getWorkStartTime());
-        vo.setWorkEndTime(entity.getWorkEndTime());
-        vo.setLateThresholdMinutes(entity.getLateThresholdMinutes());
-        vo.setEarlyLeaveThresholdMinutes(entity.getEarlyLeaveThresholdMinutes());
-        vo.setMonthlyCorrectionLimit(entity.getMonthlyCorrectionLimit());
-        vo.setStatus(entity.getStatus());
-        vo.setStatusText(Integer.valueOf(1).equals(entity.getStatus()) ? "启用" : "禁用");
-        vo.setCreateTime(entity.getCreateTime());
-        return vo;
+        return AttendanceGroupPageVO.builder()
+                .id(entity.getId())
+                .groupName(entity.getGroupName())
+                .shiftType(entity.getShiftType())
+                .workStartTime(entity.getWorkStartTime())
+                .workEndTime(entity.getWorkEndTime())
+                .lateThresholdMinutes(entity.getLateThresholdMinutes())
+                .earlyLeaveThresholdMinutes(entity.getEarlyLeaveThresholdMinutes())
+                .monthlyCorrectionLimit(entity.getMonthlyCorrectionLimit())
+                .status(entity.getStatus())
+                .statusText(Integer.valueOf(1).equals(entity.getStatus()) ? "鍚敤" : "绂佺敤")
+                .createTime(entity.getCreateTime())
+                .build();
     }
 
     /**
