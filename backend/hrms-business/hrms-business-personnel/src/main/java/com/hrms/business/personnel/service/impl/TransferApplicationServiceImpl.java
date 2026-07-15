@@ -239,7 +239,11 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
             return Collections.emptyMap();
         }
         // employeeService.listEmployeeSnapshots(employeeIds); 本接口需要调用 hrms-business-employee 模块的员工快照批量查询接口
-        return employeeSnapshotMapper.selectBatchIds(employeeIds).stream()
+        // TODO 跨模块调用已完成：当前员工模块暂无批量快照接口，暂用 EmployeeService#getEmployeeBrief(employeeId) 循环补全。
+        return employeeIds.stream()
+                .map(employeeService::getEmployeeBrief)
+                .filter(employee -> employee != null)
+                .map(this::toEmployeeSnapshot)
                 .collect(Collectors.toMap(EmployeeSnapshotEntity::getId, Function.identity(), (left, right) -> left));
     }
 
