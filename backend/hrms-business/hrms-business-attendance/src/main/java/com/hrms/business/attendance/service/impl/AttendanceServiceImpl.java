@@ -26,7 +26,7 @@ import com.hrms.business.attendance.mapper.AttendanceCorrectionMapper;
 import com.hrms.business.attendance.mapper.AttendanceRecordMapper;
 import com.hrms.business.attendance.mapper.AttendanceEmployeeSnapshotMapper;
 import com.hrms.business.attendance.mapper.LeaveRequestMapper;
-import com.hrms.business.attendance.mapper.DictDataMapper;
+import com.hrms.business.attendance.mapper.AttendanceDictDataMapper;
 import com.hrms.business.attendance.mq.AttendanceClockCreatedEvent;
 import com.hrms.business.attendance.mq.AttendanceClockEventHandler;
 import com.hrms.business.attendance.mq.AttendanceMqConstants;
@@ -99,7 +99,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     private final LeaveRequestMapper leaveRequestMapper;
 
-    private final DictDataMapper dictDataMapper;
+    private final AttendanceDictDataMapper dictDataMapper;
 
     private final StringRedisTemplate stringRedisTemplate;
 
