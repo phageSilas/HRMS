@@ -33,6 +33,11 @@
             <artifactId>hrms-business-approval</artifactId>
         </dependency>
 
+        <!-- 依赖 hrms-system-auth -->
+        <dependency>
+            <groupId>com.hrms</groupId>
+            <artifactId>hrms-system-auth</artifactId>
+        </dependency>
 
         <!-- Spring Boot Starter Web -->
         <dependency>
