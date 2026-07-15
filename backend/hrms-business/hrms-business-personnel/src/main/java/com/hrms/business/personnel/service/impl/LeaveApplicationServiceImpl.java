@@ -3,8 +3,11 @@ package com.hrms.business.personnel.service.impl;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.hrms.business.approval.enums.ApprovalTypeEnum;
+import com.hrms.business.approval.service.ApprovalEngine;
 import com.hrms.business.employee.dto.EmployeeQueryDTO;
 import com.hrms.business.employee.entity.EmployeeEntity;
 import com.hrms.business.employee.service.EmployeeService;
@@ -23,6 +26,7 @@ import com.hrms.business.personnel.vo.LeaveApplicationCreateVO;
 import com.hrms.business.personnel.vo.LeaveApplicationPageVO;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
+import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -59,6 +63,8 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
     private final EmployeeSnapshotMapper employeeSnapshotMapper;
 
     private final EmployeeService employeeService;
+
+    private final ApprovalEngine approvalEngine;
 
     /**
      * 离职申请分页查询
@@ -104,10 +110,20 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
         entity.setHandoverEmployeeId(requestDTO.getHandoverEmployeeId());
         entity.setHandoverStatus(0);
         entity.setRemark(requestDTO.getRemark());
-        // approvalService.startApproval("LEAVE", entity.getId()); 本接口需要调用 hrms-business-approval 模块的离职审批发起接口
-        entity.setApprovalInstanceId(tempStartLeaveApproval(employeeSnapshot));
         entity.setApprovalStatus(ApplicationStatusEnum.APPROVING.getCode());
         leaveApplicationMapper.insert(entity);
+        // approvalService.startApproval("LEAVE", entity.getId()); 本接口需要调用 hrms-business-approval 模块的离职审批发起接口
+        // TODO 跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起离职审批。
+        Long approvalInstanceId = approvalEngine.startApproval(
+                ApprovalTypeEnum.LEAVE.getCode(),
+                entity.getId(),
+                JSONUtil.toJsonStr(entity),
+                SecurityContextHolder.getUserId(),
+                employeeSnapshot.getDeptId(),
+                employeeSnapshot.getId()
+        );
+        entity.setApprovalInstanceId(approvalInstanceId);
+        leaveApplicationMapper.updateById(entity);
 
         return LeaveApplicationCreateVO.builder()
                 .id(entity.getId())
