@@ -46,12 +46,11 @@
             <artifactId>mysql-connector-java</artifactId>
         </dependency>
 
-        <!-- TODO: 后续对接时放开 Redis 依赖
+        <!-- Redis -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
-        -->
 
         <!-- JWT -->
         <dependency>

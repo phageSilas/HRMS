@@ -63,11 +63,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Result<Void> handleHttpMessageNotReadableException(HttpMessageNotReadableException e) {
+        e.printStackTrace();
         String detail = e.getMessage();
         if (detail != null && detail.contains("Required request body is missing")) {
             return Result.failure(40002, "请求体不能为空，请检查是否传递了正确的 JSON 数据");
         }
-        return Result.failure(40002, "请求体格式错误，请确认 Content-Type 为 application/json 且数据格式正确");
+        return Result.failure(40002, "请求体格式错误，请确认 Content-Type 为 application/json 且数据格式正确。原因: " + detail);
     }
 
     /**
