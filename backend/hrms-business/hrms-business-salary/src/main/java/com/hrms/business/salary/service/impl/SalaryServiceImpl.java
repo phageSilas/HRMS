@@ -10,6 +10,8 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hrms.business.attendance.service.AttendanceService;
 import com.hrms.business.attendance.vo.AttendancePayrollSourceVO;
+import com.hrms.business.approval.enums.ApprovalTypeEnum;
+import com.hrms.business.approval.service.ApprovalEngine;
 import com.hrms.business.salary.cache.SalaryCacheKeys;
 import com.hrms.business.salary.dto.EmployeeSalaryProfileRequestDTO;
 import com.hrms.business.salary.dto.SalaryBatchCreateRequestDTO;
@@ -103,6 +105,7 @@ public class SalaryServiceImpl implements SalaryService {
     private final ObjectProvider<AttendanceService> attendanceServiceProvider;
     private final ObjectProvider<PasswordEncoder> passwordEncoderProvider;
     private final SalaryBatchCalculateProducer salaryBatchCalculateProducer;
+    private final ApprovalEngine approvalEngine;
 
     /**
      * 分页查询薪资账套。
@@ -397,7 +400,16 @@ public class SalaryServiceImpl implements SalaryService {
         if (Optional.ofNullable(batch.getBlockCount()).orElse(0) > 0) {
             throw new GlobalException(ErrorCode.BUSINESS_ERROR, "存在阻断异常，不能提交审批");
         }
-        Long approvalInstanceId = tempStartSalaryBatchApproval(batch);
+        // approvalService.startApproval("SALARY_BATCH", batchId); 本接口需要调用 hrms-business-approval 模块的薪资批次审批发起接口。
+        // TODO 跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起薪资批次审批。
+        Long approvalInstanceId = approvalEngine.startApproval(
+                ApprovalTypeEnum.SALARY.getCode(),
+                batch.getId(),
+                JSONUtil.toJsonStr(batch),
+                SecurityContextHolder.getUserId(),
+                null,
+                null
+        );
         batch.setApprovalInstanceId(approvalInstanceId);
         batch.setBatchStatus(SalaryBatchStatusEnum.APPROVING.name());
         salaryBatchMapper.updateById(batch);
