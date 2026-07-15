@@ -30,6 +30,10 @@
             <version>${project.version}</version>
         </dependency>
 
+        <dependency>
+            <groupId>com.hrms</groupId>
+            <artifactId>hrms-business-approval</artifactId>
+        </dependency>
 
         <!-- Spring Boot Starter Web -->
         <dependency>

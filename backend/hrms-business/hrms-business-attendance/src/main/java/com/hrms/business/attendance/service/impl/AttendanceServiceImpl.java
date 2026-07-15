@@ -6,6 +6,8 @@ import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.hrms.business.approval.enums.ApprovalTypeEnum;
+import com.hrms.business.approval.service.ApprovalEngine;
 import com.hrms.business.attendance.cache.AttendanceCacheKeys;
 import com.hrms.business.attendance.convert.AttendanceGroupConvert;
 import com.hrms.business.attendance.dto.AttendanceClockRequestDTO;
@@ -109,6 +111,8 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final AttendanceMonthlyStatGenerateProducer attendanceMonthlyStatGenerateProducer;
 
     private final AttendanceClockEventHandler attendanceClockEventHandler;
+
+    private final ApprovalEngine approvalEngine;
 
     /**
      * 分页查询考勤组。
@@ -220,8 +224,6 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
         checkCorrectionDuplicate(employee.getId(), requestDTO.getDate(), period);
         AttendanceRecordEntity record = getOrCreateCorrectionRecord(employee.getId(), requestDTO.getDate());
-        // approvalService.startAttendanceCorrectionApproval(correction); 本接口需要调用 hrms-business-approval 模块的补卡审批发起方法。
-        Long approvalInstanceId = tempStartCorrectionApproval(employee.getId(), record.getId(), requestDTO);
 
         AttendanceCorrectionEntity correction = new AttendanceCorrectionEntity();
         correction.setEmployeeId(employee.getId());
@@ -229,9 +231,20 @@ public class AttendanceServiceImpl implements AttendanceService {
         correction.setCorrectionDate(requestDTO.getDate());
         correction.setCorrectionType(period.name());
         correction.setCorrectionReason(requestDTO.getReason());
-        correction.setApprovalInstanceId(approvalInstanceId);
         correction.setApprovalStatus(1);
         attendanceCorrectionMapper.insert(correction);
+        // approvalService.startAttendanceCorrectionApproval(correction); 本接口需要调用 hrms-business-approval 模块的补卡审批发起方法。
+        // TODO 跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起补卡审批。
+        Long approvalInstanceId = approvalEngine.startApproval(
+                ApprovalTypeEnum.CORRECTION.getCode(),
+                correction.getId(),
+                JSONUtil.toJsonStr(correction),
+                SecurityContextHolder.getUserId(),
+                employee.getDeptId(),
+                employee.getId()
+        );
+        correction.setApprovalInstanceId(approvalInstanceId);
+        attendanceCorrectionMapper.updateById(correction);
         attendanceRecordMapper.updateCorrectionStatus(record.getId(), "PENDING");
         evictCalendarCache(employee.getId(), requestDTO.getDate());
         return buildCorrectionCreateVO(correction);
