@@ -15,9 +15,11 @@ export default function access(initialState: { currentUser?: UserInfo }) {
 
   /**
    * 检查是否有指定权限
+   * 支持精确匹配（'approval'）和前缀匹配（'approval:approve' → matches 'approval'）
    */
   const hasPermission = (permission: string): boolean => {
-    return permissions.includes(permission);
+    return permissions.includes(permission)
+      || permissions.some(p => p.startsWith(permission + ':'));
   };
 
   return {

@@ -69,19 +69,57 @@ export async function login(data: LoginRequest): Promise<LoginResult> {
     throw new Error('请输入用户名和密码');
   }
 
-  const localUser = buildLocalUser(data);
-  const token = `try-frontend-token-${Date.now()}`;
-  localStorage.setItem('token', token);
-  localStorage.setItem('userInfo', JSON.stringify(localUser));
+  try {
+    // 调用后端真实登录接口，获取 JWT Token
+    const loginResult: any = await request.post('/api/v1/auth/login', {
+      username: data.username,
+      password: data.password,
+    });
 
-  return {
-    token,
-    userId: localUser.userId,
-    username: localUser.username,
-    nickname: localUser.nickname,
-    roleCode: localUser.roleCode,
-    permissions: localUser.permissions,
-  };
+    const { token, userInfo } = loginResult;
+    const roleCode = userInfo.roles?.[0]?.roleCode || data.role || RoleCode.ADMIN;
+
+    const user: CurrentUser = {
+      userId: userInfo.id,
+      username: userInfo.username,
+      nickname: userInfo.realName || userInfo.username,
+      realName: userInfo.realName,
+      deptId: userInfo.deptId,
+      deptName: userInfo.deptName,
+      roleCode,
+      roleName: userInfo.roles?.[0]?.roleName || ROLE_NAME_MAP[roleCode] || '系统管理员',
+      permissions: userInfo.permissions?.length > 0
+        ? userInfo.permissions
+        : (ROLE_PERMISSIONS[roleCode] || ROLE_PERMISSIONS.ADMIN),
+    };
+
+    localStorage.setItem('token', token);
+    localStorage.setItem('userInfo', JSON.stringify(user));
+
+    return {
+      token,
+      userId: user.userId,
+      username: user.username,
+      nickname: user.nickname,
+      roleCode: user.roleCode,
+      permissions: user.permissions,
+    };
+  } catch {
+    // 后端不可用时降级到本地登录（开发/演示环境）
+    const localUser = buildLocalUser(data);
+    const token = `try-frontend-token-${Date.now()}`;
+    localStorage.setItem('token', token);
+    localStorage.setItem('userInfo', JSON.stringify(localUser));
+
+    return {
+      token,
+      userId: localUser.userId,
+      username: localUser.username,
+      nickname: localUser.nickname,
+      roleCode: localUser.roleCode,
+      permissions: localUser.permissions,
+    };
+  }
 }
 
 /**
@@ -93,7 +131,22 @@ export async function getCurrentUser(): Promise<CurrentUser> {
     return JSON.parse(localUserText) as CurrentUser;
   }
 
-  return request.get('/auth/current-user');
+  // 从后端获取
+  const result: any = await request.get('/api/v1/auth/current-user');
+
+  const roleCode = result.roles?.[0]?.roleCode || RoleCode.ADMIN;
+
+  return {
+    userId: result.id,
+    username: result.username,
+    nickname: result.realName || result.username,
+    realName: result.realName,
+    deptId: result.deptId,
+    deptName: result.deptName,
+    roleCode,
+    roleName: result.roles?.[0]?.roleName || ROLE_NAME_MAP[roleCode] || '系统管理员',
+    permissions: result.permissions || [],
+  };
 }
 
 /**

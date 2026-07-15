@@ -32,7 +32,7 @@ export interface ApprovalTask {
   businessTypeName: string;
   createdAt: string;
   deadline: string;
-  currentNodeName: string;
+  nodeName: string;
   status: string;
   statusName: string;
 }
@@ -67,6 +67,7 @@ export interface ApprovalDetail {
   approvalNodes: ApprovalNode[];
   approvalHistory: ApprovalHistory[];
   currentOperator: boolean;
+  currentTaskId?: number;
 }
 
 // ============ 审批操作 ============

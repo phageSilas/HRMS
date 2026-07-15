@@ -1,5 +1,7 @@
 package com.hrms.business.approval.service;
 
+import com.hrms.business.approval.dto.OperateResultVO;
+
 /**
  * 审批流程引擎
  * <p>
@@ -30,7 +32,8 @@ public interface ApprovalEngine {
      * @param action       操作类型：approve（通过）/ reject（驳回）/ transfer（转交）
      * @param comment      审批意见
      * @param targetUserId 转交目标用户ID（action=transfer 时必填）
+     * @return 操作结果（含任务状态、实例状态、下一节点名称）
      * @throws com.hrms.common.exception.GlobalException 任务已处理时抛出 CONFLICT
      */
-    void processAction(Long taskId, String action, String comment, Long targetUserId);
+    OperateResultVO processAction(Long taskId, String action, String comment, Long targetUserId);
 }
