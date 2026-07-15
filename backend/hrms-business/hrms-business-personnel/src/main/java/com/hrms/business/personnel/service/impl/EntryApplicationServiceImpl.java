@@ -7,6 +7,9 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hrms.business.approval.enums.ApprovalTypeEnum;
 import com.hrms.business.approval.service.ApprovalEngine;
+import com.hrms.business.employee.dto.EmployeeCreateDTO;
+import com.hrms.business.employee.entity.EmployeeEntity;
+import com.hrms.business.employee.service.EmployeeService;
 import com.hrms.business.personnel.convert.EntryApplicationConvert;
 import com.hrms.business.personnel.dto.EntryApplicationConfirmRequestDTO;
 import com.hrms.business.personnel.dto.EntryApplicationCreateOrUpdateRequestDTO;
@@ -59,6 +62,8 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
 
     // 注入
     private final ApprovalEngine approvalEngine;
+
+    private final EmployeeService employeeService;
 
 
     /**
@@ -173,8 +178,11 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
             // authService.createEntryAccount(lockedEntity.getPhone(), employeeNo); 本接口需要调用 hrms-system-auth 模块的创建入职账号接口
             tempCreateEntryAccount(lockedEntity, employeeNo);
             // employeeService.createEmployee(lockedEntity, employeeNo); 本接口需要调用 hrms-business-employee 模块的创建员工档案接口
-            Long employeeId = tempCreateEmployee(lockedEntity, employeeNo);
             lockedEntity.setActualHireDate(requestDTO.getActualHireDate());
+            // TODO 跨模块调用已完成：当前调用 EmployeeService#createEmployee(createDTO) 创建员工档案。
+            EmployeeEntity createdEmployee = tempCreateEmployee(lockedEntity, employeeNo);
+            Long employeeId = createdEmployee.getId();
+            employeeNo = StrUtil.blankToDefault(createdEmployee.getEmployeeNo(), employeeNo);
             lockedEntity.setApprovalStatus(ApplicationStatusEnum.ENTERED.getCode());
             entryApplicationMapper.updateById(lockedEntity);
             // entryConfirmedProducer.send(event); 本接口需要调用通知/MQ模块发送 personnel.entry.confirmed 事件和欢迎通知
@@ -228,10 +236,25 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
      *
      * @param entity 入职申请实体
      * @param employeeNo 员工工号
-     * @return 员工ID
+     * @return 员工模块创建后的员工实体
+     * 本方法使用的工具类: EmployeeService(hrms-business-employee)
      */
-    private Long tempCreateEmployee(EntryApplicationEntity entity, String employeeNo) {
-        return entity.getId();
+    private EmployeeEntity tempCreateEmployee(EntryApplicationEntity entity, String employeeNo) {
+        EmployeeCreateDTO createDTO = new EmployeeCreateDTO();
+        createDTO.setEmployeeName(entity.getCandidateName());
+        createDTO.setGender(entity.getGender());
+        createDTO.setPhone(entity.getPhone());
+        createDTO.setEmail(entity.getEmail());
+        createDTO.setDeptId(entity.getDeptId());
+        createDTO.setPostId(entity.getPostId());
+        createDTO.setLeaderId(entity.getLeaderId());
+        createDTO.setHireType(entity.getHireType());
+        createDTO.setHireDate(entity.getActualHireDate() == null ? entity.getExpectedHireDate() : entity.getActualHireDate());
+        createDTO.setProbationMonth(entity.getProbationMonth());
+        createDTO.setProbationSalaryRatio(entity.getProbationSalaryRatio());
+        createDTO.setIdCardNo(entity.getIdCardNo());
+        createDTO.setRemark("由入职申请确认创建，申请ID：" + entity.getId() + "，预生成工号：" + employeeNo);
+        return employeeService.createEmployee(createDTO);
     }
 
     /**
