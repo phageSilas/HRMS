@@ -706,10 +706,15 @@ public class SalaryServiceImpl implements SalaryService {
 
     private void publishCalculateMessage(SalaryBatchCalculateMessage message) {
         RabbitTemplate rabbitTemplate = rabbitTemplateProvider.getIfAvailable();
-        if (rabbitTemplate != null) {
+        if (rabbitTemplate == null) {
+            tempPublishCalculateMessage(message);
+            return;
+        }
+        try {
             rabbitTemplate.convertAndSend(SalaryMqConstants.SALARY_EXCHANGE,
-                    SalaryMqConstants.BATCH_CALCULATE_ROUTING_KEY, message);
-        } else {
+                    SalaryMqConstants.BATCH_CALCULATE_ROUTING_KEY, JSONUtil.toJsonStr(message));
+        } catch (Exception ex) {
+            log.warn("publish salary.batch.calculate failed, use temp publisher, message={}", JSONUtil.toJsonStr(message), ex);
             tempPublishCalculateMessage(message);
         }
     }
