@@ -1,6 +1,9 @@
 package com.hrms.business.salary.vo;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.experimental.SuperBuilder;
 
 import java.math.BigDecimal;
 
@@ -8,6 +11,9 @@ import java.math.BigDecimal;
  * 薪资批次明细返回视图。
  */
 @Data
+@SuperBuilder
+@NoArgsConstructor
+@AllArgsConstructor
 public class SalaryBatchItemVO {
 
     private Long id;

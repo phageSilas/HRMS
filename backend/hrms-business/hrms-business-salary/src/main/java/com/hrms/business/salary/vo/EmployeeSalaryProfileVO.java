@@ -1,6 +1,9 @@
 package com.hrms.business.salary.vo;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -9,6 +12,9 @@ import java.time.LocalDate;
  * 员工薪资档案返回视图。
  */
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class EmployeeSalaryProfileVO {
 
     private Long id;

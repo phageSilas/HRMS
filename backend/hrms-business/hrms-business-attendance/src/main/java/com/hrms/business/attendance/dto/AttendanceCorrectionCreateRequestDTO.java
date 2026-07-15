@@ -2,7 +2,10 @@ package com.hrms.business.attendance.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 
@@ -10,6 +13,9 @@ import java.time.LocalDate;
  * 补卡申请创建请求。
  */
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class AttendanceCorrectionCreateRequestDTO {
 
     /**

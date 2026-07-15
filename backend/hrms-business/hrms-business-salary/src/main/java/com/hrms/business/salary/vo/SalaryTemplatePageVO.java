@@ -1,6 +1,9 @@
 package com.hrms.business.salary.vo;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -9,6 +12,9 @@ import java.util.List;
  * 薪资账套分页返回视图。
  */
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class SalaryTemplatePageVO {
 
     private Long id;

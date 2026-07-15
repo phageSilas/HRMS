@@ -2,8 +2,11 @@ package com.hrms.business.personnel.service.impl;
 
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.core.util.IdUtil;
+import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.hrms.business.approval.enums.ApprovalTypeEnum;
+import com.hrms.business.approval.service.ApprovalEngine;
 import com.hrms.business.personnel.convert.EntryApplicationConvert;
 import com.hrms.business.personnel.dto.EntryApplicationConfirmRequestDTO;
 import com.hrms.business.personnel.dto.EntryApplicationCreateOrUpdateRequestDTO;
@@ -17,6 +20,7 @@ import com.hrms.business.personnel.vo.EntryApplicationPageVO;
 import com.hrms.business.personnel.vo.EntryApplicationSubmitVO;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
+import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -53,6 +57,15 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
 
     private final EntryApplicationMapper entryApplicationMapper;
 
+    // 注入
+    private final ApprovalEngine approvalEngine;
+
+
+    /**
+     * 分页查询入职申请。
+     * @param queryDTO 入职申请查询参数
+     * @return 入职申请分页列表
+     */
     @Override
     public PageResult<EntryApplicationPageVO> pageEntryApplications(EntryApplicationQueryDTO queryDTO) {
         int pageNum = normalizePageNum(queryDTO.getPageNum());
@@ -67,6 +80,11 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         return PageResult.of(records, page.getTotal(), pageNum, pageSize);
     }
 
+    /**
+     * 创建入职申请。
+     * @param requestDTO 入职申请创建参数
+     * @return 入职申请详情
+     */
     @Override
     public EntryApplicationPageVO createEntryApplication(EntryApplicationCreateOrUpdateRequestDTO requestDTO) {
         checkPhoneAvailable(requestDTO.getPhone(), null);
@@ -76,6 +94,11 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         return EntryApplicationConvert.toPageVO(entity);
     }
 
+    /**
+     * 更新入职申请。
+     * @param id 入职申请ID
+     * @param requestDTO 入职申请更新参数
+     */
     @Override
     public void updateEntryApplication(Long id, EntryApplicationCreateOrUpdateRequestDTO requestDTO) {
         EntryApplicationEntity entity = getRequiredEntryApplication(id);
@@ -85,21 +108,33 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         entryApplicationMapper.updateById(entity);
     }
 
+    /**
+     * 提交入职申请。
+     * @param id 入职申请ID
+     * @return 入职申请提交结果
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public EntryApplicationSubmitVO submitEntryApplication(Long id) {
         EntryApplicationEntity entity = getRequiredEntryApplication(id);
         assertDraft(entity);
-        // approvalService.startEntryApproval(entity); 本接口需要调用 hrms-business-approval 模块的发起入职审批接口
-        Long approvalInstanceId = tempStartEntryApproval(entity);
+        // TODO 跨模块调用入职模块,已实现, approvalService.startEntryApproval(entity); 本接口需要调用 hrms-business-approval 模块的发起入职审批接口
+        Long approvalInstanceId = approvalEngine.startApproval(
+                ApprovalTypeEnum.ENTRY.getCode(),       // approvalType = "ENTRY"
+                entity.getId(),                          // bizId
+                JSONUtil.toJsonStr(entity),              // formData（JSON 快照）
+                SecurityContextHolder.getUserId(), // applicantUserId
+                entity.getDeptId(),                      // applicantDeptId
+                null                                     // applicantEmployeeId（入职前尚无员工ID）
+        );
         entity.setApprovalInstanceId(approvalInstanceId);
         entity.setApprovalStatus(ApplicationStatusEnum.APPROVING.getCode());
         entryApplicationMapper.updateById(entity);
 
-        EntryApplicationSubmitVO submitVO = new EntryApplicationSubmitVO();
-        submitVO.setApprovalInstanceId(approvalInstanceId);
-        submitVO.setApprovalStatus(entity.getApprovalStatus());
-        return submitVO;
+        return EntryApplicationSubmitVO.builder()
+                .approvalInstanceId(approvalInstanceId)
+                .approvalStatus(entity.getApprovalStatus())
+                .build();
     }
 
     /**
@@ -108,10 +143,16 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
      * @param entity 入职申请实体
      * @return 审批实例ID
      */
-    private Long tempStartEntryApproval(EntryApplicationEntity entity) {
-        return IdUtil.getSnowflakeNextId();
-    }
+    // private Long tempStartEntryApproval(EntryApplicationEntity entity) {
+    //     return IdUtil.getSnowflakeNextId();
+    // }
 
+    /**
+     * 确认入职申请。
+     * @param id 入职申请ID
+     * @param requestDTO 入职申请确认参数
+     * @return 入职申请确认结果
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public EntryApplicationConfirmVO confirmEntryApplication(Long id, EntryApplicationConfirmRequestDTO requestDTO) {
@@ -212,10 +253,10 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
      * @return 入职确认结果
      */
     private EntryApplicationConfirmVO buildConfirmVO(Long employeeId, String employeeNo) {
-        EntryApplicationConfirmVO confirmVO = new EntryApplicationConfirmVO();
-        confirmVO.setEmployeeId(employeeId);
-        confirmVO.setEmployeeNo(employeeNo);
-        return confirmVO;
+        return EntryApplicationConfirmVO.builder()
+                .employeeId(employeeId)
+                .employeeNo(employeeNo)
+                .build();
     }
 
     /**

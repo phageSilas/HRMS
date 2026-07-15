@@ -2,7 +2,10 @@ package com.hrms.business.salary.dto;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.util.List;
 
@@ -10,6 +13,9 @@ import java.util.List;
  * 创建或更新薪资账套请求参数。
  */
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class SalaryTemplateCreateOrUpdateRequestDTO {
 
     @NotBlank

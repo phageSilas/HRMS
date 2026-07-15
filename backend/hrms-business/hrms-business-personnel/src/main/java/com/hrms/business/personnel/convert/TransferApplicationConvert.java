@@ -23,23 +23,21 @@ public final class TransferApplicationConvert {
      */
     public static TransferApplicationPageVO toPageVO(TransferApplicationEntity entity,
                                                      EmployeeSnapshotEntity employeeSnapshot) {
-        TransferApplicationPageVO vo = new TransferApplicationPageVO();
-        vo.setId(entity.getId());
-        vo.setEmployeeId(entity.getEmployeeId());
-        if (employeeSnapshot != null) {
-            vo.setEmployeeName(employeeSnapshot.getEmployeeName());
-            vo.setEmployeeNo(employeeSnapshot.getEmployeeNo());
-        }
-        vo.setFromDeptName(tempResolveDeptName(entity.getFromDeptId()));
-        vo.setFromPostName(tempResolvePostName(entity.getFromPostId()));
-        vo.setToDeptName(tempResolveDeptName(entity.getToDeptId()));
-        vo.setToPostName(tempResolvePostName(entity.getToPostId()));
-        vo.setEffectiveDate(entity.getEffectiveDate());
-        vo.setReason(entity.getReason());
-        vo.setApprovalStatus(entity.getApprovalStatus());
-        vo.setApprovalStatusDesc(ApplicationStatusEnum.getDescByCode(entity.getApprovalStatus()));
-        vo.setCreateTime(entity.getCreateTime());
-        return vo;
+        return TransferApplicationPageVO.builder()
+                .id(entity.getId())
+                .employeeId(entity.getEmployeeId())
+                .employeeName(employeeSnapshot == null ? null : employeeSnapshot.getEmployeeName())
+                .employeeNo(employeeSnapshot == null ? null : employeeSnapshot.getEmployeeNo())
+                .fromDeptName(tempResolveDeptName(entity.getFromDeptId()))
+                .fromPostName(tempResolvePostName(entity.getFromPostId()))
+                .toDeptName(tempResolveDeptName(entity.getToDeptId()))
+                .toPostName(tempResolvePostName(entity.getToPostId()))
+                .effectiveDate(entity.getEffectiveDate())
+                .reason(entity.getReason())
+                .approvalStatus(entity.getApprovalStatus())
+                .approvalStatusDesc(ApplicationStatusEnum.getDescByCode(entity.getApprovalStatus()))
+                .createTime(entity.getCreateTime())
+                .build();
     }
 
     /**

@@ -1,6 +1,9 @@
 package com.hrms.business.attendance.vo;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -9,6 +12,9 @@ import java.time.LocalDateTime;
  * 个人打卡日历单日视图。
  */
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class AttendanceCalendarDayVO {
 
     /**

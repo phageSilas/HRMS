@@ -1,7 +1,10 @@
 package com.hrms.business.personnel.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 
 import java.time.LocalDate;
@@ -10,6 +13,9 @@ import java.time.LocalDate;
  * 入职申请分页查询 DTO
  */
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 @Schema(description = "入职申请分页查询")
 public class EntryApplicationQueryDTO {
 
@@ -17,12 +23,14 @@ public class EntryApplicationQueryDTO {
      * 当前页码
      */
     @Schema(description = "当前页码", example = "1")
+    @Builder.Default
     private Integer pageNum = 1;
 
     /**
      * 每页条数
      */
     @Schema(description = "每页条数", example = "20")
+    @Builder.Default
     private Integer pageSize = 20;
 
     /**
