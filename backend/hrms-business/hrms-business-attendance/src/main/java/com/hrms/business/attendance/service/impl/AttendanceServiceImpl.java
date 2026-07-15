@@ -30,6 +30,8 @@ import com.hrms.business.attendance.mapper.AttendanceDictDataMapper;
 import com.hrms.business.attendance.mq.AttendanceClockCreatedProducer;
 import com.hrms.business.attendance.mq.AttendanceClockCreatedEvent;
 import com.hrms.business.attendance.mq.AttendanceClockEventHandler;
+import com.hrms.business.attendance.mq.AttendanceMonthlyStatGenerateMessage;
+import com.hrms.business.attendance.mq.AttendanceMonthlyStatGenerateProducer;
 import com.hrms.business.attendance.service.AttendanceService;
 import com.hrms.business.attendance.vo.AttendanceClockVO;
 import com.hrms.business.attendance.vo.AttendanceCalendarDayVO;
@@ -103,6 +105,8 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final StringRedisTemplate stringRedisTemplate;
 
     private final AttendanceClockCreatedProducer attendanceClockCreatedProducer;
+
+    private final AttendanceMonthlyStatGenerateProducer attendanceMonthlyStatGenerateProducer;
 
     private final AttendanceClockEventHandler attendanceClockEventHandler;
 
@@ -359,18 +363,52 @@ public class AttendanceServiceImpl implements AttendanceService {
                     .success(false)
                     .build();
         }
+        try {
+            AttendanceMonthlyStatGenerateMessage message = AttendanceMonthlyStatGenerateMessage.builder()
+                    .messageId(IdUtil.fastSimpleUUID())
+                    .month(requestDTO.getMonth())
+                    .employeeIds(requestDTO.getEmployeeIds())
+                    .build();
+            attendanceMonthlyStatGenerateProducer.send(message);
+        } catch (Exception ex) {
+            stringRedisTemplate.delete(lockKey);
+            log.warn("publish attendance.stat.monthly.generate failed, request={}", JSONUtil.toJsonStr(requestDTO), ex);
+            if (ex instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new GlobalException(ErrorCode.SYSTEM_ERROR, "发送考勤月度统计消息失败");
+        }
+        /*
         List<AttendancePayrollSourceVO> stats = computePayrollSources(requestDTO.getMonth(), requestDTO.getEmployeeIds());
         stats.forEach(stat -> stringRedisTemplate.opsForValue().set(
                 AttendanceCacheKeys.monthStat(stat.getEmployeeId(), requestDTO.getMonth()),
                 JSONUtil.toJsonStr(stat),
                 Duration.ofDays(35)));
-        // attendanceStatGenerateProducer.send(requestDTO); 本接口后续替换为 attendance.stat.generate 生产者异步分片统计。
         tempPublishMonthlyStatGenerateMessage(requestDTO);
+        */
         return MonthlyStatGenerateVO.builder()
                 .month(requestDTO.getMonth())
-                .employeeCount(stats.size())
+                .employeeCount(requestDTO.getEmployeeIds() == null ? 0 : requestDTO.getEmployeeIds().size())
                 .success(true)
                 .build();
+    }
+
+    /**
+     * 处理月度统计生成消息。
+     *
+     * @param message 月度统计生成消息
+     * 本方法使用的工具类: AttendanceCacheKeys(本模块cache包),JSONUtil(hutool),StringRedisTemplate(spring-data-redis)
+     */
+    public void handleMonthlyStatGenerateMessage(AttendanceMonthlyStatGenerateMessage message) {
+        try {
+            List<AttendancePayrollSourceVO> stats = computePayrollSources(message.getMonth(), message.getEmployeeIds());
+            stats.forEach(stat -> stringRedisTemplate.opsForValue().set(
+                    AttendanceCacheKeys.monthStat(stat.getEmployeeId(), message.getMonth()),
+                    JSONUtil.toJsonStr(stat),
+                    Duration.ofDays(35)));
+        } finally {
+            stringRedisTemplate.delete(AttendanceCacheKeys.monthStatGenerateLock(message.getMonth()));
+        }
     }
 
     /**

@@ -53,4 +53,32 @@ public class AttendanceRabbitMqConfig {
                 .with(AttendanceMqConstants.CLOCK_CREATED_ROUTING_KEY);
     }
 
+    /**
+     * 声明月度统计生成事件队列。
+     *
+     * @return 月度统计生成事件队列
+     * 本方法使用的工具类: Queue(spring-amqp)
+     */
+    @Bean
+    public Queue attendanceMonthlyStatGenerateQueue() {
+        return new Queue(AttendanceMqConstants.MONTHLY_STAT_GENERATE_QUEUE, true);
+    }
+
+    /**
+     * 绑定月度统计生成事件队列。
+     *
+     * @param attendanceExchange 考勤模块交换机
+     * @param attendanceMonthlyStatGenerateQueue 月度统计生成事件队列
+     * @return 队列绑定关系
+     * 本方法使用的工具类: BindingBuilder(spring-amqp)
+     */
+    @Bean
+    public Binding attendanceMonthlyStatGenerateBinding(DirectExchange attendanceExchange,
+                                                       @Qualifier("attendanceMonthlyStatGenerateQueue")
+                                                       Queue attendanceMonthlyStatGenerateQueue) {
+        return BindingBuilder.bind(attendanceMonthlyStatGenerateQueue)
+                .to(attendanceExchange)
+                .with(AttendanceMqConstants.MONTHLY_STAT_GENERATE_ROUTING_KEY);
+    }
+
 }
