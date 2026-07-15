@@ -38,7 +38,7 @@ const ProfileArchivePage: React.FC = () => {
   const [editingField, setEditingField] = useState<string>('');
   const [form] = Form.useForm();
 
-  const profile = data?.data;
+  const profile = data;
 
   // ============ 编辑弹窗提交 ============
 

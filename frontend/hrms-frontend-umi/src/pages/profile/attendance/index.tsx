@@ -81,8 +81,8 @@ const ProfileAttendancePage: React.FC = () => {
     getMakeupRecords,
   );
 
-  const calendar = calendarData?.data;
-  const makeupRecords = makeupData?.data || [];
+  const calendar = calendarData;
+  const makeupRecords = makeupData || [];
 
   // ============ 打卡 ============
 
@@ -123,6 +123,13 @@ const ProfileAttendancePage: React.FC = () => {
     if (!calendar?.days) return [];
     return calendar.days;
   }, [calendar]);
+
+  // 月首星期偏移（0=周一，6=周日）
+  const firstDayOffset = useMemo(() => {
+    if (calendarDays.length === 0) return 0;
+    const d = dayjs(calendarDays[0].date).day();
+    return d === 0 ? 6 : d - 1;
+  }, [calendarDays]);
 
   // 统计
   const statistics = useMemo(() => {
@@ -267,12 +274,13 @@ const ProfileAttendancePage: React.FC = () => {
             </Row>
             {/* 日期网格 */}
             <Row gutter={[4, 4]}>
+              {/* 月首空白占位：对齐星期 */}
+              {firstDayOffset > 0 &&
+                Array.from({ length: firstDayOffset }).map((_, i) => (
+                  <Col span={3} key={`offset-${i}`} />
+                ))}
               {calendarDays.map((day) => {
                 const dayNum = dayjs(day.date).date();
-                const dayOfWeek = dayjs(day.date).day(); // 0=Sunday
-                // 周日偏移处理：周日放最后
-                const offset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-                const isFirstRow = calendarDays.indexOf(day) < 7;
 
                 return (
                   <Col span={3} key={day.date}>

@@ -77,7 +77,7 @@ const QUICK_ENTRIES: QuickEntry[] = [
 const ProfileIndexPage: React.FC = () => {
   const { data, loading, error } = useRequest(getProfile);
 
-  const profile = data?.data;
+  const profile = data;
 
   return (
     <div style={{ padding: 24 }}>

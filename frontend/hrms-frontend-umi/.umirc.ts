@@ -233,16 +233,16 @@ export default defineConfig({
       icon: 'check-circle',
       access: 'approval',
       routes: [
-        { path: '/approval', redirect: '/approval/pending' },
+        { path: '/approval', redirect: '/approval/workspace' },
         {
-          path: '/approval/pending',
-          name: '待办任务',
-          component: '@/pages/approval/pending',
+          path: '/approval/workspace',
+          name: '审批工作台',
+          component: '@/pages/approval/workspace',
         },
         {
-          path: '/approval/done',
-          name: '已办任务',
-          component: '@/pages/approval/done',
+          path: '/approval/delegation',
+          name: '审批配置',
+          component: '@/pages/approval/delegation',
         },
         {
           path: '/approval/detail/:id',

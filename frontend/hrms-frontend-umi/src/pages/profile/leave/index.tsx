@@ -72,8 +72,8 @@ const ProfileLeavePage: React.FC = () => {
   // 请假记录
   const { data: leaveData, loading: leaveLoading, refresh: refreshLeaves } = useRequest(getLeaveList);
 
-  const balance = balanceData?.data;
-  const allLeaves = leaveData?.data || [];
+  const balance = balanceData;
+  const allLeaves = leaveData || [];
 
   // ============ 按 Tab 过滤 ============
 

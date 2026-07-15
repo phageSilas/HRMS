@@ -117,6 +117,12 @@ public class AttendanceServiceImpl implements AttendanceService {
                 record.setClockInTime(LocalDateTime.now());
                 record.setClockInStatus("NORMAL");
                 record.setCorrectionStatus("NONE");
+                // 查询员工所属考勤组
+                Long groupId = attendanceRecordMapper.selectDefaultAttendanceGroupId();
+                if (groupId == null) {
+                    throw new GlobalException(ErrorCode.BUSINESS_ERROR, "未配置考勤组，请联系管理员");
+                }
+                record.setGroupId(groupId);
                 attendanceRecordMapper.insert(record);
             } else {
                 throw new GlobalException(ErrorCode.BUSINESS_ERROR, "请先进行上班打卡");
@@ -160,6 +166,16 @@ public class AttendanceServiceImpl implements AttendanceService {
         entity.setCorrectionType(request.getCorrectionType());
         entity.setCorrectionReason(request.getCorrectionReason());
         entity.setApprovalStatus(1); // 审批中
+
+        // 查询当天考勤记录，设置关联的 record_id
+        MyAttendanceRecordEntity attendanceRecord = attendanceRecordMapper.selectOne(
+                new LambdaQueryWrapper<MyAttendanceRecordEntity>()
+                        .eq(MyAttendanceRecordEntity::getEmployeeId, employeeId)
+                        .eq(MyAttendanceRecordEntity::getRecordDate, request.getCorrectionDate())
+        );
+        if (attendanceRecord != null) {
+            entity.setRecordId(attendanceRecord.getId());
+        }
         correctionMapper.insert(entity);
     }
 

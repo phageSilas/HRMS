@@ -54,7 +54,7 @@ const ProfileSecurityPage: React.FC = () => {
 
   // 登录日志
   const { data: logData, loading: logLoading } = useRequest(getLoginLogs);
-  const loginLogs = logData?.data || [];
+  const loginLogs = logData || [];
 
   // ============ 修改密码 ============
 

@@ -1,5 +1,6 @@
 package com.hrms.business.mycenter.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
@@ -31,5 +32,6 @@ public class LoginLogVO {
     private String errorMsg;
 
     @Schema(description = "登录时间")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime loginTime;
 }

@@ -1,5 +1,6 @@
 package com.hrms.business.mycenter.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
@@ -17,6 +18,7 @@ public class MakeupRecordVO {
     private Long id;
 
     @Schema(description = "补卡日期")
+    @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate correctionDate;
 
     @Schema(description = "补卡类型：CLOCK_IN-上班补卡 CLOCK_OUT-下班补卡")
@@ -29,5 +31,6 @@ public class MakeupRecordVO {
     private Integer approvalStatus;
 
     @Schema(description = "创建时间")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;
 }
