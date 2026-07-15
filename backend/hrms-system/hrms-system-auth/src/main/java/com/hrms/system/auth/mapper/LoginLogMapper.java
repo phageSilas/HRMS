@@ -1,13 +1,13 @@
 package com.hrms.system.auth.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.hrms.system.auth.entity.UserEntity;
+import com.hrms.system.auth.entity.LoginLogEntity;
 import org.apache.ibatis.annotations.Mapper;
 
 /**
- * 用户 Mapper
+ * 登录日志 Mapper
  */
 @Mapper
-public interface UserMapper extends BaseMapper<UserEntity> {
+public interface LoginLogMapper extends BaseMapper<LoginLogEntity> {
 
 }

@@ -3,11 +3,15 @@ package com.hrms.system.auth.entity;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.hrms.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
+
+import java.time.LocalDateTime;
 
 /**
  * 用户实体
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
 @TableName("sys_user")
 public class UserEntity extends BaseEntity {
 
@@ -17,7 +21,7 @@ public class UserEntity extends BaseEntity {
     private String username;
 
     /**
-     * 密码
+     * 密码（BCrypt 加密）
      */
     private String password;
 
@@ -25,6 +29,11 @@ public class UserEntity extends BaseEntity {
      * 昵称
      */
     private String nickname;
+
+    /**
+     * 真实姓名
+     */
+    private String realName;
 
     /**
      * 邮箱
@@ -37,70 +46,53 @@ public class UserEntity extends BaseEntity {
     private String phone;
 
     /**
-     * 头像
+     * 头像地址
      */
     private String avatarUrl;
+
+    /**
+     * 关联员工 ID
+     */
+    private Long employeeId;
 
     /**
      * 状态：1-正常，0-禁用
      */
     private Integer status;
 
-    // 手动添加 getter 和 setter 方法
-    public String getUsername() {
-        return username;
-    }
+    /**
+     * 最后登录时间
+     */
+    private LocalDateTime lastLoginTime;
 
-    public void setUsername(String username) {
-        this.username = username;
-    }
+    /**
+     * 最后登录 IP
+     */
+    private String lastLoginIp;
 
-    public String getPassword() {
-        return password;
-    }
+    /**
+     * 首次登录强制修改密码：1-是，0-否
+     */
+    private Integer needChangePassword;
 
-    public void setPassword(String password) {
-        this.password = password;
-    }
+    /**
+     * 密码最后更新时间
+     */
+    private LocalDateTime passwordUpdateTime;
 
-    public String getNickname() {
-        return nickname;
-    }
+    /**
+     * 连续登录失败次数
+     */
+    private Integer loginFailCount;
 
-    public void setNickname(String nickname) {
-        this.nickname = nickname;
-    }
+    /**
+     * 账号锁定时间
+     */
+    private LocalDateTime lockTime;
 
-    public String getEmail() {
-        return email;
-    }
-
-    public void setEmail(String email) {
-        this.email = email;
-    }
-
-    public String getPhone() {
-        return phone;
-    }
-
-    public void setPhone(String phone) {
-        this.phone = phone;
-    }
-
-    public String getAvatarUrl() {
-        return avatarUrl;
-    }
-
-    public void setAvatarUrl(String avatarUrl) {
-        this.avatarUrl = avatarUrl;
-    }
-
-    public Integer getStatus() {
-        return status;
-    }
-
-    public void setStatus(Integer status) {
-        this.status = status;
-    }
+    /**
+     * 备注
+     */
+    private String remark;
 
 }
