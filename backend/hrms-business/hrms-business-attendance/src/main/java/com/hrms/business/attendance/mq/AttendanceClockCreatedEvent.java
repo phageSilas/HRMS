@@ -1,6 +1,10 @@
 package com.hrms.business.attendance.mq;
 
+import com.hrms.common.mq.HrmsMqMessage;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -9,7 +13,10 @@ import java.time.LocalDateTime;
  * 打卡成功领域事件。
  */
 @Data
-public class AttendanceClockCreatedEvent {
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class AttendanceClockCreatedEvent implements HrmsMqMessage {
 
     /**
      * 消息唯一ID。
