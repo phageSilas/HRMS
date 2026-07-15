@@ -5,6 +5,9 @@ import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import cn.hutool.json.JSONUtil;
+import com.hrms.business.approval.enums.ApprovalTypeEnum;
+import com.hrms.business.approval.service.ApprovalEngine;
 import com.hrms.business.employee.entity.EmployeeEntity;
 import com.hrms.business.employee.service.EmployeeService;
 import com.hrms.business.personnel.convert.RegularApplicationConvert;
@@ -21,6 +24,7 @@ import com.hrms.business.personnel.vo.RegularApplicationApplyVO;
 import com.hrms.business.personnel.vo.RegularApplicationPageVO;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
+import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -60,6 +64,8 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
     private final EmployeeSnapshotMapper employeeSnapshotMapper;
 
     private final EmployeeService employeeService;
+
+    private final ApprovalEngine approvalEngine;
 
     /**
      * 分页查询转正申请。
@@ -102,11 +108,20 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
         entity.setExtendMonth(requestDTO.getExtendMonth());
         entity.setSalaryAdjustment(requestDTO.getSalaryAdjustment());
         entity.setEvaluateOpinion(requestDTO.getEvaluateOpinion());
-        // approvalService.startApproval("REGULAR", entity.getId()); 本接口需要调用 hrms-business-approval 模块的转正审批发起接口
-        Long approvalInstanceId = tempStartRegularApproval(employeeSnapshot);
-        entity.setApprovalInstanceId(approvalInstanceId);
         entity.setApprovalStatus(ApplicationStatusEnum.APPROVING.getCode());
         regularApplicationMapper.insert(entity);
+        // approvalService.startApproval("REGULAR", entity.getId()); 本接口需要调用 hrms-business-approval 模块的转正审批发起接口
+        // TODO 跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起转正审批。
+        Long approvalInstanceId = approvalEngine.startApproval(
+                ApprovalTypeEnum.REGULAR.getCode(),
+                entity.getId(),
+                JSONUtil.toJsonStr(entity),
+                SecurityContextHolder.getUserId(),
+                employeeSnapshot.getDeptId(),
+                employeeId
+        );
+        entity.setApprovalInstanceId(approvalInstanceId);
+        regularApplicationMapper.updateById(entity);
 
         return RegularApplicationApplyVO.builder()
                 .success(Boolean.TRUE)
