@@ -2,8 +2,11 @@ package com.hrms.business.personnel.service.impl;
 
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.core.util.IdUtil;
+import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.hrms.business.approval.enums.ApprovalTypeEnum;
+import com.hrms.business.approval.service.ApprovalEngine;
 import com.hrms.business.personnel.convert.EntryApplicationConvert;
 import com.hrms.business.personnel.dto.EntryApplicationConfirmRequestDTO;
 import com.hrms.business.personnel.dto.EntryApplicationCreateOrUpdateRequestDTO;
@@ -17,6 +20,7 @@ import com.hrms.business.personnel.vo.EntryApplicationPageVO;
 import com.hrms.business.personnel.vo.EntryApplicationSubmitVO;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
+import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -52,6 +56,10 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
     private static final int MAX_PAGE_SIZE = 200;
 
     private final EntryApplicationMapper entryApplicationMapper;
+
+    // 注入
+    private final ApprovalEngine approvalEngine;
+
 
     /**
      * 分页查询入职申请。
@@ -110,8 +118,15 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
     public EntryApplicationSubmitVO submitEntryApplication(Long id) {
         EntryApplicationEntity entity = getRequiredEntryApplication(id);
         assertDraft(entity);
-        // approvalService.startEntryApproval(entity); 本接口需要调用 hrms-business-approval 模块的发起入职审批接口
-        Long approvalInstanceId = tempStartEntryApproval(entity);
+        // TODO 跨模块调用入职模块,已实现, approvalService.startEntryApproval(entity); 本接口需要调用 hrms-business-approval 模块的发起入职审批接口
+        Long approvalInstanceId = approvalEngine.startApproval(
+                ApprovalTypeEnum.ENTRY.getCode(),       // approvalType = "ENTRY"
+                entity.getId(),                          // bizId
+                JSONUtil.toJsonStr(entity),              // formData（JSON 快照）
+                SecurityContextHolder.getUserId(), // applicantUserId
+                entity.getDeptId(),                      // applicantDeptId
+                null                                     // applicantEmployeeId（入职前尚无员工ID）
+        );
         entity.setApprovalInstanceId(approvalInstanceId);
         entity.setApprovalStatus(ApplicationStatusEnum.APPROVING.getCode());
         entryApplicationMapper.updateById(entity);
@@ -128,9 +143,9 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
      * @param entity 入职申请实体
      * @return 审批实例ID
      */
-    private Long tempStartEntryApproval(EntryApplicationEntity entity) {
-        return IdUtil.getSnowflakeNextId();
-    }
+    // private Long tempStartEntryApproval(EntryApplicationEntity entity) {
+    //     return IdUtil.getSnowflakeNextId();
+    // }
 
     /**
      * 确认入职申请。

@@ -19,15 +19,20 @@
         <dependency>
             <groupId>com.hrms</groupId>
             <artifactId>hrms-business-employee</artifactId>
-            <version>${project.version}</version>
         </dependency>
 
         <!-- 依赖 hrms-common -->
         <dependency>
             <groupId>com.hrms</groupId>
             <artifactId>hrms-common</artifactId>
-            <version>${project.version}</version>
         </dependency>
+
+        <!-- 依赖 hrms-business-approval -->
+        <dependency>
+            <groupId>com.hrms</groupId>
+            <artifactId>hrms-business-approval</artifactId>
+        </dependency>
+
 
         <!-- Spring Boot Starter Web -->
         <dependency>
