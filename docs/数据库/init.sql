@@ -899,14 +899,42 @@ CREATE TABLE `sys_login_log` (
 -- ============================================================
 -- 初始化完成
 -- ============================================================
--- 共计 32 张表
+-- 共计 32+1 张表
 -- M5 权限体系: 6张
 -- M6 组织架构: 4张
 -- M1 员工档案: 2张
 -- M2 入转调离: 4张
--- M3 考勤管理: 4张
+-- M3 考勤管理: 4张+1 共5张
 -- M4 薪资管理: 5张
 -- M7 审批中心: 3张
 -- M9 AI 助手:  1张
 -- 公共模块:   3张
 -- ============================================================
+
+# 新增 hr_leave_balance，属于考勤管理模块, 专门存员工每年每类假期余额。
+CREATE TABLE `hr_leave_balance` (
+                                    `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+                                    `employee_id` bigint NOT NULL COMMENT '员工ID',
+                                    `leave_type` varchar(32) NOT NULL COMMENT '假期类型：ANNUAL-年假 SICK-病假 PERSONAL-事假 COMPASSIONATE-调休 MARRIAGE-婚假 MATERNITY-产假 FUNERAL-丧假',
+                                    `balance_year` int NOT NULL COMMENT '余额所属年份',
+                                    `total_days` decimal(5,1) NOT NULL DEFAULT '0.0' COMMENT '本年度应得天数',
+                                    `used_days` decimal(5,1) NOT NULL DEFAULT '0.0' COMMENT '已使用天数',
+                                    `frozen_days` decimal(5,1) NOT NULL DEFAULT '0.0' COMMENT '审批中冻结天数',
+                                    `remaining_days` decimal(5,1) NOT NULL DEFAULT '0.0' COMMENT '剩余可用天数',
+                                    `carryover_days` decimal(5,1) NOT NULL DEFAULT '0.0' COMMENT '上年结转天数',
+                                    `adjust_days` decimal(5,1) NOT NULL DEFAULT '0.0' COMMENT '人工调整天数，可正可负',
+                                    `expire_date` date DEFAULT NULL COMMENT '余额过期日期',
+                                    `status` tinyint NOT NULL DEFAULT '1' COMMENT '状态：0-停用 1-启用',
+                                    `remark` varchar(500) DEFAULT NULL COMMENT '备注',
+                                    `create_by` bigint DEFAULT NULL COMMENT '创建人',
+                                    `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                                    `update_by` bigint DEFAULT NULL COMMENT '更新人',
+                                    `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+                                    `is_deleted` tinyint NOT NULL DEFAULT '0' COMMENT '是否删除：0-否 1-是',
+                                    `version` int NOT NULL DEFAULT '0' COMMENT '乐观锁版本号',
+                                    PRIMARY KEY (`id`),
+                                    UNIQUE KEY `uk_employee_leave_year` (`employee_id`, `leave_type`, `balance_year`, `is_deleted`),
+                                    KEY `idx_employee_year` (`employee_id`, `balance_year`),
+                                    KEY `idx_leave_type_year` (`leave_type`, `balance_year`),
+                                    KEY `idx_expire_date` (`expire_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='员工假期余额表';
