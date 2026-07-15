@@ -60,6 +60,21 @@
             <artifactId>hrms-system-auth</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>com.hrms</groupId>
+            <artifactId>hrms-system-organization</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.hrms</groupId>
+            <artifactId>hrms-system-log</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.hrms</groupId>
+            <artifactId>hrms-system-file</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
         <!-- Spring Boot Starter Web -->
         <dependency>

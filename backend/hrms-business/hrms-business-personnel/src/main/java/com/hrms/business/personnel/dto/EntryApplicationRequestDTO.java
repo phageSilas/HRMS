@@ -1,7 +1,10 @@
 package com.hrms.business.personnel.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import jakarta.validation.constraints.NotNull;
 
@@ -9,6 +12,9 @@ import jakarta.validation.constraints.NotNull;
  * 入职申请请求 DTO
  */
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 @Schema(description = "入职申请请求")
 public class EntryApplicationRequestDTO {
 
