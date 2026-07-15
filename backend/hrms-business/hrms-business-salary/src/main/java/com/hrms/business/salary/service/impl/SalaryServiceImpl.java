@@ -33,8 +33,8 @@ import com.hrms.business.salary.mapper.SalaryEmployeeSnapshotMapper;
 import com.hrms.business.salary.mapper.SalarySysUserMapper;
 import com.hrms.business.salary.mapper.SalaryTemplateItemMapper;
 import com.hrms.business.salary.mapper.SalaryTemplateMapper;
+import com.hrms.business.salary.mq.SalaryBatchCalculateProducer;
 import com.hrms.business.salary.mq.SalaryBatchCalculateMessage;
-import com.hrms.business.salary.mq.SalaryMqConstants;
 import com.hrms.business.salary.service.SalaryService;
 import com.hrms.business.salary.vo.EmployeeSalaryProfileVO;
 import com.hrms.business.salary.vo.SalaryBatchItemVO;
@@ -52,7 +52,6 @@ import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -101,9 +100,9 @@ public class SalaryServiceImpl implements SalaryService {
     private final SalaryEmployeeSnapshotMapper employeeSnapshotMapper;
     private final SalarySysUserMapper salarySysUserMapper;
     private final ObjectProvider<StringRedisTemplate> redisTemplateProvider;
-    private final ObjectProvider<RabbitTemplate> rabbitTemplateProvider;
     private final ObjectProvider<AttendanceService> attendanceServiceProvider;
     private final ObjectProvider<PasswordEncoder> passwordEncoderProvider;
+    private final SalaryBatchCalculateProducer salaryBatchCalculateProducer;
 
     /**
      * 分页查询薪资账套。
@@ -282,8 +281,8 @@ public class SalaryServiceImpl implements SalaryService {
      * 触发薪资核算。
      *
      * @param batchId 批次ID
-     * @return 核算后的批次
-     * 本方法使用的工具类: StringRedisTemplate(spring-data-redis),RabbitTemplate(spring-amqp),IdUtil(hutool),Transactional(Spring)
+     * @return 已进入核算中的批次
+     * 本方法使用的工具类: StringRedisTemplate(spring-data-redis),SalaryBatchCalculateProducer(本模块mq包),IdUtil(hutool),Transactional(Spring)
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -299,16 +298,50 @@ public class SalaryServiceImpl implements SalaryService {
         if (!Boolean.TRUE.equals(locked)) {
             throw new GlobalException(ErrorCode.CONFLICT, "薪资批次正在核算中，请稍后重试");
         }
+        String originalStatus = batch.getBatchStatus();
         try {
-            SalaryBatchCalculateMessage message = new SalaryBatchCalculateMessage(
-                    IdUtil.fastSimpleUUID(), batchId, batch.getSalaryMonth());
-            publishCalculateMessage(message);
+            batch.setBatchStatus(SalaryBatchStatusEnum.CALCULATING.name());
+            salaryBatchMapper.updateById(batch);
+            SalaryBatchCalculateMessage message = SalaryBatchCalculateMessage.builder()
+                    .messageId(IdUtil.fastSimpleUUID())
+                    .batchId(batchId)
+                    .salaryMonth(batch.getSalaryMonth())
+                    .build();
+            salaryBatchCalculateProducer.send(message);
+            /*
             doCalculateBatch(batchId);
             evictBatchCache(batchId);
             return toBatchVO(getBatchRequired(batchId));
-        } finally {
+            */
+            evictBatchCache(batchId);
+            return toBatchVO(batch);
+        } catch (Exception ex) {
+            batch.setBatchStatus(originalStatus);
+            salaryBatchMapper.updateById(batch);
             if (redisTemplate != null) {
                 redisTemplate.delete(lockKey);
+            }
+            if (ex instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new GlobalException(ErrorCode.SYSTEM_ERROR, "发送薪资批次核算消息失败");
+        }
+    }
+
+    /**
+     * 处理薪资批次核算消息。
+     *
+     * @param message 薪资批次核算消息
+     * 本方法使用的工具类: StringRedisTemplate(spring-data-redis)
+     */
+    public void handleBatchCalculateMessage(SalaryBatchCalculateMessage message) {
+        try {
+            doCalculateBatch(message.getBatchId());
+            evictBatchCache(message.getBatchId());
+        } finally {
+            StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+            if (redisTemplate != null) {
+                redisTemplate.delete(SalaryCacheKeys.calculateLock(message.getBatchId()));
             }
         }
     }
@@ -750,25 +783,6 @@ public class SalaryServiceImpl implements SalaryService {
                 .leaveDays(BigDecimal.ZERO)
                 .overtimeHours(BigDecimal.ZERO)
                 .build()).toList();
-    }
-
-    /**
-     * 发布薪资核算消息。
-     * @param message 消息
-     */
-    private void publishCalculateMessage(SalaryBatchCalculateMessage message) {
-        RabbitTemplate rabbitTemplate = rabbitTemplateProvider.getIfAvailable();
-        if (rabbitTemplate == null) {
-            tempPublishCalculateMessage(message);
-            return;
-        }
-        try {
-            rabbitTemplate.convertAndSend(SalaryMqConstants.SALARY_EXCHANGE,
-                    SalaryMqConstants.BATCH_CALCULATE_ROUTING_KEY, JSONUtil.toJsonStr(message));
-        } catch (Exception ex) {
-            log.warn("publish salary.batch.calculate failed, use temp publisher, message={}", JSONUtil.toJsonStr(message), ex);
-            tempPublishCalculateMessage(message);
-        }
     }
 
     /**
