@@ -38,6 +38,85 @@
 
     <dependencyManagement>
         <dependencies>
+            <!-- HRMS 模块版本管理 -->
+            <dependency>
+                <groupId>com.hrms</groupId>
+                <artifactId>hrms-common</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.hrms</groupId>
+                <artifactId>hrms-system</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+            </dependency>
+            <dependency>
+                <groupId>com.hrms</groupId>
+                <artifactId>hrms-system-auth</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.hrms</groupId>
+                <artifactId>hrms-system-organization</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.hrms</groupId>
+                <artifactId>hrms-system-file</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.hrms</groupId>
+                <artifactId>hrms-system-log</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.hrms</groupId>
+                <artifactId>hrms-business</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+            </dependency>
+            <dependency>
+                <groupId>com.hrms</groupId>
+                <artifactId>hrms-business-employee</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.hrms</groupId>
+                <artifactId>hrms-business-personnel</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.hrms</groupId>
+                <artifactId>hrms-business-attendance</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.hrms</groupId>
+                <artifactId>hrms-business-salary</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.hrms</groupId>
+                <artifactId>hrms-business-approval</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.hrms</groupId>
+                <artifactId>hrms-business-mycenter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.hrms</groupId>
+                <artifactId>hrms-business-ai</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.hrms</groupId>
+                <artifactId>hrms-server</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
             <!-- MyBatis-Plus BOM -->
             <dependency>
                 <groupId>com.baomidou</groupId>
