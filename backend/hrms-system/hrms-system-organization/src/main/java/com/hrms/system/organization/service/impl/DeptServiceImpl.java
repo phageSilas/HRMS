@@ -148,7 +148,7 @@ public class DeptServiceImpl implements DeptService {
                         .eq(DeptEntity::getDeptCode, createDTO.getDeptCode())
         );
         if (count > 0) {
-            throw new GlobalException(new ErrorCode(40021, "部门编码已存在"));
+            throw new GlobalException(ErrorCode.DEPT_CODE_EXISTS);
         }
 
         DeptEntity dept = new DeptEntity();
@@ -171,13 +171,13 @@ public class DeptServiceImpl implements DeptService {
             // 子部门
             DeptEntity parentDept = deptMapper.selectById(parentId);
             if (parentDept == null || parentDept.getIsDeleted() == 1) {
-                throw new GlobalException(new ErrorCode(40022, "上级部门不存在"));
+                throw new GlobalException(ErrorCode.DEPT_PARENT_NOT_FOUND);
             }
 
             // 校验层级限制
             int newLevel = parentDept.getDeptLevel() + 1;
             if (newLevel > MAX_DEPT_LEVEL) {
-                throw new GlobalException(new ErrorCode(40023, "部门层级超过最大限制（5级）"));
+                throw new GlobalException(ErrorCode.DEPT_LEVEL_EXCEED);
             }
 
             dept.setParentId(parentId);
@@ -227,7 +227,7 @@ public class DeptServiceImpl implements DeptService {
                         .eq(DeptEntity::getIsDeleted, 0)
         );
         if (childCount > 0) {
-            throw new GlobalException(new ErrorCode(40024, "存在子部门，无法删除"));
+            throw new GlobalException(ErrorCode.DEPT_HAS_CHILDREN);
         }
 
         // TODO: 检查是否有在职员工（后续通过 EmployeeService 检查）

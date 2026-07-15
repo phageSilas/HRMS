@@ -68,4 +68,44 @@ public class DictController {
         return Result.success(id);
     }
 
+    /**
+     * 更新字典类型
+     */
+    @PutMapping("/types/{id}")
+    @Operation(summary = "更新字典类型", description = "根据ID更新字典类型信息")
+    public Result<Void> updateType(@PathVariable Long id, @Valid @RequestBody DictTypeCreateDTO updateDTO) {
+        dictService.updateDictType(id, updateDTO);
+        return Result.success();
+    }
+
+    /**
+     * 删除字典类型
+     */
+    @DeleteMapping("/types/{id}")
+    @Operation(summary = "删除字典类型", description = "根据ID逻辑删除字典类型，同时删除关联的字典数据")
+    public Result<Void> deleteType(@PathVariable Long id) {
+        dictService.deleteDictType(id);
+        return Result.success();
+    }
+
+    /**
+     * 更新字典数据
+     */
+    @PutMapping("/data/{id}")
+    @Operation(summary = "更新字典数据", description = "根据ID更新字典数据项")
+    public Result<Void> updateData(@PathVariable Long id, @Valid @RequestBody DictDataCreateDTO updateDTO) {
+        dictService.updateDictData(id, updateDTO);
+        return Result.success();
+    }
+
+    /**
+     * 删除字典数据
+     */
+    @DeleteMapping("/data/{id}")
+    @Operation(summary = "删除字典数据", description = "根据ID逻辑删除字典数据项")
+    public Result<Void> deleteData(@PathVariable Long id) {
+        dictService.deleteDictData(id);
+        return Result.success();
+    }
+
 }

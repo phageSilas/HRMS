@@ -46,7 +46,7 @@ public class DictServiceImpl implements DictService {
                 .map(this::convertTypeToVO)
                 .collect(Collectors.toList());
 
-        return PageResult.of(records, resultPage.getTotal(), resultPage.getCurrent(), resultPage.getSize());
+        return PageResult.of(records, resultPage.getTotal(), (int) resultPage.getCurrent(), (int) resultPage.getSize());
     }
 
     @Override
@@ -81,7 +81,7 @@ public class DictServiceImpl implements DictService {
         );
 
         if (dictType == null) {
-            throw new GlobalException(new ErrorCode(40030, "字典类型编码不存在"));
+            throw new GlobalException(ErrorCode.DICT_TYPE_NOT_FOUND);
         }
 
         List<DictDataEntity> dataList = dictDataMapper.selectList(
@@ -107,7 +107,7 @@ public class DictServiceImpl implements DictService {
         );
 
         if (dictType == null) {
-            throw new GlobalException(new ErrorCode(40030, "字典类型编码不存在"));
+            throw new GlobalException(ErrorCode.DICT_TYPE_NOT_FOUND);
         }
 
         DictDataEntity dictData = new DictDataEntity();
@@ -121,6 +121,90 @@ public class DictServiceImpl implements DictService {
 
         dictDataMapper.insert(dictData);
         return dictData.getId();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateDictType(Long id, DictTypeCreateDTO updateDTO) {
+        DictTypeEntity dictType = dictTypeMapper.selectById(id);
+        if (dictType == null || dictType.getIsDeleted() == 1) {
+            throw new GlobalException(ErrorCode.NOT_FOUND);
+        }
+
+        // 如果修改了 dictType 编码，校验唯一性
+        if (!dictType.getDictType().equals(updateDTO.getDictType())) {
+            Long count = dictTypeMapper.selectCount(
+                    Wrappers.<DictTypeEntity>lambdaQuery()
+                            .eq(DictTypeEntity::getDictType, updateDTO.getDictType())
+            );
+            if (count > 0) {
+                throw new GlobalException(ErrorCode.DATA_DUPLICATE);
+            }
+        }
+
+        dictType.setDictName(updateDTO.getDictName());
+        dictType.setDictType(updateDTO.getDictType());
+        dictType.setRemark(updateDTO.getRemark());
+
+        dictTypeMapper.updateById(dictType);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteDictType(Long id) {
+        DictTypeEntity dictType = dictTypeMapper.selectById(id);
+        if (dictType == null || dictType.getIsDeleted() == 1) {
+            throw new GlobalException(ErrorCode.NOT_FOUND);
+        }
+
+        // TODO: 检查是否有关联的字典数据，有则不允许删除
+        // 简化处理：先删除关联的字典数据
+        dictDataMapper.delete(
+                Wrappers.<DictDataEntity>lambdaQuery()
+                        .eq(DictDataEntity::getDictType, dictType.getDictType())
+        );
+
+        dictTypeMapper.deleteById(id);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateDictData(Long id, DictDataCreateDTO updateDTO) {
+        DictDataEntity dictData = dictDataMapper.selectById(id);
+        if (dictData == null || dictData.getIsDeleted() == 1) {
+            throw new GlobalException(ErrorCode.NOT_FOUND);
+        }
+
+        // 校验字典类型是否存在
+        DictTypeEntity dictType = dictTypeMapper.selectOne(
+                Wrappers.<DictTypeEntity>lambdaQuery()
+                        .eq(DictTypeEntity::getDictType, updateDTO.getDictType())
+                        .eq(DictTypeEntity::getStatus, 1)
+        );
+
+        if (dictType == null) {
+            throw new GlobalException(ErrorCode.DICT_TYPE_NOT_FOUND);
+        }
+
+        dictData.setDictType(updateDTO.getDictType());
+        dictData.setDictLabel(updateDTO.getDictLabel());
+        dictData.setDictValue(updateDTO.getDictValue());
+        dictData.setCssClass(updateDTO.getCssClass());
+        dictData.setSort(updateDTO.getSort());
+        dictData.setRemark(updateDTO.getRemark());
+
+        dictDataMapper.updateById(dictData);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteDictData(Long id) {
+        DictDataEntity dictData = dictDataMapper.selectById(id);
+        if (dictData == null || dictData.getIsDeleted() == 1) {
+            throw new GlobalException(ErrorCode.NOT_FOUND);
+        }
+
+        dictDataMapper.deleteById(id);
     }
 
     /**

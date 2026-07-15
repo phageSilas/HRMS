@@ -46,4 +46,34 @@ public interface DictService {
      */
     Long createDictData(DictDataCreateDTO createDTO);
 
+    /**
+     * 更新字典类型
+     *
+     * @param id        字典类型 ID
+     * @param updateDTO 更新字典类型 DTO
+     */
+    void updateDictType(Long id, DictTypeCreateDTO updateDTO);
+
+    /**
+     * 删除字典类型（逻辑删除）
+     *
+     * @param id 字典类型 ID
+     */
+    void deleteDictType(Long id);
+
+    /**
+     * 更新字典数据
+     *
+     * @param id        字典数据 ID
+     * @param updateDTO 更新字典数据 DTO
+     */
+    void updateDictData(Long id, DictDataCreateDTO updateDTO);
+
+    /**
+     * 删除字典数据（逻辑删除）
+     *
+     * @param id 字典数据 ID
+     */
+    void deleteDictData(Long id);
+
 }

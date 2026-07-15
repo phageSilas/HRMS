@@ -62,7 +62,7 @@ public class PostServiceImpl implements PostService {
                 .map(this::convertToVO)
                 .collect(Collectors.toList());
 
-        return PageResult.of(records, resultPage.getTotal(), resultPage.getCurrent(), resultPage.getSize());
+        return PageResult.of(records, resultPage.getTotal(), (int) resultPage.getCurrent(), (int) resultPage.getSize());
     }
 
     @Override
