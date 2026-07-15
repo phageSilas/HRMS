@@ -4,15 +4,11 @@ import { message } from 'antd';
 /**
  * HRMS 请求工具封装
  * 基于 axios 封装，统一处理 Token 注入、响应拦截、错误处理
- *
- * 注意：响应拦截器已将后端 Result<T> 解包，返回 T 而非 AxiosResponse<T>。
- * 下方 http 对象重新声明了类型签名，使 TypeScript 类型与运行时行为一致。
  */
 
 // 创建 axios 实例
-const instance: AxiosInstance = axios.create({
-  // 开发环境走 Umi 代理/Mock，生产环境可配置 API_BASE_URL
-  baseURL: process.env.API_BASE_URL || '',
+const request: AxiosInstance = axios.create({
+  baseURL: process.env.API_BASE_URL || 'http://localhost:8080',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
@@ -20,7 +16,7 @@ const instance: AxiosInstance = axios.create({
 });
 
 // 请求拦截器：注入 Token
-instance.interceptors.request.use(
+request.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
     if (token) {
@@ -34,12 +30,12 @@ instance.interceptors.request.use(
 );
 
 // 响应拦截器：处理 Result<T> 格式
-instance.interceptors.response.use(
+request.interceptors.response.use(
   (response: AxiosResponse) => {
     const { code, message: msg, data } = response.data;
 
-    // 成功
-    if (code === 0) {
+    // 成功：后端统一成功码为 20000，兼容早期前端 mock 的 0。
+    if (code === 20000 || code === 0) {
       return data;
     }
 
@@ -111,31 +107,5 @@ instance.interceptors.response.use(
     return Promise.reject(new Error('网络错误，请稍后重试'));
   }
 );
-
-/**
- * 类型安全的请求方法集合
- * 与 axios 实例共享相同的拦截器，但重新声明了类型签名，使
- * 返回类型为 T（而非 AxiosResponse<T>），与拦截器解包行为一致。
- *
- * 用法示例：
- *   request.get<PageResult<ApprovalTask>>('/api/v1/approval/tasks/pending')
- *   // 返回 Promise<PageResult<ApprovalTask>>
- */
-const request = {
-  get: <T = any>(url: string, config?: AxiosRequestConfig): Promise<T> =>
-    instance.get<any, T>(url, config),
-
-  post: <T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> =>
-    instance.post<any, T>(url, data, config),
-
-  put: <T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> =>
-    instance.put<any, T>(url, data, config),
-
-  delete: <T = any>(url: string, config?: AxiosRequestConfig): Promise<T> =>
-    instance.delete<any, T>(url, config),
-
-  patch: <T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> =>
-    instance.patch<any, T>(url, data, config),
-};
 
 export default request;
