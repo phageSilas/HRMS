@@ -7,6 +7,7 @@ import com.hrms.business.approval.dto.PendingTaskQuery;
 import com.hrms.business.approval.dto.PendingTaskVO;
 import com.hrms.business.approval.service.ApprovalEngine;
 import com.hrms.business.approval.service.ApprovalTaskService;
+import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
 import com.hrms.common.web.Result;
 import io.swagger.v3.oas.annotations.Operation;
@@ -19,6 +20,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Map;
 
 /**
  * 审批任务控制器
@@ -35,29 +38,24 @@ public class ApprovalTaskController {
     private final ApprovalTaskService approvalTaskService;
     private final ApprovalEngine approvalEngine;
 
-    private Long getCurrentUserId() {
-        // TODO: 接入安全认证后替换为 getCurrentUserId()
-        return 1L;
-    }
-
     @Operation(summary = "待办列表")
     @GetMapping("/tasks/pending")
     public Result<PageResult<PendingTaskVO>> getPendingTasks(PendingTaskQuery query) {
-        Long userId = getCurrentUserId();
+        Long userId = SecurityContextHolder.getUserId();
         return Result.success(approvalTaskService.findPendingTasks(userId, query));
     }
 
     @Operation(summary = "已审批列表")
     @GetMapping("/tasks/history")
     public Result<PageResult<PendingTaskVO>> getHistoryTasks(PendingTaskQuery query) {
-        Long userId = getCurrentUserId();
+        Long userId = SecurityContextHolder.getUserId();
         return Result.success(approvalTaskService.findHistoryTasks(userId, query));
     }
 
     @Operation(summary = "审批详情")
     @GetMapping("/{id}")
     public Result<ApprovalDetailVO> getDetail(@PathVariable Long id) {
-        Long userId = getCurrentUserId();
+        Long userId = SecurityContextHolder.getUserId();
         return Result.success(approvalTaskService.getDetail(id, userId));
     }
 
@@ -65,15 +63,23 @@ public class ApprovalTaskController {
     @PostMapping("/{id}/operate")
     public Result<OperateResultVO> operate(@PathVariable Long id,
                                            @Valid @RequestBody ApprovalOperateRequest request) {
-        Long userId = getCurrentUserId();
-        approvalEngine.processAction(id, request.getAction(), request.getComment(), request.getTargetUserId());
-        return Result.success(OperateResultVO.ok());
+        Long userId = SecurityContextHolder.getUserId();
+        OperateResultVO result = approvalEngine.processAction(id, request.getAction(), request.getComment(), request.getTargetUserId());
+        return Result.success(result);
+    }
+
+    @Operation(summary = "待审批数量（角标用）")
+    @GetMapping("/pending-count")
+    public Result<Map<String, Integer>> getPendingCount() {
+        Long userId = SecurityContextHolder.getUserId();
+        Integer count = approvalTaskService.getPendingCount(userId);
+        return Result.success(Map.of("count", count));
     }
 
     @Operation(summary = "撤回申请")
     @PostMapping("/{id}/withdraw")
     public Result<OperateResultVO> withdraw(@PathVariable Long id) {
-        Long userId = getCurrentUserId();
+        Long userId = SecurityContextHolder.getUserId();
         approvalTaskService.withdraw(id, userId);
         return Result.success(OperateResultVO.ok());
     }

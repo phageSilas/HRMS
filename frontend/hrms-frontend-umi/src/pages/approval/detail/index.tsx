@@ -71,7 +71,7 @@ const DetailPage: React.FC = () => {
     try {
       const values = await operateForm.validateFields();
       setOperateLoading(true);
-      await operateApproval(Number(id), {
+      await operateApproval(Number(detail.currentTaskId), {
         action: operateModal.action,
         comment: values.comment,
         targetUserId: values.targetUserId

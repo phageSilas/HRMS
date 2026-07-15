@@ -3,6 +3,7 @@ package com.hrms.business.approval.controller;
 import com.hrms.business.approval.dto.DelegationCreateRequest;
 import com.hrms.business.approval.dto.DelegationListVO;
 import com.hrms.business.approval.service.DelegationService;
+import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.Result;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -32,15 +33,10 @@ public class DelegationController {
 
     private final DelegationService delegationService;
 
-    private Long getCurrentUserId() {
-        // TODO: 接入安全认证后替换为 SecurityContextHolder.getUserId()
-        return 1L;
-    }
-
     @Operation(summary = "设置委托")
     @PostMapping
     public Result<Map<String, Long>> createDelegation(@Valid @RequestBody DelegationCreateRequest request) {
-        Long userId = getCurrentUserId();
+        Long userId = SecurityContextHolder.getUserId();
         Long id = delegationService.createDelegation(userId, request);
         return Result.success(Map.of("id", id));
     }
@@ -48,7 +44,7 @@ public class DelegationController {
     @Operation(summary = "取消委托")
     @PutMapping("/{id}/cancel")
     public Result<Map<String, Boolean>> cancelDelegation(@PathVariable Long id) {
-        Long userId = getCurrentUserId();
+        Long userId = SecurityContextHolder.getUserId();
         delegationService.cancelDelegation(id, userId);
         return Result.success(Map.of("success", true));
     }
@@ -56,7 +52,7 @@ public class DelegationController {
     @Operation(summary = "查询我的委托")
     @GetMapping("/my")
     public Result<DelegationListVO> getMyDelegations() {
-        Long userId = getCurrentUserId();
+        Long userId = SecurityContextHolder.getUserId();
         return Result.success(delegationService.findMyDelegations(userId));
     }
 }

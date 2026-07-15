@@ -45,6 +45,9 @@ public class ApprovalDetailVO {
     @Schema(description = "当前用户是否为当前审批人")
     private Boolean currentOperator;
 
+    @Schema(description = "当前待办任务ID（用于操作接口传参）")
+    private Long currentTaskId;
+
     /**
      * 审批节点（Steps 用）
      */
