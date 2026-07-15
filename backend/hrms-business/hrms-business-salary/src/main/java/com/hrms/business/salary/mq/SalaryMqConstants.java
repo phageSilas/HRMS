@@ -11,4 +11,6 @@ public final class SalaryMqConstants {
     public static final String SALARY_EXCHANGE = "hrms.salary.exchange";
 
     public static final String BATCH_CALCULATE_ROUTING_KEY = "salary.batch.calculate";
+
+    public static final String BATCH_CALCULATE_QUEUE = "hrms.salary.batch.calculate.queue";
 }
