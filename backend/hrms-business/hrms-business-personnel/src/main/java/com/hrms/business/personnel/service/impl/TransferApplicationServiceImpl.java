@@ -52,11 +52,6 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
 
     private final EmployeeSnapshotMapper employeeSnapshotMapper;
 
-    /**
-     * 分页查询调岗申请。
-     * @param queryDTO 调岗申请查询参数
-     * @return 调岗申请分页列表
-     */
     @Override
     public PageResult<TransferApplicationPageVO> pageTransferApplications(TransferApplicationQueryDTO queryDTO) {
         int pageNum = normalizePageNum(queryDTO.getPageNum());
@@ -74,13 +69,6 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
         return PageResult.of(records, page.getTotal(), pageNum, pageSize);
     }
 
-    /**
-     * 创建调岗申请。
-     *
-     * @param requestDTO 调岗申请创建参数
-     * @return 调岗申请创建结果
-     * 本方法使用的工具类: 无
-     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public TransferApplicationCreateVO createTransferApplication(TransferApplicationCreateRequestDTO requestDTO) {
