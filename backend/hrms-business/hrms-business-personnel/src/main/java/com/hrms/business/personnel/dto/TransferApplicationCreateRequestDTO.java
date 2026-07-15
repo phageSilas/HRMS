@@ -3,7 +3,10 @@ package com.hrms.business.personnel.dto;
 import com.fasterxml.jackson.annotation.JsonAlias;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -12,6 +15,9 @@ import java.time.LocalDate;
  * 调岗申请创建请求 DTO
  */
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 @Schema(description = "调岗申请创建请求")
 public class TransferApplicationCreateRequestDTO {
 

@@ -1,11 +1,17 @@
 package com.hrms.business.attendance.vo;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
  * 请假申请创建结果。
  */
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class LeaveCreateVO {
 
     /**

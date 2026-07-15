@@ -1,7 +1,10 @@
 package com.hrms.business.attendance.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.util.List;
 
@@ -9,6 +12,9 @@ import java.util.List;
  * 月度考勤统计生成请求。
  */
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class MonthlyStatGenerateRequestDTO {
 
     /**

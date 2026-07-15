@@ -96,10 +96,10 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         entity.setApprovalStatus(ApplicationStatusEnum.APPROVING.getCode());
         entryApplicationMapper.updateById(entity);
 
-        EntryApplicationSubmitVO submitVO = new EntryApplicationSubmitVO();
-        submitVO.setApprovalInstanceId(approvalInstanceId);
-        submitVO.setApprovalStatus(entity.getApprovalStatus());
-        return submitVO;
+        return EntryApplicationSubmitVO.builder()
+                .approvalInstanceId(approvalInstanceId)
+                .approvalStatus(entity.getApprovalStatus())
+                .build();
     }
 
     /**
@@ -212,10 +212,10 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
      * @return 入职确认结果
      */
     private EntryApplicationConfirmVO buildConfirmVO(Long employeeId, String employeeNo) {
-        EntryApplicationConfirmVO confirmVO = new EntryApplicationConfirmVO();
-        confirmVO.setEmployeeId(employeeId);
-        confirmVO.setEmployeeNo(employeeNo);
-        return confirmVO;
+        return EntryApplicationConfirmVO.builder()
+                .employeeId(employeeId)
+                .employeeNo(employeeNo)
+                .build();
     }
 
     /**

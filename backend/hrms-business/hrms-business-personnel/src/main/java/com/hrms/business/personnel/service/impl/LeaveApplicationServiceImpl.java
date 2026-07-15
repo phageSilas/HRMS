@@ -93,9 +93,9 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
         entity.setApprovalStatus(ApplicationStatusEnum.APPROVING.getCode());
         leaveApplicationMapper.insert(entity);
 
-        LeaveApplicationCreateVO vo = new LeaveApplicationCreateVO();
-        vo.setId(entity.getId());
-        return vo;
+        return LeaveApplicationCreateVO.builder()
+                .id(entity.getId())
+                .build();
     }
 
     /**

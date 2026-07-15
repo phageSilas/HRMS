@@ -1,6 +1,9 @@
 package com.hrms.business.attendance.vo;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.util.List;
 
@@ -8,6 +11,9 @@ import java.util.List;
  * 个人月度打卡日历视图。
  */
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class AttendanceCalendarVO {
 
     /**
