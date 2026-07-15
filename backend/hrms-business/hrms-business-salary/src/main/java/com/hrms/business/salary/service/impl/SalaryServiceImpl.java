@@ -542,6 +542,14 @@ public class SalaryServiceImpl implements SalaryService {
         salaryBatchMapper.updateById(batch);
     }
 
+    /**
+     * 计算员工薪资项。
+     * @param batch 批次
+     * @param employee 员工
+     * @param profile 员工薪资档案
+     * @param attendance 考勤数据
+     * @return 薪资项
+     */
     private SalaryBatchItemEntity calculateEmployeeItem(SalaryBatchEntity batch,
                                                         SalaryEmployeeSnapshotEntity employee,
                                                         EmployeeSalaryProfileEntity profile,
@@ -587,6 +595,13 @@ public class SalaryServiceImpl implements SalaryService {
         return item;
     }
 
+    /**
+     * 应用薪资警告。
+     * @param batch 批次
+     * @param employeeId 员工ID
+     * @param item 薪资项
+     * @param leaveDays 请假天数
+     */
     private void applyWarning(SalaryBatchEntity batch, Long employeeId, SalaryBatchItemEntity item, BigDecimal leaveDays) {
         if (item.getNetSalary().compareTo(BigDecimal.ZERO) <= 0) {
             item.setWarningLevel(SalaryWarningLevelEnum.BLOCK.name());
@@ -612,6 +627,12 @@ public class SalaryServiceImpl implements SalaryService {
         item.setWarningReason(null);
     }
 
+    /**
+     * 查找上月同员工的薪资。
+     * @param employeeId 员工ID
+     * @param salaryMonth 薪资月
+     * @return 上月同员工的薪资
+     */
     private BigDecimal findPreviousNetSalary(Long employeeId, String salaryMonth) {
         String previousMonth = YearMonth.parse(salaryMonth).minusMonths(1).toString();
         List<SalaryBatchEntity> previousBatches = salaryBatchMapper.selectList(Wrappers.lambdaQuery(SalaryBatchEntity.class)
@@ -628,6 +649,10 @@ public class SalaryServiceImpl implements SalaryService {
         return previous == null ? ZERO : money(previous.getNetSalary());
     }
 
+    /**
+     * 填充零薪资。
+     * @param item 薪资项
+     */
     private void fillZeroSalary(SalaryBatchItemEntity item) {
         item.setBaseSalary(ZERO);
         item.setAllowance(ZERO);
@@ -643,6 +668,11 @@ public class SalaryServiceImpl implements SalaryService {
         item.setNetSalary(ZERO);
     }
 
+    /**
+     * 计算薪资所得税。
+     * @param taxable 税前收入
+     * @return 税后收入
+     */
     private BigDecimal calculateIncomeTax(BigDecimal taxable) {
         BigDecimal threshold = new BigDecimal("5000");
         if (taxable.compareTo(threshold) <= 0) {
@@ -651,6 +681,11 @@ public class SalaryServiceImpl implements SalaryService {
         return taxable.subtract(threshold).multiply(new BigDecimal("0.03")).setScale(2, RoundingMode.HALF_UP);
     }
 
+    /**
+     * 解析批次员工。
+     * @param batch 批次
+     * @return 员工列表
+     */
     private List<SalaryEmployeeSnapshotEntity> resolveBatchEmployees(SalaryBatchEntity batch) {
         LambdaQueryWrapper<SalaryEmployeeSnapshotEntity> wrapper = Wrappers.lambdaQuery(SalaryEmployeeSnapshotEntity.class)
                 .eq(SalaryEmployeeSnapshotEntity::getIsDeleted, 0)
@@ -663,6 +698,11 @@ public class SalaryServiceImpl implements SalaryService {
         return employeeSnapshotMapper.selectList(wrapper);
     }
 
+    /**
+     * 列出员工薪资档案。
+     * @param employeeIds 员工ID列表
+     * @return 员工薪资档案
+     */
     private Map<Long, EmployeeSalaryProfileEntity> listProfiles(List<Long> employeeIds) {
         if (CollUtil.isEmpty(employeeIds)) {
             return Map.of();
@@ -672,6 +712,12 @@ public class SalaryServiceImpl implements SalaryService {
                 .stream().collect(Collectors.toMap(EmployeeSalaryProfileEntity::getEmployeeId, Function.identity(), (a, b) -> a));
     }
 
+    /**
+     * 获取考勤汇总。
+     * @param month 考勤月
+     * @param employeeIds 员工ID列表
+     * @return 考勤汇总
+     */
     private Map<Long, AttendancePayrollSourceVO> getAttendanceSummary(String month, List<Long> employeeIds) {
         if (CollUtil.isEmpty(employeeIds)) {
             return Map.of();
@@ -686,6 +732,12 @@ public class SalaryServiceImpl implements SalaryService {
         return summary.stream().collect(Collectors.toMap(AttendancePayrollSourceVO::getEmployeeId, Function.identity(), (a, b) -> a));
     }
 
+    /**
+     * 临时获取考勤月度汇总。
+     * @param month 考勤月
+     * @param employeeIds 员工ID列表
+     * @return 考勤月度汇总
+     */
     private List<AttendancePayrollSourceVO> tempGetAttendanceMonthlySummary(String month, List<Long> employeeIds) {
         // 本方法未来替换为 hrms-business-attendance 的 AttendanceService#getPayrollSource(month, employeeIds)。
         return employeeIds.stream().map(employeeId -> AttendancePayrollSourceVO.builder()
@@ -700,6 +752,10 @@ public class SalaryServiceImpl implements SalaryService {
                 .build()).toList();
     }
 
+    /**
+     * 发布薪资核算消息。
+     * @param message 消息
+     */
     private void publishCalculateMessage(SalaryBatchCalculateMessage message) {
         RabbitTemplate rabbitTemplate = rabbitTemplateProvider.getIfAvailable();
         if (rabbitTemplate == null) {
@@ -715,21 +771,41 @@ public class SalaryServiceImpl implements SalaryService {
         }
     }
 
+    /**
+     * 临时发布薪资核算消息。
+     * @param message 消息
+     */
     private void tempPublishCalculateMessage(SalaryBatchCalculateMessage message) {
         // 本方法未来替换为 salary.batch.calculate Producer，用于异步触发薪资批次核算。
         log.info("temp salary.batch.calculate message: {}", JSONUtil.toJsonStr(message));
     }
 
+    /**
+     * 临时启动薪资批次审批。
+     * @param batch 批次
+     * @return 审批ID
+     */
     private Long tempStartSalaryBatchApproval(SalaryBatchEntity batch) {
         // 本方法未来替换为 hrms-business-approval 的薪资批次审批发起接口。
         return Math.abs(IdUtil.getSnowflakeNextId());
     }
 
+    /**
+     * 临时验证短信验证码。
+     * @param userId 用户ID
+     * @param smsCode 短信验证码
+     * @return 是否验证通过
+     */
     private boolean tempVerifySmsCode(Long userId, String smsCode) {
         // 本方法未来替换为 auth/notification 模块短信验证码校验接口。
         return "123456".equals(smsCode);
     }
 
+    /**
+     * 保存薪资模板项。
+     * @param templateId 模板ID
+     * @param items 模板项列表
+     */
     private void saveTemplateItems(Long templateId, List<SalaryTemplateItemRequestDTO> items) {
         if (CollUtil.isEmpty(items)) {
             return;
@@ -747,6 +823,11 @@ public class SalaryServiceImpl implements SalaryService {
         }
     }
 
+    /**
+     * 列出薪资模板项。
+     * @param templateIds 模板ID列表
+     * @return 模板项列表
+     */
     private List<SalaryTemplateItemEntity> listTemplateItems(List<Long> templateIds) {
         if (CollUtil.isEmpty(templateIds)) {
             return List.of();
@@ -756,6 +837,11 @@ public class SalaryServiceImpl implements SalaryService {
                 .orderByAsc(SalaryTemplateItemEntity::getSortNo));
     }
 
+    /**
+     * 获取薪资账套。
+     * @param id 薪资账套ID
+     * @return 薪资账套
+     */
     private SalaryTemplateEntity getTemplateRequired(Long id) {
         SalaryTemplateEntity entity = salaryTemplateMapper.selectById(id);
         if (entity == null) {
@@ -764,6 +850,11 @@ public class SalaryServiceImpl implements SalaryService {
         return entity;
     }
 
+    /**
+     * 获取薪资批次。
+     * @param id 薪资批次ID
+     * @return 薪资批次
+     */
     private SalaryBatchEntity getBatchRequired(Long id) {
         SalaryBatchEntity entity = salaryBatchMapper.selectById(id);
         if (entity == null) {
@@ -772,6 +863,11 @@ public class SalaryServiceImpl implements SalaryService {
         return entity;
     }
 
+    /**
+     * 获取员工。
+     * @param employeeId 员工ID
+     * @return 员工
+     */
     private SalaryEmployeeSnapshotEntity getEmployeeRequired(Long employeeId) {
         SalaryEmployeeSnapshotEntity employee = employeeSnapshotMapper.selectById(employeeId);
         if (employee == null || Objects.equals(employee.getIsDeleted(), 1)) {
@@ -780,6 +876,10 @@ public class SalaryServiceImpl implements SalaryService {
         return employee;
     }
 
+    /**
+     * 获取当前登录用户绑定的员工ID。
+     * @return 员工ID
+     */
     private Long getCurrentEmployeeId() {
         Long userId = SecurityContextHolder.getUserId();
         SalaryEmployeeSnapshotEntity employee = employeeSnapshotMapper.selectOne(Wrappers
@@ -789,6 +889,11 @@ public class SalaryServiceImpl implements SalaryService {
                 .last("limit 1"));
         if (employee != null) {
             return employee.getId();
+    /**
+     * 列出员工。
+     * @param employeeIds 员工ID列表
+     * @return 员工列表
+     */
         }
         SalarySysUserEntity user = salarySysUserMapper.selectById(userId);
         if (user != null && user.getEmployeeId() != null) {
@@ -797,6 +902,11 @@ public class SalaryServiceImpl implements SalaryService {
         throw new GlobalException(ErrorCode.NOT_FOUND, "当前登录用户未绑定员工档案");
     }
 
+    /**
+     * 列出员工。
+     * @param employeeIds 员工ID列表
+     * @return 员工列表
+     */
     private Map<Long, SalaryEmployeeSnapshotEntity> listEmployeesByIds(List<Long> employeeIds) {
         if (CollUtil.isEmpty(employeeIds)) {
             return Map.of();
@@ -806,6 +916,12 @@ public class SalaryServiceImpl implements SalaryService {
                 .stream().collect(Collectors.toMap(SalaryEmployeeSnapshotEntity::getId, Function.identity(), (a, b) -> a));
     }
 
+    /**
+     * 薪资模板项转VO。
+     * @param profile 薪资模板项
+     * @param employee 员工
+     * @return 薪资模板项VO
+     */
     private EmployeeSalaryProfileVO toProfileVO(EmployeeSalaryProfileEntity profile, SalaryEmployeeSnapshotEntity employee) {
         SalaryTemplateEntity template = profile.getTemplateId() == null ? null : salaryTemplateMapper.selectById(profile.getTemplateId());
         return EmployeeSalaryProfileVO.builder()
@@ -827,6 +943,12 @@ public class SalaryServiceImpl implements SalaryService {
                 .build();
     }
 
+    /**
+     * 薪资账套转VO。
+     * @param entity 薪资账套
+     * @param items 模板项列表
+     * @return 薪资账套VO
+     */
     private SalaryTemplatePageVO toTemplateVO(SalaryTemplateEntity entity, List<SalaryTemplateItemEntity> items) {
         return SalaryTemplatePageVO.builder()
                 .id(entity.getId())
@@ -842,6 +964,11 @@ public class SalaryServiceImpl implements SalaryService {
                 .build();
     }
 
+    /**
+     * 薪资模板项转VO。
+     * @param entity 薪资模板项
+     * @return 薪资模板项VO
+     */
     private SalaryTemplateItemVO toTemplateItemVO(SalaryTemplateItemEntity entity) {
         return SalaryTemplateItemVO.builder()
                 .id(entity.getId())
@@ -854,6 +981,11 @@ public class SalaryServiceImpl implements SalaryService {
                 .build();
     }
 
+    /**
+     * 薪资批次转VO。
+     * @param entity 薪资批次
+     * @return 薪资批次VO
+     */
     private SalaryBatchVO toBatchVO(SalaryBatchEntity entity) {
         return SalaryBatchVO.builder()
                 .id(entity.getId())
@@ -872,10 +1004,22 @@ public class SalaryServiceImpl implements SalaryService {
                 .build();
     }
 
+    /**
+     * 薪资批次项转VO。
+     * @param item 薪资批次项
+     * @param employee 员工
+     * @return 薪资批次项VO
+     */
     private SalaryBatchItemVO toBatchItemVO(SalaryBatchItemEntity item, SalaryEmployeeSnapshotEntity employee) {
         return batchItemBuilder(item, employee).build();
     }
 
+    /**
+     * 薪资批次项转VO。
+     * @param item 薪资批次项
+     * @param employee 员工
+     * @return 薪资批次项VO
+     */
     private SalaryBatchItemVO.SalaryBatchItemVOBuilder<?, ?> batchItemBuilder(SalaryBatchItemEntity item,
                                                                              SalaryEmployeeSnapshotEntity employee) {
         return SalaryBatchItemVO.builder()
@@ -900,6 +1044,12 @@ public class SalaryServiceImpl implements SalaryService {
                 .warningReason(item.getWarningReason());
     }
 
+    /**
+     * 薪资明细转VO。
+     * @param item 薪资明细
+     * @param employee 员工
+     * @return 薪资明细VO
+     */
     private SalaryPayslipDetailVO.SalaryPayslipDetailVOBuilder<?, ?> payslipDetailBuilder(SalaryBatchItemEntity item,
                                                                                          SalaryEmployeeSnapshotEntity employee) {
         return SalaryPayslipDetailVO.builder()
@@ -924,6 +1074,12 @@ public class SalaryServiceImpl implements SalaryService {
                 .warningReason(item.getWarningReason());
     }
 
+    /**
+     * 薪资 payroll 列表转VO。
+     * @param item 薪资 payroll
+     * @param batch 薪资批次
+     * @return 薪资 payrollVO
+     */
     private SalaryPayslipListVO toPayslipListVO(SalaryBatchItemEntity item, SalaryBatchEntity batch) {
         StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
         return SalaryPayslipListVO.builder()
@@ -938,6 +1094,11 @@ public class SalaryServiceImpl implements SalaryService {
                 .build();
     }
 
+    /**
+     * 规范化薪资账套范围类型。
+     * @param scopeType 范围类型
+     * @return 规范化后的范围类型
+     */
     private String normalizeScopeType(String scopeType) {
         if (StrUtil.isBlank(scopeType)) {
             return "ALL";
@@ -952,6 +1113,12 @@ public class SalaryServiceImpl implements SalaryService {
         return normalized;
     }
 
+    /**
+     * 规范化薪资账套范围值。
+     * @param scopeType 范围类型
+     * @param requestDTO 请求参数
+     * @return 规范化后的范围值
+     */
     private String normalizeScopeValue(String scopeType, SalaryBatchCreateRequestDTO requestDTO) {
         if ("EMPLOYEE".equals(scopeType) && CollUtil.isNotEmpty(requestDTO.getEmployeeIds())) {
             return requestDTO.getEmployeeIds().stream().map(String::valueOf).collect(Collectors.joining(","));
@@ -965,6 +1132,11 @@ public class SalaryServiceImpl implements SalaryService {
         throw new GlobalException(ErrorCode.PARAM_REQUIRED, "非 ALL 范围必须传入 scopeValue 或 employeeIds");
     }
 
+    /**
+     * 规范化薪资月份。
+     * @param month 薪资月份
+     * @return 规范化后的薪资月份
+     */
     private String normalizeMonth(String month) {
         if (StrUtil.isBlank(month)) {
             throw new GlobalException(ErrorCode.PARAM_REQUIRED, "薪资月份不能为空");
@@ -972,6 +1144,11 @@ public class SalaryServiceImpl implements SalaryService {
         return YearMonth.parse(month).toString();
     }
 
+    /**
+     * 解析 Long 列表。
+     * @param value 值
+     * @return Long 列表
+     */
     private List<Long> parseLongList(String value) {
         if (StrUtil.isBlank(value)) {
             return List.of();
@@ -985,10 +1162,20 @@ public class SalaryServiceImpl implements SalaryService {
         return values;
     }
 
+    /**
+     * 格式化金额。
+     * @param value 值
+     * @return 格式化后的金额
+     */
     private BigDecimal money(BigDecimal value) {
         return Optional.ofNullable(value).orElse(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
     }
 
+    /**
+     * 银行账号脱敏。
+     * @param bankAccount 银行账号
+     * @return 脱敏后的银行账号
+     */
     private String maskBankAccount(String bankAccount) {
         if (StrUtil.isBlank(bankAccount)) {
             return null;
@@ -999,6 +1186,10 @@ public class SalaryServiceImpl implements SalaryService {
         return bankAccount.substring(0, 4) + " **** **** " + bankAccount.substring(bankAccount.length() - 4);
     }
 
+    /**
+     * 删除薪资账套缓存。
+     * @param templateId 薪资账套ID
+     */
     private void evictTemplateCache(Long templateId) {
         StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
         if (redisTemplate != null) {
@@ -1006,6 +1197,10 @@ public class SalaryServiceImpl implements SalaryService {
         }
     }
 
+    /**
+     * 删除薪资批次缓存。
+     * @param batchId 薪资批次ID
+     */
     private void evictBatchCache(Long batchId) {
         StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
         if (redisTemplate != null) {
@@ -1013,6 +1208,10 @@ public class SalaryServiceImpl implements SalaryService {
         }
     }
 
+    /**
+     * 获取密码编码器。
+     * @return 密码编码器
+     */
     private PasswordEncoder getPasswordEncoder() {
         return Optional.ofNullable(passwordEncoderProvider.getIfAvailable()).orElseGet(BCryptPasswordEncoder::new);
     }

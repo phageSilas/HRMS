@@ -57,6 +57,11 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
 
     private final EmployeeSnapshotMapper employeeSnapshotMapper;
 
+    /**
+     * 分页查询转正申请。
+     * @param queryDTO 转正申请查询参数
+     * @return 转正申请分页列表
+     */
     @Override
     public PageResult<RegularApplicationPageVO> pageRegularApplications(RegularApplicationQueryDTO queryDTO) {
         if (TAB_EVALUATED.equals(queryDTO.getTab())) {
@@ -65,6 +70,14 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
         return pagePendingRegularEmployees(queryDTO);
     }
 
+    /**
+     * 提交转正申请。
+     *
+     * @param employeeId 员工ID
+     * @param requestDTO 转正申请参数
+     * @return 转正申请结果
+     * 本方法使用的工具类: 无
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public RegularApplicationApplyVO applyRegular(Long employeeId, RegularApplicationApplyRequestDTO requestDTO) {

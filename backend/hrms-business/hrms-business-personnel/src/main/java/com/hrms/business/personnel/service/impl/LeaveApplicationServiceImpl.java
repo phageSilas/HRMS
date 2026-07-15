@@ -54,6 +54,11 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
 
     private final EmployeeSnapshotMapper employeeSnapshotMapper;
 
+    /**
+     * 离职申请分页查询
+     * @param queryDTO 离职申请查询参数
+     * @return 离职申请分页列表
+     */
     @Override
     public PageResult<LeaveApplicationPageVO> pageLeaveApplications(LeaveApplicationQueryDTO queryDTO) {
         int pageNum = normalizePageNum(queryDTO.getPageNum());
@@ -72,6 +77,11 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
         return PageResult.of(records, page.getTotal(), pageNum, pageSize);
     }
 
+    /**
+     * 创建离职申请
+     * @param requestDTO 离职申请创建参数
+     * @return 离职申请创建结果
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public LeaveApplicationCreateVO createLeaveApplication(LeaveApplicationCreateRequestDTO requestDTO) {
