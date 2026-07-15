@@ -17,4 +17,10 @@ public final class AttendanceMqConstants {
      * 打卡成功事件 routing key。
      */
     public static final String CLOCK_CREATED_ROUTING_KEY = "attendance.clock.created";
+
+    /**
+     * 打卡成功事件队列。
+     */
+    public static final String CLOCK_CREATED_QUEUE = "hrms.attendance.clock.created.queue";
+
 }

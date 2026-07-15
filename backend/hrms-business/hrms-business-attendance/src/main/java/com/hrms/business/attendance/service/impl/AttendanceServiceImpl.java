@@ -27,9 +27,9 @@ import com.hrms.business.attendance.mapper.AttendanceRecordMapper;
 import com.hrms.business.attendance.mapper.AttendanceEmployeeSnapshotMapper;
 import com.hrms.business.attendance.mapper.LeaveRequestMapper;
 import com.hrms.business.attendance.mapper.AttendanceDictDataMapper;
+import com.hrms.business.attendance.mq.AttendanceClockCreatedProducer;
 import com.hrms.business.attendance.mq.AttendanceClockCreatedEvent;
 import com.hrms.business.attendance.mq.AttendanceClockEventHandler;
-import com.hrms.business.attendance.mq.AttendanceMqConstants;
 import com.hrms.business.attendance.service.AttendanceService;
 import com.hrms.business.attendance.vo.AttendanceClockVO;
 import com.hrms.business.attendance.vo.AttendanceCalendarDayVO;
@@ -47,7 +47,6 @@ import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -103,7 +102,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     private final StringRedisTemplate stringRedisTemplate;
 
-    private final RabbitTemplate rabbitTemplate;
+    private final AttendanceClockCreatedProducer attendanceClockCreatedProducer;
 
     private final AttendanceClockEventHandler attendanceClockEventHandler;
 
@@ -1040,32 +1039,31 @@ public class AttendanceServiceImpl implements AttendanceService {
      */
     private AttendanceClockCreatedEvent buildClockCreatedEvent(AttendanceRecordEntity record, ClockPeriodEnum period,
                                                                String status, LocalDateTime clockTime, String deviceInfo) {
-        AttendanceClockCreatedEvent event = new AttendanceClockCreatedEvent();
-        event.setMessageId(IdUtil.fastSimpleUUID());
-        event.setEmployeeId(record.getEmployeeId());
-        event.setGroupId(record.getGroupId());
-        event.setRecordId(record.getId());
-        event.setRecordDate(record.getRecordDate());
-        event.setPeriod(period.name());
-        event.setStatus(status);
-        event.setClockTime(clockTime);
-        event.setDeviceInfo(deviceInfo);
-        return event;
+        return AttendanceClockCreatedEvent.builder()
+                .messageId(IdUtil.fastSimpleUUID())
+                .employeeId(record.getEmployeeId())
+                .groupId(record.getGroupId())
+                .recordId(record.getId())
+                .recordDate(record.getRecordDate())
+                .period(period.name())
+                .status(status)
+                .clockTime(clockTime)
+                .deviceInfo(deviceInfo)
+                .build();
     }
 
     /**
      * 发布打卡成功事件。
      *
      * @param event 打卡成功事件
-     * 本方法使用的工具类: RabbitTemplate(spring-amqp)
+     * 本方法使用的工具类: AttendanceClockCreatedProducer(本模块mq包)
      */
     private void publishClockCreatedEvent(AttendanceClockCreatedEvent event) {
         try {
-            rabbitTemplate.convertAndSend(AttendanceMqConstants.EXCHANGE, AttendanceMqConstants.CLOCK_CREATED_ROUTING_KEY, event);
+            attendanceClockCreatedProducer.send(event);
         } catch (Exception ex) {
-            log.warn("publish attendance.clock.created failed, use temp handler, event={}", event, ex);
-            // attendanceClockCreatedProducer.send(event); 本接口需要调用考勤 MQ Producer 发送 attendance.clock.created。
-            tempPublishClockCreatedEvent(event);
+            log.warn("publish attendance.clock.created failed, event={}", event, ex);
+            // tempPublishClockCreatedEvent(event); 旧同步兜底逻辑先保留注释，当前打卡后置动作改为 RabbitMQ 异步消费。
         }
     }
 
