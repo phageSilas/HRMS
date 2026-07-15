@@ -5,6 +5,8 @@ import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.hrms.business.employee.entity.EmployeeEntity;
+import com.hrms.business.employee.service.EmployeeService;
 import com.hrms.business.personnel.convert.RegularApplicationConvert;
 import com.hrms.business.personnel.dto.RegularApplicationApplyRequestDTO;
 import com.hrms.business.personnel.dto.RegularApplicationQueryDTO;
@@ -56,6 +58,8 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
     private final RegularApplicationMapper regularApplicationMapper;
 
     private final EmployeeSnapshotMapper employeeSnapshotMapper;
+
+    private final EmployeeService employeeService;
 
     /**
      * 分页查询转正申请。
@@ -130,11 +134,35 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
      */
     private EmployeeSnapshotEntity getRequiredEmployeeSnapshot(Long employeeId) {
         // employeeService.getEmployeeSnapshot(employeeId); 本接口需要调用 hrms-business-employee 模块的员工快照详情接口
-        EmployeeSnapshotEntity employeeSnapshot = employeeSnapshotMapper.selectById(employeeId);
-        if (employeeSnapshot == null) {
+        // TODO 跨模块调用已完成：当前调用 EmployeeService#getEmployeeBrief(employeeId) 获取员工简要信息。
+        EmployeeEntity employee = employeeService.getEmployeeBrief(employeeId);
+        if (employee == null) {
             throw new GlobalException(EMPLOYEE_NOT_FOUND);
         }
-        return employeeSnapshot;
+        return toEmployeeSnapshot(employee);
+    }
+
+    /**
+     * 将员工模块实体转换为本模块员工快照。
+     *
+     * @param employee 员工模块实体
+     * @return 本模块员工快照
+     * 本方法使用的工具类: 无
+     */
+    private EmployeeSnapshotEntity toEmployeeSnapshot(EmployeeEntity employee) {
+        EmployeeSnapshotEntity snapshot = new EmployeeSnapshotEntity();
+        snapshot.setId(employee.getId());
+        snapshot.setEmployeeNo(employee.getEmployeeNo());
+        snapshot.setEmployeeName(employee.getEmployeeName());
+        snapshot.setDeptId(employee.getDeptId());
+        snapshot.setPostId(employee.getPostId());
+        snapshot.setLeaderId(employee.getLeaderId());
+        snapshot.setJobLevel(employee.getJobLevel());
+        snapshot.setEmploymentStatus(employee.getEmploymentStatus());
+        snapshot.setHireDate(employee.getHireDate());
+        snapshot.setProbationMonth(employee.getProbationMonth());
+        snapshot.setBaseSalary(employee.getBaseSalary());
+        return snapshot;
     }
 
     /**
