@@ -127,7 +127,8 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
     public EntryApplicationSubmitVO submitEntryApplication(Long id) {
         EntryApplicationEntity entity = getRequiredEntryApplication(id);
         assertDraft(entity);
-        // TODO 跨模块调用入职模块,已实现, approvalService.startEntryApproval(entity); 本接口需要调用 hrms-business-approval 模块的发起入职审批接口
+
+        // TODO 跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起入职审批。
         Long approvalInstanceId = approvalEngine.startApproval(
                 ApprovalTypeEnum.ENTRY.getCode(),       // approvalType = "ENTRY"
                 entity.getId(),                          // bizId
@@ -179,15 +180,17 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
             assertApproved(lockedEntity);
             // employeeService.generateEmployeeNo(lockedEntity); 本接口需要调用 hrms-business-employee 模块的生成员工工号接口
             String employeeNo = tempGenerateEmployeeNo(lockedEntity);
-            // employeeService.createEmployee(lockedEntity, employeeNo); 本接口需要调用 hrms-business-employee 模块的创建员工档案接口
             lockedEntity.setActualHireDate(requestDTO.getActualHireDate());
+
             // TODO 跨模块调用已完成：当前调用 EmployeeService#createEmployee(createDTO) 创建员工档案。
             EmployeeEntity createdEmployee = tempCreateEmployee(lockedEntity, employeeNo);
+
             Long employeeId = createdEmployee.getId();
             employeeNo = StrUtil.blankToDefault(createdEmployee.getEmployeeNo(), employeeNo);
-            // authService.createEntryAccount(lockedEntity.getPhone(), employeeNo); 本接口需要调用 hrms-system-auth 模块的创建入职账号接口
+
             // TODO 跨模块调用已完成：当前调用 UserService#createUser(createDTO) 创建入职账号。
             tempCreateEntryAccount(lockedEntity, employeeNo, employeeId);
+
             lockedEntity.setApprovalStatus(ApplicationStatusEnum.ENTERED.getCode());
             entryApplicationMapper.updateById(lockedEntity);
             // entryConfirmedProducer.send(event); 本接口需要调用通知/MQ模块发送 personnel.entry.confirmed 事件和欢迎通知

@@ -233,7 +233,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         correction.setCorrectionReason(requestDTO.getReason());
         correction.setApprovalStatus(1);
         attendanceCorrectionMapper.insert(correction);
-        // approvalService.startAttendanceCorrectionApproval(correction); 本接口需要调用 hrms-business-approval 模块的补卡审批发起方法。
+
         // TODO 跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起补卡审批。
         Long approvalInstanceId = approvalEngine.startApproval(
                 ApprovalTypeEnum.CORRECTION.getCode(),
@@ -353,7 +353,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         entity.setAttachmentUrl(resolveAttachment(requestDTO));
         entity.setApprovalStatus(1);
         leaveRequestMapper.insert(entity);
-        // approvalService.startLeaveApproval(leaveRequest); 本接口需要调用 hrms-business-approval 模块的请假审批发起方法。
+
         // TODO 跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起请假审批。
         Long approvalInstanceId = approvalEngine.startApproval(
                 ApprovalTypeEnum.LEAVE_REQUEST.getCode(),

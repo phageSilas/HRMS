@@ -400,7 +400,7 @@ public class SalaryServiceImpl implements SalaryService {
         if (Optional.ofNullable(batch.getBlockCount()).orElse(0) > 0) {
             throw new GlobalException(ErrorCode.BUSINESS_ERROR, "存在阻断异常，不能提交审批");
         }
-        // approvalService.startApproval("SALARY_BATCH", batchId); 本接口需要调用 hrms-business-approval 模块的薪资批次审批发起接口。
+
         // TODO 跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起薪资批次审批。
         Long approvalInstanceId = approvalEngine.startApproval(
                 ApprovalTypeEnum.SALARY.getCode(),

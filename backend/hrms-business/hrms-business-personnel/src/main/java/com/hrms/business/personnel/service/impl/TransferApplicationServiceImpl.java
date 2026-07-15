@@ -114,7 +114,7 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
         entity.setReason(requestDTO.getReason());
         entity.setApprovalStatus(ApplicationStatusEnum.APPROVING.getCode());
         transferApplicationMapper.insert(entity);
-        // approvalService.startApproval("TRANSFER", entity.getId()); 本接口需要调用 hrms-business-approval 模块的调岗审批发起接口
+
         // TODO 跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起调岗审批。
         Long approvalInstanceId = approvalEngine.startApproval(
                 ApprovalTypeEnum.TRANSFER.getCode(),
@@ -152,7 +152,6 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
      * 本方法使用的工具类: 无
      */
     private EmployeeSnapshotEntity getRequiredEmployeeSnapshot(Long employeeId) {
-        // employeeService.getEmployeeSnapshot(employeeId); 本接口需要调用 hrms-business-employee 模块的员工快照详情接口
         // TODO 跨模块调用已完成：当前调用 EmployeeService#getEmployeeBrief(employeeId) 获取员工简要信息。
         EmployeeEntity employee = employeeService.getEmployeeBrief(employeeId);
         if (employee == null) {
@@ -231,7 +230,6 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
         if (StrUtil.isBlank(keyword)) {
             return Collections.emptyList();
         }
-        // employeeService.listEmployeeIdsByKeyword(keyword); 本接口需要调用 hrms-business-employee 模块的员工关键词查询接口
         // TODO 跨模块调用已完成：当前调用 EmployeeService#listEmployees(queryDTO) 按关键词查询员工列表。
         EmployeeQueryDTO queryDTO = new EmployeeQueryDTO();
         queryDTO.setKeyword(keyword);
@@ -254,7 +252,6 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
         if (CollUtil.isEmpty(employeeIds)) {
             return Collections.emptyMap();
         }
-        // employeeService.listEmployeeSnapshots(employeeIds); 本接口需要调用 hrms-business-employee 模块的员工快照批量查询接口
         // TODO 跨模块调用已完成：当前员工模块暂无批量快照接口，暂用 EmployeeService#getEmployeeBrief(employeeId) 循环补全。
         return employeeIds.stream()
                 .map(employeeService::getEmployeeBrief)
