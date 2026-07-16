@@ -18,6 +18,7 @@ import com.hrms.business.attendance.dto.LeaveCreateRequestDTO;
 import com.hrms.business.attendance.dto.MonthlyStatGenerateRequestDTO;
 import com.hrms.business.attendance.entity.AttendanceCorrectionEntity;
 import com.hrms.business.attendance.entity.AttendanceGroupEntity;
+import com.hrms.business.attendance.entity.AttendanceGroupMemberEntity;
 import com.hrms.business.attendance.entity.AttendanceRecordEntity;
 import com.hrms.business.attendance.entity.EmployeeSnapshotEntity;
 import com.hrms.business.attendance.entity.LeaveBalanceEntity;
@@ -26,6 +27,7 @@ import com.hrms.business.attendance.entity.DictDataEntity;
 import com.hrms.business.attendance.enums.ClockPeriodEnum;
 import com.hrms.business.attendance.mapper.AttendanceGroupMapper;
 import com.hrms.business.attendance.mapper.AttendanceCorrectionMapper;
+import com.hrms.business.attendance.mapper.AttendanceGroupMemberMapper;
 import com.hrms.business.attendance.mapper.AttendanceRecordMapper;
 import com.hrms.business.attendance.mapper.AttendanceEmployeeSnapshotMapper;
 import com.hrms.business.attendance.mapper.LeaveBalanceMapper;
@@ -95,6 +97,8 @@ public class AttendanceServiceImpl implements AttendanceService {
     private static final ErrorCode LEAVE_DAYS_INVALID = new ErrorCode(40057, "请假天数必须大于0且不超过30天");
 
     private final AttendanceGroupMapper attendanceGroupMapper;
+
+    private final AttendanceGroupMemberMapper attendanceGroupMemberMapper;
 
     private final AttendanceRecordMapper attendanceRecordMapper;
 
@@ -178,11 +182,11 @@ public class AttendanceServiceImpl implements AttendanceService {
     @Transactional(rollbackFor = Exception.class)
     public AttendanceClockVO clock(AttendanceClockRequestDTO requestDTO, String clientIp) {
         EmployeeSnapshotEntity employee = getCurrentEmployeeSnapshot();
-        AttendanceGroupEntity group = tempResolveEmployeeAttendanceGroup(employee);
-        validateClockRange(group, requestDTO, clientIp);
-
         LocalDateTime now = LocalDateTime.now();
         LocalDate recordDate = now.toLocalDate();
+        AttendanceGroupEntity group = resolveEmployeeAttendanceGroup(employee.getId(), recordDate);
+        validateClockRange(group, requestDTO, clientIp);
+
         AttendanceRecordEntity existing = attendanceRecordMapper.selectByEmployeeAndDate(employee.getId(), recordDate);
         ClockPeriodEnum period = resolveClockPeriod(requestDTO, existing);
         String status = calculateClockStatus(group, period, now.toLocalTime());
@@ -782,7 +786,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         if (existing != null) {
             return existing;
         }
-        AttendanceGroupEntity group = tempResolveEmployeeAttendanceGroup(new EmployeeSnapshotEntity());
+        AttendanceGroupEntity group = resolveEmployeeAttendanceGroup(employeeId, date);
         AttendanceRecordEntity record = new AttendanceRecordEntity();
         record.setEmployeeId(employeeId);
         record.setGroupId(group.getId());
@@ -952,23 +956,57 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     /**
-     * 临时解析员工所属考勤组。
+     * 解析员工在指定日期生效的考勤组。
      *
-     * @param employee 员工快照
+     * @param employeeId  员工ID
+     * @param targetDate 目标日期
      * @return 考勤组
-     * 本方法使用的工具类: GlobalException(hrms-common)
+     * 本方法使用的工具类: GlobalException(hrms-common),LambdaQueryWrapper(mybatis-plus)
      */
-    private AttendanceGroupEntity tempResolveEmployeeAttendanceGroup(EmployeeSnapshotEntity employee) {
-        // attendanceGroupMemberService.getEmployeeGroup(employee.getId()); 本接口需要调用考勤组成员/员工归属解析接口。
+    private AttendanceGroupEntity resolveEmployeeAttendanceGroup(Long employeeId, LocalDate targetDate) {
+        AttendanceGroupMemberEntity member = attendanceGroupMemberMapper.selectOne(new LambdaQueryWrapper<AttendanceGroupMemberEntity>()
+                .eq(AttendanceGroupMemberEntity::getEmployeeId, employeeId)
+                .eq(AttendanceGroupMemberEntity::getStatus, 1)
+                .eq(AttendanceGroupMemberEntity::getIsDeleted, 0)
+                .le(AttendanceGroupMemberEntity::getEffectiveStartDate, targetDate)
+                .and(wrapper -> wrapper.isNull(AttendanceGroupMemberEntity::getEffectiveEndDate)
+                        .or()
+                        .ge(AttendanceGroupMemberEntity::getEffectiveEndDate, targetDate))
+                .orderByDesc(AttendanceGroupMemberEntity::getEffectiveStartDate)
+                .orderByDesc(AttendanceGroupMemberEntity::getId)
+                .last("LIMIT 1"));
+        if (member == null) {
+            throw new GlobalException(ATTENDANCE_GROUP_NOT_FOUND, "当前员工未配置有效考勤组");
+        }
         AttendanceGroupEntity group = attendanceGroupMapper.selectOne(new LambdaQueryWrapper<AttendanceGroupEntity>()
+                .eq(AttendanceGroupEntity::getId, member.getGroupId())
                 .eq(AttendanceGroupEntity::getStatus, 1)
-                .orderByAsc(AttendanceGroupEntity::getId)
+                .eq(AttendanceGroupEntity::getIsDeleted, 0)
                 .last("LIMIT 1"));
         if (group == null) {
-            throw new GlobalException(ATTENDANCE_GROUP_NOT_FOUND);
+            throw new GlobalException(ATTENDANCE_GROUP_NOT_FOUND, "当前员工未配置有效考勤组");
         }
         return group;
     }
+
+//    /**
+//     * 已停用：临时解析员工所属考勤组，仅作历史临时逻辑参考；当前已替换为 hr_attendance_group_member 生效关系表解析。
+//     *
+//     * @param employee 员工快照
+//     * @return 考勤组
+//     * 本方法使用的工具类: GlobalException(hrms-common)
+//     */
+//    private AttendanceGroupEntity tempResolveEmployeeAttendanceGroup(EmployeeSnapshotEntity employee) {
+//        // attendanceGroupMemberService.getEmployeeGroup(employee.getId()); 本接口需要调用考勤组成员/员工归属解析接口。
+//        AttendanceGroupEntity group = attendanceGroupMapper.selectOne(new LambdaQueryWrapper<AttendanceGroupEntity>()
+//                .eq(AttendanceGroupEntity::getStatus, 1)
+//                .orderByAsc(AttendanceGroupEntity::getId)
+//                .last("LIMIT 1"));
+//        if (group == null) {
+//            throw new GlobalException(ATTENDANCE_GROUP_NOT_FOUND);
+//        }
+//        return group;
+//    }
 
     /**
      * 校验打卡 IP 与 GPS 范围。
