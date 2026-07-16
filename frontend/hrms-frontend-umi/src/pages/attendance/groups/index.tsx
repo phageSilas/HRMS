@@ -11,11 +11,12 @@ import {
   CalendarOutlined,
   ClockCircleOutlined,
   EditOutlined,
+  FileSearchOutlined,
   PlusOutlined,
   TeamOutlined,
 } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
-import { useRequest } from '@umijs/max';
+import { history, useRequest } from '@umijs/max';
 import {
   Button,
   Card,
@@ -324,6 +325,17 @@ const AttendanceGroupsPage: React.FC = () => {
                         <span>
                           迟到阈值 {group.lateThresholdMinutes ?? 0}min
                         </span>
+                      </div>
+                      <div className={styles.groupActions}>
+                        <Button
+                          type="link"
+                          icon={<FileSearchOutlined />}
+                          onClick={() =>
+                            history.push(`/attendance/record?groupId=${group.id}`)
+                          }
+                        >
+                          查看记录
+                        </Button>
                       </div>
                     </Space>
                   </Card>
