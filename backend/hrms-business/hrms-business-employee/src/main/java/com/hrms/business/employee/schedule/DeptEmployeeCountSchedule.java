@@ -32,6 +32,7 @@ public class DeptEmployeeCountSchedule {
 
     /**
      * 每天凌晨 2 点执行
+     * 生产环境建议：每天凌晨 2 点执行
      */
     @Scheduled(cron = "0 0 2 * * ?")
     public void refreshDeptEmployeeCount() {

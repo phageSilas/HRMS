@@ -30,8 +30,10 @@ import com.hrms.system.organization.service.DeptService;
 import com.hrms.system.organization.service.PostService;
 import com.hrms.system.organization.vo.DeptDetailVO;
 import com.hrms.system.organization.vo.PostVO;
+import com.hrms.business.employee.event.EmployeeChangeEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,6 +54,7 @@ public class EmployeeServiceImpl implements EmployeeService {
     private final DeptService deptService;
     private final PostService postService;
     private final UserService userService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     public PageResult<EmployeeListVO> listEmployees(EmployeeQueryDTO queryDTO) {
@@ -160,6 +163,9 @@ public class EmployeeServiceImpl implements EmployeeService {
 
         // 创建系统账号
         createUserAccount(entity);
+
+        // 发布员工创建事件，更新部门人数
+        eventPublisher.publishEvent(new EmployeeChangeEvent(this, EmployeeChangeEvent.ChangeType.CREATE, entity.getId(), entity.getDeptId(), entity.getDeptId()));
 
         return entity;
     }
@@ -270,7 +276,16 @@ public class EmployeeServiceImpl implements EmployeeService {
             entity.setRemark(updateDTO.getRemark());
         }
 
+        // 记录原部门ID（用于事件通知）
+        Long oldDeptId = entity.getDeptId();
+
         employeeMapper.updateById(entity);
+
+        // 发布员工更新事件，更新部门人数
+        if (updateDTO.getDeptId() != null && !updateDTO.getDeptId().equals(oldDeptId)) {
+            eventPublisher.publishEvent(new EmployeeChangeEvent(this, EmployeeChangeEvent.ChangeType.UPDATE, id, oldDeptId, updateDTO.getDeptId()));
+        }
+
         return entity;
     }
 
@@ -343,6 +358,9 @@ public class EmployeeServiceImpl implements EmployeeService {
 
         // 逻辑删除
         employeeMapper.deleteById(id);
+
+        // 发布员工删除事件，更新部门人数
+        eventPublisher.publishEvent(new EmployeeChangeEvent(this, EmployeeChangeEvent.ChangeType.DELETE, id, entity.getDeptId(), null));
     }
 
     @Override
