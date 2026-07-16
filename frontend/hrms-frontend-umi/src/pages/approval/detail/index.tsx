@@ -27,6 +27,105 @@ import {
 } from '@/services/approval';
 import type { ApprovalDetail } from '@/services/approval';
 
+// ============ 业务类型表单字段中文映射 ============
+
+/** 各业务类型对应的表单字段中文标签 */
+const FORM_LABEL_MAP: Record<string, Record<string, string>> = {
+  LEAVE_REQUEST: {
+    leaveType: '请假类型',
+    startTime: '开始时间',
+    endTime: '结束时间',
+    totalDays: '请假天数',
+    totalHours: '请假小时数',
+    leaveReason: '请假事由',
+  },
+  CORRECTION: {
+    correctionDate: '补卡日期',
+    correctionType: '补卡类型',
+    correctionReason: '补卡原因',
+  },
+  OVERTIME: {
+    overtimeDate: '加班日期',
+    duration: '加班时长（小时）',
+    reason: '加班事由',
+  },
+  SALARY: {
+    yearMonth: '核算月份',
+    batchName: '批次名称',
+    remark: '备注',
+  },
+  ENTRY: {
+    employeeName: '员工姓名',
+    deptName: '部门',
+    postName: '职位',
+    hireDate: '入职日期',
+    remark: '备注',
+  },
+  REGULAR: {
+    employeeName: '员工姓名',
+    probationEndDate: '试用期结束日期',
+    evaluation: '评估意见',
+  },
+  TRANSFER: {
+    employeeName: '员工姓名',
+    fromDept: '原部门',
+    toDept: '目标部门',
+    fromPost: '原职位',
+    toPost: '目标职位',
+    reason: '调岗原因',
+  },
+  LEAVE: {
+    employeeName: '员工姓名',
+    leaveDate: '离职日期',
+    leaveType: '离职类型',
+    reason: '离职原因',
+  },
+};
+
+/** 补卡类型值映射 */
+const CORRECTION_TYPE_MAP: Record<string, string> = {
+  CLOCK_IN: '上班卡',
+  CLOCK_OUT: '下班卡',
+};
+
+/** 请假类型值映射 */
+const LEAVE_TYPE_MAP: Record<string, string> = {
+  ANNUAL: '年假',
+  COMPASSIONATE: '调休',
+  SICK: '病假',
+  PERSONAL: '事假',
+  MARRIAGE: '婚假',
+  MATERNITY: '产假',
+  FUNERAL: '丧假',
+};
+
+/**
+ * 根据业务类型和字段名获取中文标签
+ */
+const getFormLabel = (businessType: string, key: string): string => {
+  const typeMap = FORM_LABEL_MAP[businessType];
+  return typeMap?.[key] || key;
+};
+
+/**
+ * 根据业务类型和字段名格式化值
+ */
+const formatFormValue = (businessType: string, key: string, value: any): string => {
+  if (value === null || value === undefined || value === '') return '-';
+
+  // 补卡类型转中文
+  if (businessType === 'CORRECTION' && key === 'correctionType') {
+    return CORRECTION_TYPE_MAP[String(value)] || String(value);
+  }
+
+  // 请假类型转中文
+  if (businessType === 'LEAVE_REQUEST' && key === 'leaveType') {
+    return LEAVE_TYPE_MAP[String(value)] || String(value);
+  }
+
+  return String(value);
+};
+
 /** 审批状态颜色映射 */
 const STATUS_COLOR_MAP: Record<string, string> = {
   PENDING: 'processing',
@@ -230,8 +329,11 @@ const DetailPage: React.FC = () => {
               {detail.formData && Object.entries(detail.formData).length > 0 ? (
                 <Descriptions column={1}>
                   {Object.entries(detail.formData).map(([key, value]) => (
-                    <Descriptions.Item label={key} key={key}>
-                      {String(value ?? '')}
+                    <Descriptions.Item
+                      label={getFormLabel(detail.businessType, key)}
+                      key={key}
+                    >
+                      {formatFormValue(detail.businessType, key, value)}
                     </Descriptions.Item>
                   ))}
                 </Descriptions>

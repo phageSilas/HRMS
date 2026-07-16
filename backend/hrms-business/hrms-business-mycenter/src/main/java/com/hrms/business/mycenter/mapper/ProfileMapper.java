@@ -12,7 +12,7 @@ import org.apache.ibatis.annotations.Update;
 public interface ProfileMapper {
 
     /**
-     * 根据用户ID查询个人档案（含部门名称、职位名称）
+     * 根据用户ID查询个人档案（通过 hr_employee.user_id 关联）
      */
     @Select({
             "<script>",
@@ -35,13 +35,43 @@ public interface ProfileMapper {
             "  e.emergency_phone AS emergencyPhone,",
             "  e.current_address AS currentAddress",
             "FROM hr_employee e",
-            "JOIN sys_user u ON e.id = u.employee_id",
             "LEFT JOIN sys_dept d ON e.dept_id = d.id",
             "LEFT JOIN sys_post p ON e.post_id = p.id",
-            "WHERE u.id = #{userId}",
+            "WHERE e.user_id = #{userId}",
             "</script>"
     })
     ProfileVO selectProfileByUserId(@Param("userId") Long userId);
+
+    /**
+     * 根据员工ID查询个人档案（通过 hr_employee.id 关联 sys_user.employee_id）
+     */
+    @Select({
+            "<script>",
+            "SELECT",
+            "  e.id AS employeeId,",
+            "  e.employee_no AS employeeNo,",
+            "  e.employee_name AS employeeName,",
+            "  e.gender,",
+            "  e.phone,",
+            "  e.email,",
+            "  e.id_card_no AS idCard,",
+            "  e.birthday,",
+            "  e.dept_id AS deptId,",
+            "  d.dept_name AS deptName,",
+            "  p.post_name AS postName,",
+            "  e.job_level AS jobLevel,",
+            "  e.leader_id AS leaderId,",
+            "  e.hire_date AS hireDate,",
+            "  e.emergency_contact AS emergencyContact,",
+            "  e.emergency_phone AS emergencyPhone,",
+            "  e.current_address AS currentAddress",
+            "FROM hr_employee e",
+            "LEFT JOIN sys_dept d ON e.dept_id = d.id",
+            "LEFT JOIN sys_post p ON e.post_id = p.id",
+            "WHERE e.id = #{employeeId}",
+            "</script>"
+    })
+    ProfileVO selectProfileByEmployeeId(@Param("employeeId") Long employeeId);
 
     /**
      * 更新员工可编辑字段

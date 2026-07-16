@@ -245,6 +245,7 @@ public class AttendanceServiceImpl implements AttendanceService {
             vo.setCorrectionType(e.getCorrectionType());
             vo.setCorrectionReason(e.getCorrectionReason());
             vo.setApprovalStatus(e.getApprovalStatus());
+            vo.setApprovalInstanceId(e.getApprovalInstanceId());
             vo.setCreateTime(e.getCreateTime());
             return vo;
         }).collect(Collectors.toList());
@@ -320,6 +321,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                     .reason(e.getReason())
                     .approvalStatus(e.getApprovalStatus())
                     .approvalStatusDesc(statusDesc)
+                    .approvalInstanceId(e.getApprovalInstanceId())
                     .createTime(e.getCreateTime())
                     .build();
         }).collect(Collectors.toList());

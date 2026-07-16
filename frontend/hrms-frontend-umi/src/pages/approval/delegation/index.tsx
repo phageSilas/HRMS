@@ -3,13 +3,13 @@
  *
  * 功能：查看当前生效委托、创建新委托、查看历史委托记录、取消委托
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
 import type { ProColumns } from '@ant-design/pro-components';
 import {
   Card,
   Form,
-  InputNumber,
+  Select,
   DatePicker,
   Input,
   Button,
@@ -26,6 +26,8 @@ import {
   createDelegation,
   cancelDelegation,
 } from '@/services/approval';
+import { getEmployeeList } from '@/services/employee';
+import type { EmployeeBrief } from '@/services/employee';
 
 // ============ 常量定义 ============
 
@@ -42,6 +44,8 @@ const DelegationPage: React.FC = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState<boolean>(true);
   const [submitting, setSubmitting] = useState<boolean>(false);
+  const [employeeOptions, setEmployeeOptions] = useState<EmployeeBrief[]>([]);
+  const [searching, setSearching] = useState<boolean>(false);
   const [activeDelegation, setActiveDelegation] = useState<Delegation | null>(
     null,
   );
@@ -66,6 +70,32 @@ const DelegationPage: React.FC = () => {
   useEffect(() => {
     fetchDelegations();
   }, [fetchDelegations]);
+
+  // ============ 员工搜索 ============
+
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /** 输入姓名/工号搜索员工（300ms 防抖） */
+  const handleEmployeeSearch = useCallback((keyword: string) => {
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current);
+    }
+    if (!keyword || keyword.length < 1) {
+      setEmployeeOptions([]);
+      return;
+    }
+    searchTimerRef.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const result = await getEmployeeList({ keyword, pageNum: 1, pageSize: 20 });
+        setEmployeeOptions(result.records || []);
+      } catch {
+        setEmployeeOptions([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+  }, []);
 
   // ============ 事件处理 ============
 
@@ -194,11 +224,20 @@ const DelegationPage: React.FC = () => {
               <Form.Item
                 name="delegateeId"
                 label="被委托人"
-                rules={[{ required: true, message: '请输入被委托人用户ID' }]}
+                rules={[{ required: true, message: '请选择被委托人' }]}
               >
-                <InputNumber
-                  style={{ width: '100%' }}
-                  placeholder="请输入用户ID"
+                <Select
+                  showSearch
+                  placeholder="输入姓名或工号搜索员工"
+                  filterOption={false}
+                  notFoundContent={searching ? '搜索中...' : '未找到匹配员工'}
+                  loading={searching}
+                  onSearch={handleEmployeeSearch}
+                  labelInValue={false}
+                  options={employeeOptions.map((emp) => ({
+                    label: `${emp.employeeName}（${emp.employeeNo}）- ${emp.deptName || ''}${emp.postName ? '/' + emp.postName : ''}`,
+                    value: emp.id,
+                  }))}
                 />
               </Form.Item>
               <Form.Item

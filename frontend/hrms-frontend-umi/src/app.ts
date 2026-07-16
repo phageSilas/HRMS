@@ -134,16 +134,6 @@ export const layout: RunTimeLayoutConfig = ({ initialState }) => {
 
 /**
  * 请求配置
+ * 注意：前端使用自定义 axios 实例（@/utils/request），已在拦截器中统一处理 Result<T> 解包
+ * 因此不再配置 umi 的 request 运行时配置，避免 useRequest 二次解包导致数据丢失
  */
-export const request = {
-  timeout: 10000,
-  errorConfig: {
-    adaptor: (resData: { code: number; message: string }) => {
-      return {
-        success: resData.code === 20000,
-        errorMessage: resData.message,
-        errorCode: resData.code,
-      };
-    },
-  },
-};

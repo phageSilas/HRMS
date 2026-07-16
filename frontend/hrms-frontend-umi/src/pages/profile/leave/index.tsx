@@ -4,8 +4,8 @@
  */
 
 import { PlusOutlined } from '@ant-design/icons';
+import { history, useRequest } from '@umijs/max';
 import { PageContainer } from '@ant-design/pro-components';
-import { useRequest } from '@umijs/max';
 import {
   Button,
   Card,
@@ -28,7 +28,7 @@ import {
 import dayjs from 'dayjs';
 import React, { useMemo, useState } from 'react';
 import { cancelLeave, createLeave, getLeaveBalance, getLeaveList } from '@/services/profile';
-import type { LeaveRequestDTO } from '@/services/profile';
+import type { LeaveRequestDTO, LeaveVO } from '@/services/profile';
 
 const { Text } = Typography;
 
@@ -163,17 +163,26 @@ const ProfileLeavePage: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 100,
-      render: (_: any, record: { id: number; approvalStatus: number }) => {
-        // 草稿(0)或审批中(1)可取消
-        if (record.approvalStatus === 0 || record.approvalStatus === 1) {
-          return (
-            <Button type="link" danger onClick={() => handleCancelLeave(record.id)}>
-              取消
-            </Button>
-          );
-        }
-        return '-';
+      width: 160,
+      render: (_: any, record: LeaveVO) => {
+        return (
+          <Space>
+            {record.approvalInstanceId && (
+              <Button
+                type="link"
+                size="small"
+                onClick={() => history.push(`/approval/detail/${record.approvalInstanceId}`)}
+              >
+                查看进度
+              </Button>
+            )}
+            {record.approvalStatus === 0 || record.approvalStatus === 1 ? (
+              <Button type="link" danger size="small" onClick={() => handleCancelLeave(record.id)}>
+                取消
+              </Button>
+            ) : null}
+          </Space>
+        );
       },
     },
   ];

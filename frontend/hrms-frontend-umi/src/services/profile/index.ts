@@ -80,6 +80,7 @@ export interface MakeupRecordVO {
   correctionType: string;
   correctionReason: string;
   approvalStatus: number;
+  approvalInstanceId?: number;
   createTime: string;
 }
 
@@ -105,6 +106,7 @@ export interface LeaveVO {
   leaveReason: string;
   approvalStatus: number;
   approvalStatusDesc: string;
+  approvalInstanceId?: number;
   createTime: string;
 }
 
@@ -220,6 +222,7 @@ export interface OvertimeRecordVO {
   reason: string;
   approvalStatus: number;
   approvalStatusDesc: string;
+  approvalInstanceId?: number;
   createTime: string;
 }
 
