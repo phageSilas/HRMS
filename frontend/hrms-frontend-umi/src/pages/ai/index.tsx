@@ -2,11 +2,12 @@
  * AI 智能助手对话页
  *
  * 布局：左侧会话列表 + 右侧对话区
- * 功能：SSE 流式对话、会话切换、新建会话
+ * 功能：SSE 流式对话、Markdown 渲染、会话切换、新建/删除/重命名会话、路由建议卡片
  */
 
 import {
   DeleteOutlined,
+  EditOutlined,
   PlusOutlined,
   RobotOutlined,
   SendOutlined,
@@ -16,20 +17,27 @@ import { useRequest } from '@umijs/max';
 import {
   Avatar,
   Button,
+  Card,
   Input,
   List,
   message as antMsg,
   Popconfirm,
   Spin,
+  Tag,
   Typography,
 } from 'antd';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import rehypeRaw from 'rehype-raw';
+import remarkGfm from 'remark-gfm';
 import {
   type Conversation,
   type Message,
+  deleteConversation,
   getConversations,
   getMessages,
   sendChatMessage,
+  updateTitle,
 } from '@/services/ai';
 
 const { Text, Title } = Typography;
@@ -54,7 +62,7 @@ const HEADER_HEIGHT = 56;
 const styles = {
   container: {
     display: 'flex',
-    height: 'calc(100vh - 64px)', // 减去顶部导航
+    height: 'calc(100vh - 64px)',
     background: '#f5f5f5',
   } as React.CSSProperties,
   sidebar: {
@@ -104,8 +112,8 @@ const styles = {
     padding: '12px 16px',
     borderRadius: 12,
     lineHeight: 1.6,
-    whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
+    overflow: 'hidden',
   } as React.CSSProperties,
   inputArea: {
     borderTop: '1px solid #f0f0f0',
@@ -133,6 +141,104 @@ const styles = {
   } as React.CSSProperties,
 };
 
+// ============ Markdown 渲染覆盖样式 ============
+
+const markdownStyles = `
+  .ai-markdown h1, .ai-markdown h2, .ai-markdown h3,
+  .ai-markdown h4, .ai-markdown h5, .ai-markdown h6 {
+    margin-top: 12px;
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+  .ai-markdown p { margin-bottom: 8px; }
+  .ai-markdown ul, .ai-markdown ol { margin-bottom: 8px; padding-left: 20px; }
+  .ai-markdown li { margin-bottom: 4px; }
+  .ai-markdown code {
+    background: #f0f0f0;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
+  }
+  .ai-markdown pre {
+    background: #f5f5f5;
+    padding: 12px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin-bottom: 8px;
+  }
+  .ai-markdown pre code {
+    background: none;
+    padding: 0;
+  }
+  .ai-markdown table {
+    border-collapse: collapse;
+    margin-bottom: 8px;
+    width: 100%;
+  }
+  .ai-markdown th, .ai-markdown td {
+    border: 1px solid #e8e8e8;
+    padding: 6px 10px;
+    text-align: left;
+  }
+  .ai-markdown th {
+    background: #fafafa;
+    font-weight: 600;
+  }
+  .ai-markdown blockquote {
+    border-left: 3px solid #1677ff;
+    padding-left: 12px;
+    margin: 8px 0;
+    color: #666;
+  }
+  .ai-markdown a { color: #1677ff; }
+`;
+
+// ============ 建议卡片组件 ============
+
+interface Suggestion {
+  label: string;
+  path: string;
+}
+
+interface SuggestionCardsProps {
+  suggestions: Suggestion[];
+}
+
+const SuggestionCards: React.FC<SuggestionCardsProps> = ({ suggestions }) => {
+  if (!suggestions || suggestions.length === 0) return null;
+
+  return (
+    <div style={{ marginTop: 12, marginBottom: 4 }}>
+      <Text type="secondary" style={{ fontSize: 12, marginBottom: 6, display: 'block' }}>
+        推荐操作：
+      </Text>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {suggestions.map((s, i) => (
+          <Card
+            key={i}
+            size="small"
+            hoverable
+            onClick={() => {
+              window.location.href = s.path;
+            }}
+            style={{
+              borderRadius: 8,
+              border: '1px solid #e8e8e8',
+              cursor: 'pointer',
+              minWidth: 100,
+            }}
+            bodyStyle={{ padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            <Tag color="blue" style={{ marginRight: 0, fontSize: 12 }}>
+              {s.label}
+            </Tag>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 // ============ 消息气泡组件 ============
 
 interface MessageBubbleProps {
@@ -142,6 +248,19 @@ interface MessageBubbleProps {
 
 const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isStreaming }) => {
   const isUser = message.role === 'user';
+
+  // 解析 metadata 中的路由建议
+  let suggestions: Suggestion[] = [];
+  if (!isUser && message.metadata) {
+    try {
+      const meta = JSON.parse(message.metadata);
+      if (meta.suggestions) {
+        suggestions = meta.suggestions;
+      }
+    } catch {
+      // ignore parse error
+    }
+  }
 
   return (
     <div style={{ ...styles.messageRow, flexDirection: isUser ? 'row-reverse' : 'row' }}>
@@ -153,21 +272,103 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isStreaming }) =
           flexShrink: 0,
         }}
       />
-      <div
-        style={{
-          ...styles.messageBubble,
-          backgroundColor: isUser ? '#1677ff' : '#f5f5f5',
-          color: isUser ? '#fff' : '#333',
-          borderTopLeftRadius: isUser ? 12 : 4,
-          borderTopRightRadius: isUser ? 4 : 12,
-        }}
-      >
-        {message.content}
-        {isStreaming && <span style={styles.streamingCursor} />}
+      <div style={{ maxWidth: '70%' }}>
+        <div
+          style={{
+            ...styles.messageBubble,
+            backgroundColor: isUser ? '#1677ff' : '#f5f5f5',
+            color: isUser ? '#fff' : '#333',
+            borderTopLeftRadius: isUser ? 12 : 4,
+            borderTopRightRadius: isUser ? 4 : 12,
+          }}
+        >
+          {isUser ? (
+            message.content
+          ) : (
+            <div className="ai-markdown">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeRaw]}
+              >
+                {message.content}
+              </ReactMarkdown>
+            </div>
+          )}
+          {isStreaming && <span style={styles.streamingCursor} />}
+        </div>
+
+        {/* 路由建议卡片 */}
+        {!isUser && suggestions.length > 0 && (
+          <SuggestionCards suggestions={suggestions} />
+        )}
       </div>
     </div>
   );
 };
+
+// ============ 可编辑标题组件 ============
+
+interface EditableTitleProps {
+  value: string;
+  onSave: (newTitle: string) => void;
+}
+
+const EditableTitle: React.FC<EditableTitleProps> = ({ value, onSave }) => {
+  const [editing, setEditing] = useState(false);
+  const [inputValue, setInputValue] = useState(value);
+  const inputRef = useRef<Input>(null);
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+
+  useEffect(() => {
+    setInputValue(value);
+  }, [value]);
+
+  const handleSave = () => {
+    const trimmed = inputValue.trim();
+    if (trimmed && trimmed !== value) {
+      onSave(trimmed);
+    }
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <Input
+        ref={inputRef}
+        size="small"
+        value={inputValue}
+        onChange={(e) => setInputValue(e.target.value)}
+        onBlur={handleSave}
+        onPressEnter={handleSave}
+        style={{ width: 200 }}
+      />
+    );
+  }
+
+  return (
+    <Text
+      style={{ cursor: 'pointer' }}
+      ellipsis={{ tooltip: value }}
+      onDoubleClick={() => setEditing(true)}
+    >
+      {value}
+    </Text>
+  );
+};
+
+// ============ SSE 事件解析扩展 ============
+
+interface SseEndEventExt {
+  type: 'end';
+  reason: string;
+  suggestions?: Suggestion[];
+}
 
 // ============ 主页面组件 ============
 
@@ -182,11 +383,10 @@ const AiChatPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const messageListRef = useRef<HTMLDivElement>(null);
-  const streamingRef = useRef(''); // 跟踪流式内容（避免闭包问题）
+  const streamingRef = useRef('');
 
   // ---- 数据加载 ----
 
-  // 会话列表
   const {
     loading: convLoading,
     error: convError,
@@ -196,7 +396,6 @@ const AiChatPage: React.FC = () => {
     {
       onSuccess: (data) => {
         setConversations(data?.records || []);
-        // 自动选择第一个会话
         if (data?.records?.length > 0 && !currentId) {
           setCurrentId(data.records[0].id);
         }
@@ -205,7 +404,6 @@ const AiChatPage: React.FC = () => {
     },
   );
 
-  // 消息列表
   const { loading: msgLoading, run: loadMessages } = useRequest(
     (id: number) => getMessages(id),
     {
@@ -220,7 +418,6 @@ const AiChatPage: React.FC = () => {
     },
   );
 
-  // 切换会话时加载消息
   useEffect(() => {
     if (currentId) {
       loadMessages(currentId);
@@ -230,7 +427,6 @@ const AiChatPage: React.FC = () => {
     }
   }, [currentId]);
 
-  // 滚动到底部
   const scrollToBottom = useCallback(() => {
     setTimeout(() => {
       if (messageListRef.current) {
@@ -254,7 +450,6 @@ const AiChatPage: React.FC = () => {
     setError(null);
     streamingRef.current = '';
 
-    // 立即显示用户消息
     const tempUserMsg: Message = {
       id: Date.now(),
       role: 'user',
@@ -263,6 +458,8 @@ const AiChatPage: React.FC = () => {
     };
 
     setMessages((prev) => [...prev, tempUserMsg]);
+
+    let pendingSuggestions: Suggestion[] = [];
 
     await sendChatMessage(
       { conversationId: currentId || undefined, content },
@@ -276,16 +473,30 @@ const AiChatPage: React.FC = () => {
           streamingRef.current += text;
           setStreamingContent(streamingRef.current);
         },
-        onEnd: () => {
-          // 将 streaming 内容转为正式消息
+        onEnd: (reason, rawData) => {
+          // 解析 end 事件中的路由建议
+          if (rawData) {
+            try {
+              const parsed: SseEndEventExt = JSON.parse(rawData);
+              if (parsed.suggestions) {
+                pendingSuggestions = parsed.suggestions;
+              }
+            } catch {
+              // ignore
+            }
+          }
+
           const finalContent = streamingRef.current;
           if (finalContent) {
             setMessages((prev) => [
               ...prev,
               {
                 id: Date.now(),
-                role: 'assistant' as const,
+                role: 'assistant',
                 content: finalContent,
+                metadata: pendingSuggestions.length > 0
+                  ? JSON.stringify({ suggestions: pendingSuggestions })
+                  : undefined,
                 createTime: new Date().toISOString(),
               },
             ]);
@@ -324,16 +535,45 @@ const AiChatPage: React.FC = () => {
     setError(null);
   };
 
+  // ---- 删除会话 ----
+
+  const handleDeleteConversation = async (id: number) => {
+    try {
+      await deleteConversation(id);
+      antMsg.success('已删除');
+      // 如果删除的是当前会话，跳转到最近会话
+      if (id === currentId) {
+        const remaining = conversations.filter((c) => c.id !== id);
+        setCurrentId(remaining.length > 0 ? remaining[0].id : null);
+      }
+      refreshConversations();
+    } catch {
+      antMsg.error('删除失败');
+    }
+  };
+
+  // ---- 重命名会话 ----
+
+  const handleRenameConversation = async (id: number, title: string) => {
+    try {
+      await updateTitle(id, title);
+      antMsg.success('标题已更新');
+      refreshConversations();
+    } catch {
+      antMsg.error('修改标题失败');
+    }
+  };
+
   // ---- 渲染 ----
 
   return (
     <div style={styles.container}>
-      {/* 光标闪烁动画 */}
       <style>{`
         @keyframes blink {
           0%, 100% { opacity: 1; }
           50% { opacity: 0; }
         }
+        ${markdownStyles}
       `}</style>
 
       {/* ===== 左侧：会话列表 ===== */}
@@ -386,10 +626,7 @@ const AiChatPage: React.FC = () => {
                     <Popconfirm
                       key="delete"
                       title="确认删除此对话？"
-                      onConfirm={() => {
-                        // TODO: 调用删除 API
-                        antMsg.success('已删除');
-                      }}
+                      onConfirm={() => handleDeleteConversation(item.id)}
                     >
                       <DeleteOutlined style={{ color: '#999', fontSize: 12 }} />
                     </Popconfirm>,
@@ -397,12 +634,19 @@ const AiChatPage: React.FC = () => {
                 >
                   <List.Item.Meta
                     title={
-                      <Text
-                        style={{ fontSize: 14 }}
-                        ellipsis={{ tooltip: item.title }}
-                      >
-                        {item.title}
-                      </Text>
+                      currentId === item.id ? (
+                        <EditableTitle
+                          value={item.title}
+                          onSave={(newTitle) => handleRenameConversation(item.id, newTitle)}
+                        />
+                      ) : (
+                        <Text
+                          style={{ fontSize: 14 }}
+                          ellipsis={{ tooltip: item.title }}
+                        >
+                          {item.title}
+                        </Text>
+                      )
                     }
                     description={
                       <div>
@@ -425,23 +669,25 @@ const AiChatPage: React.FC = () => {
 
       {/* ===== 右侧：对话区 ===== */}
       <div style={styles.chatArea}>
-        {/* 会话标题 */}
         <div style={styles.chatHeader}>
           <Title level={5} style={{ margin: 0 }}>
             {currentId
               ? (conversations.find((c) => c.id === currentId)?.title || '对话')
               : 'AI 智能助手'}
           </Title>
+          {currentId && (
+            <Text type="secondary" style={{ fontSize: 12, marginLeft: 12 }}>
+              双击标题可重命名
+            </Text>
+          )}
         </div>
 
-        {/* 消息列表 */}
         <div style={styles.messageList} ref={messageListRef}>
           {msgLoading ? (
             <div style={{ textAlign: 'center', padding: 60 }}>
               <Spin tip="加载消息中..." />
             </div>
           ) : !currentId && messages.length === 0 ? (
-            // 欢迎页
             <div style={styles.welcomeContainer}>
               <RobotOutlined style={{ fontSize: 64, color: '#1677ff', marginBottom: 24 }} />
               <Title level={4} style={{ margin: 0 }}>AI 智能助手</Title>
@@ -464,7 +710,6 @@ const AiChatPage: React.FC = () => {
               </div>
             </div>
           ) : error && messages.length === 0 ? (
-            // 错误状态
             <div style={{ textAlign: 'center', padding: 60 }}>
               <Text type="warning">{error}</Text>
               <br />
@@ -478,12 +723,10 @@ const AiChatPage: React.FC = () => {
             </div>
           ) : (
             <>
-              {/* 消息气泡 */}
               {messages.map((msg) => (
                 <MessageBubble key={msg.id} message={msg} />
               ))}
 
-              {/* 流式渲染中的 AI 消息 */}
               {isStreaming && streamingContent && (
                 <MessageBubble
                   message={{ id: 0, role: 'assistant', content: streamingContent, createTime: '' }}
@@ -491,7 +734,6 @@ const AiChatPage: React.FC = () => {
                 />
               )}
 
-              {/* 等待中… */}
               {isStreaming && !streamingContent && (
                 <div style={{ ...styles.messageRow, flexDirection: 'row' }}>
                   <Avatar
@@ -512,7 +754,6 @@ const AiChatPage: React.FC = () => {
                 </div>
               )}
 
-              {/* 错误提示 + 重试 */}
               {error && messages.length > 0 && (
                 <div style={{ textAlign: 'center', padding: 12 }}>
                   <Text type="danger" style={{ fontSize: 12 }}>{error}</Text>
@@ -532,7 +773,6 @@ const AiChatPage: React.FC = () => {
           )}
         </div>
 
-        {/* 输入区 */}
         <div style={styles.inputArea}>
           <TextArea
             value={inputValue}

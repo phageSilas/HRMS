@@ -17,6 +17,9 @@
     "antd": "^5.4.0",
     "axios": "^1.18.1",
     "dayjs": "^1.11.21",
+    "react-markdown": "^10.1.0",
+    "rehype-raw": "^7.0.0",
+    "remark-gfm": "^4.0.1",
     "three": "^0.121.1",
     "vanta": "^0.5.24"
   },
