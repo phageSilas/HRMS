@@ -25,8 +25,10 @@ import {
   ProTable,
 } from '@ant-design/pro-components';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
-import { Button, Space, Tag, message } from 'antd';
+import { Avatar, Button, Card, Space, Tag, Typography, message } from 'antd';
 import React, { useRef, useState } from 'react';
+
+const { Text } = Typography;
 
 const statusMeta: Record<number, { text: string; color: string }> = {
   [ApprovalStatus.DRAFT]: { text: '草稿', color: 'default' },
@@ -57,33 +59,49 @@ const handoverOptions = [
   { label: '赵琳（1003）', value: 1003 },
 ];
 
+type LeaveFormValues = LeaveApplicationCreateRequest & {
+  employeeName?: string;
+  departmentName?: string;
+  positionName?: string;
+};
+
+function getInitial(name?: string) {
+  return name?.slice(0, 1) || '员';
+}
+
 const LeavePage: React.FC = () => {
   const actionRef = useRef<ActionType>();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [employeePreview, setEmployeePreview] = useState<{
+    employeeName?: string;
+    employeeId?: number;
+    departmentName?: string;
+    positionName?: string;
+  }>({});
 
   const columns: ProColumns<LeaveApplication>[] = [
     {
-      title: '关键词',
+      title: '员工姓名',
       dataIndex: 'keyword',
       hideInTable: true,
-      fieldProps: { placeholder: '员工姓名 / 工号' },
+      fieldProps: { placeholder: '请输入员工姓名 / 工号' },
     },
     {
       title: '部门',
       dataIndex: 'departmentId',
       hideInTable: true,
       valueType: 'select',
-      fieldProps: { options: departmentOptions, allowClear: true },
+      fieldProps: { options: departmentOptions, allowClear: true, placeholder: '请选择部门' },
     },
     {
       title: '离职类型',
       dataIndex: 'leaveType',
       hideInTable: true,
       valueType: 'select',
-      fieldProps: { options: leaveTypeOptions, allowClear: true },
+      fieldProps: { options: leaveTypeOptions, allowClear: true, placeholder: '请选择离职类型' },
     },
     {
-      title: '状态',
+      title: '离职状态',
       dataIndex: 'approvalStatus',
       hideInTable: true,
       valueType: 'select',
@@ -95,16 +113,17 @@ const LeavePage: React.FC = () => {
       },
     },
     {
-      title: '员工',
+      title: '员工姓名',
       dataIndex: 'employeeName',
       width: 150,
       search: false,
       render: (_, record) => (
-        <Space direction="vertical" size={0}>
-          <strong>{record.employeeName || `员工 ${record.employeeId}`}</strong>
-          <span style={{ color: '#6b7280', fontSize: 12 }}>
-            ID {record.employeeId}
-          </span>
+        <Space>
+          <Avatar style={{ background: '#2f6fed' }}>{getInitial(record.employeeName)}</Avatar>
+          <Space direction="vertical" size={0}>
+            <strong>{record.employeeName || `员工 ${record.employeeId}`}</strong>
+            <Text type="secondary">ID {record.employeeId}</Text>
+          </Space>
         </Space>
       ),
     },
@@ -130,12 +149,6 @@ const LeavePage: React.FC = () => {
       title: '离职日期',
       dataIndex: 'leaveDate',
       valueType: 'date',
-      width: 120,
-      search: false,
-    },
-    {
-      title: '交接人',
-      dataIndex: 'handoverEmployeeName',
       width: 120,
       search: false,
     },
@@ -194,25 +207,37 @@ const LeavePage: React.FC = () => {
               key="create"
               type="primary"
               icon={<PlusOutlined />}
-              onClick={() => setDrawerOpen(true)}
+              onClick={() => {
+                setEmployeePreview({});
+                setDrawerOpen(true);
+              }}
             >
-              新建离职申请
+              创建离职
             </Button>,
           ],
         }}
       />
 
-      <DrawerForm<LeaveApplicationCreateRequest & {
-        employeeName?: string;
-        departmentName?: string;
-        positionName?: string;
-      }>
-        title="新建离职申请"
-        width={700}
+      <DrawerForm<LeaveFormValues>
+        title="离职申请表单"
+        width={420}
         open={drawerOpen}
-        onOpenChange={setDrawerOpen}
+        onOpenChange={(open) => {
+          setDrawerOpen(open);
+          if (!open) {
+            setEmployeePreview({});
+          }
+        }}
         drawerProps={{ destroyOnClose: true }}
         submitter={{ searchConfig: { submitText: '提交审批' } }}
+        onValuesChange={(_, values) => {
+          setEmployeePreview({
+            employeeId: values.employeeId,
+            employeeName: values.employeeName,
+            departmentName: values.departmentName,
+            positionName: values.positionName,
+          });
+        }}
         onFinish={async (values) => {
           const payload: LeaveApplicationCreateRequest = {
             employeeId: values.employeeId,
@@ -229,7 +254,23 @@ const LeavePage: React.FC = () => {
           return true;
         }}
       >
-        <ProFormGroup title="员工信息">
+        <Card size="small" title="员工信息" style={{ marginBottom: 16 }}>
+          <Space>
+            <Avatar size={40} style={{ background: '#2f6fed' }}>
+              {getInitial(employeePreview.employeeName)}
+            </Avatar>
+            <Space direction="vertical" size={0}>
+              <strong>{employeePreview.employeeName || '待选择员工'}</strong>
+              <Text type="secondary">员工 ID：{employeePreview.employeeId || '-'}</Text>
+              <Text type="secondary">
+                部门：{employeePreview.departmentName || '-'}　职位：
+                {employeePreview.positionName || '-'}
+              </Text>
+            </Space>
+          </Space>
+        </Card>
+
+        <ProFormGroup>
           <ProFormDigit
             name="employeeId"
             label="员工 ID"
@@ -238,37 +279,31 @@ const LeavePage: React.FC = () => {
             rules={[{ required: true, message: '请输入离职员工 ID' }]}
           />
           <ProFormText name="employeeName" label="员工姓名" width="md" />
-          <ProFormText name="departmentName" label="当前部门" width="md" disabled />
-          <ProFormText name="positionName" label="当前职位" width="md" disabled />
+          <ProFormText name="departmentName" label="当前部门" width="md" />
+          <ProFormText name="positionName" label="当前职位" width="md" />
         </ProFormGroup>
 
-        <ProFormGroup title="离职安排">
-          <ProFormSelect
-            name="leaveType"
-            label="离职类型"
-            width="md"
-            options={leaveTypeOptions}
-            rules={[{ required: true, message: '请选择离职类型' }]}
-          />
-          <ProFormDatePicker
-            name="lastWorkDate"
-            label="最后工作日"
-            width="md"
-            rules={[{ required: true, message: '请选择最后工作日' }]}
-          />
-          <ProFormSelect
-            name="handoverEmployeeId"
-            label="工作交接人"
-            width="md"
-            options={handoverOptions}
-            rules={[{ required: true, message: '请选择工作交接人' }]}
-          />
-        </ProFormGroup>
-
+        <ProFormSelect
+          name="leaveType"
+          label="离职类型"
+          options={leaveTypeOptions}
+          rules={[{ required: true, message: '请选择离职类型' }]}
+        />
+        <ProFormDatePicker
+          name="lastWorkDate"
+          label="最后工作日"
+          rules={[{ required: true, message: '请选择最后工作日' }]}
+        />
+        <ProFormSelect
+          name="handoverEmployeeId"
+          label="工作交接人"
+          options={handoverOptions}
+          rules={[{ required: true, message: '请选择工作交接人' }]}
+        />
         <ProFormTextArea
           name="leaveReason"
           label="离职原因"
-          fieldProps={{ rows: 4 }}
+          fieldProps={{ rows: 4, maxLength: 500, showCount: true }}
           rules={[{ required: true, message: '请输入离职原因' }]}
         />
         <ProFormTextArea
