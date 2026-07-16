@@ -25,8 +25,6 @@ import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
 import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
-import com.hrms.system.auth.dto.UserCreateDTO;
-import com.hrms.system.auth.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -66,9 +64,6 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
     private final ApprovalEngine approvalEngine;
 
     private final EmployeeService employeeService;
-
-    private final UserService userService;
-
 
     /**
      * 分页查询入职申请。
@@ -187,8 +182,7 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
             Long employeeId = createdEmployee.getId();
             String employeeNo = createdEmployee.getEmployeeNo();
 
-            // TODO 跨模块调用已完成：当前调用 UserService#createUser(createDTO) 创建入职账号。
-            tempCreateEntryAccount(lockedEntity, employeeNo, employeeId);
+            // TODO 跨模块调用已完成：账号创建已由 EmployeeService#createEmployee(createDTO) 内部完成，personnel 不再重复调用 UserService#createUser(...)。
 
             lockedEntity.setEmployeeId(employeeId);
             lockedEntity.setEmployeeNo(employeeNo);
@@ -230,25 +224,26 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         return String.format("EMP%06d", entity.getId());
     }
 
-    /**
-     * 临时创建入职账号。
-     *
-     * @param entity 入职申请实体
-     * @param employeeNo 员工工号
-     * @param employeeId 员工ID
-     * 本方法使用的工具类: UserService(hrms-system-auth)
-     */
-    private void tempCreateEntryAccount(EntryApplicationEntity entity, String employeeNo, Long employeeId) {
-        UserCreateDTO createDTO = new UserCreateDTO();
-        createDTO.setUsername(employeeNo);
-        createDTO.setPassword(entity.getPhone().substring(entity.getPhone().length() - 6));
-        createDTO.setRealName(entity.getCandidateName());
-        createDTO.setPhone(entity.getPhone());
-        createDTO.setEmail(entity.getEmail());
-        createDTO.setEmployeeId(employeeId);
+    // 已停用：账号创建已由 EmployeeService#createEmployee(createDTO) 内部完成，避免重复创建手机号账号。
+    //     /**
+    //      * 临时创建入职账号。
+    //      *
+    //      * @param entity 入职申请实体
+    //      * @param employeeNo 员工工号
+    //      * @param employeeId 员工ID
+    //      * 本方法使用的工具类: UserService(hrms-system-auth)
+    //      */
+    //     private void tempCreateEntryAccount(EntryApplicationEntity entity, String employeeNo, Long employeeId) {
+    //         UserCreateDTO createDTO = new UserCreateDTO();
+    //         createDTO.setUsername(employeeNo);
+    //         createDTO.setPassword(entity.getPhone().substring(entity.getPhone().length() - 6));
+    //         createDTO.setRealName(entity.getCandidateName());
+    //         createDTO.setPhone(entity.getPhone());
+    //         createDTO.setEmail(entity.getEmail());
+    //         createDTO.setEmployeeId(employeeId);
         // 当前 auth 模块尚无“入职默认角色/按岗位分配角色”公开接口，roleIds 暂不传，由账号或权限模块后续补齐。
-        userService.createUser(createDTO);
-    }
+    //         userService.createUser(createDTO);
+    //     }
 
     /**
      * 临时创建员工档案。
