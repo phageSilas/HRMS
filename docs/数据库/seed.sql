@@ -260,3 +260,10 @@ UPDATE hr_salary_batch_item SET employee_id = 6 WHERE id IN (1,3) AND employee_i
 -- 20. 修复补卡表的 record_id 字段（允许为空，因为补卡可以先于打卡记录存在）
 -- ============================================================
 ALTER TABLE `hr_attendance_correction` MODIFY COLUMN `record_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '打卡记录ID（补卡时可先无打卡记录）';
+
+-- ============================================================
+-- 21. 加班申请数据 (hr_attendance_overtime)
+--       孙七 employee_id=5，已通过的加班记录
+-- ============================================================
+INSERT IGNORE INTO `hr_attendance_overtime` (`id`, `employee_id`, `overtime_date`, `duration`, `reason`, `approval_status`, `create_time`, `update_time`, `is_deleted`, `version`) VALUES
+    (1, 5, '2026-07-10 18:00:00', 3.0, '项目上线紧急支持', 2, NOW(), NOW(), 0, 0);
