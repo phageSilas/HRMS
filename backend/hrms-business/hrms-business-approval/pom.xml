@@ -25,6 +25,20 @@
             <version>1.0.0</version>
         </dependency>
 
+        <!-- hrms-system-auth（查询用户、角色） -->
+        <dependency>
+            <groupId>com.hrms</groupId>
+            <artifactId>hrms-system-auth</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+
+        <!-- hrms-system-organization（查询部门负责人） -->
+        <dependency>
+            <groupId>com.hrms</groupId>
+            <artifactId>hrms-system-organization</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+
         <!-- Spring Boot Starter Web -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

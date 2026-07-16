@@ -1,5 +1,6 @@
 package com.hrms.business.mycenter.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -20,10 +21,12 @@ public class LeaveRequestDTO {
     private String leaveType;
 
     @NotNull(message = "开始时间不能为空")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     @Schema(description = "开始时间")
     private LocalDateTime startTime;
 
     @NotNull(message = "结束时间不能为空")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     @Schema(description = "结束时间")
     private LocalDateTime endTime;
 
