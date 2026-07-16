@@ -90,6 +90,8 @@ const LOCATION_STATUS_COLOR: Record<AmapLocationStatus, string> = {
   failed: 'warning',
 };
 
+const TODAY_CLOCK_CACHE_PREFIX = 'hrms-attendance-today-record';
+
 function parseBackendDate(value?: BackendDateValue) {
   if (!value) return undefined;
 
@@ -137,6 +139,47 @@ function getClockLabel(period?: string) {
 
 function getClockIp(result?: AttendanceClockVO) {
   return result?.networkIp || result?.clientIp;
+}
+
+function getTodayClockCacheKey(date: string) {
+  let userKey = 'anonymous';
+
+  try {
+    const userText = localStorage.getItem('userInfo');
+    const userInfo = userText
+      ? (JSON.parse(userText) as { userId?: number; username?: string })
+      : undefined;
+    userKey = String(userInfo?.userId || userInfo?.username || userKey);
+  } catch {
+    userKey = 'anonymous';
+  }
+
+  return `${TODAY_CLOCK_CACHE_PREFIX}:${userKey}:${date}`;
+}
+
+function readCachedTodayRecord(date: string): MergedTodayRecord | undefined {
+  try {
+    const cacheText = sessionStorage.getItem(getTodayClockCacheKey(date));
+    if (!cacheText) return undefined;
+
+    const record = JSON.parse(cacheText) as MergedTodayRecord;
+    return normalizeDate(record.date as BackendDateValue) === date
+      ? record
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeCachedTodayRecord(date: string, record: MergedTodayRecord) {
+  try {
+    sessionStorage.setItem(
+      getTodayClockCacheKey(date),
+      JSON.stringify(record),
+    );
+  } catch {
+    // 浏览器禁用存储时不影响真实打卡流程，页面仍依赖后端月历回显。
+  }
 }
 
 function unwrapClockResponse(payload: ClockResponsePayload) {
@@ -203,8 +246,11 @@ function getDeviceInfo(location?: AmapLocationResult) {
 
 const AttendancePunchPage: React.FC = () => {
   const [now, setNow] = useState(dayjs());
+  const currentDate = now.format('YYYY-MM-DD');
   const [localTodayRecord, setLocalTodayRecord] =
-    useState<MergedTodayRecord>();
+    useState<MergedTodayRecord>(() =>
+      readCachedTodayRecord(dayjs().format('YYYY-MM-DD')),
+    );
   const [clocking, setClocking] = useState(false);
   const [locationState, setLocationState] = useState<LocationState>({
     status: 'idle',
@@ -267,34 +313,37 @@ const AttendancePunchPage: React.FC = () => {
       const locationDetail = formatLocationDetail(location);
 
       setLocalTodayRecord((previous) => {
-        const today = now.format('YYYY-MM-DD');
         const todayLocalRecord =
-          normalizeDate(previous?.date as BackendDateValue) === today
+          normalizeDate(previous?.date as BackendDateValue) === currentDate
             ? previous
             : undefined;
         const baseRecord: MergedTodayRecord = {
-          date: today,
+          date: currentDate,
           ...(todayRecord || {}),
           ...(todayLocalRecord || {}),
         };
 
         if (result.period === 'CLOCK_OUT') {
-          return {
+          const nextRecord = {
             ...baseRecord,
             clockOutTime: result.clockTime,
             clockOutStatus: result.status,
             clockOutIp: networkIp,
             dayStatus: result.status || baseRecord.dayStatus,
           };
+          writeCachedTodayRecord(currentDate, nextRecord);
+          return nextRecord;
         }
 
-        return {
+        const nextRecord = {
           ...baseRecord,
           clockInTime: result.clockTime,
           clockInStatus: result.status,
           clockInIp: networkIp,
           dayStatus: result.status || baseRecord.dayStatus,
         };
+        writeCachedTodayRecord(currentDate, nextRecord);
+        return nextRecord;
       });
       Modal.success({
         title: `${label}成功`,
@@ -329,24 +378,28 @@ const AttendancePunchPage: React.FC = () => {
     return () => window.clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    setLocalTodayRecord(readCachedTodayRecord(currentDate));
+  }, [currentDate]);
+
   const todayRecord = useMemo<AttendanceCalendarDayVO | undefined>(() => {
-    const today = now.format('YYYY-MM-DD');
     return calendar?.days?.find(
-      (item) => normalizeDate(item.date as BackendDateValue) === today,
+      (item) => normalizeDate(item.date as BackendDateValue) === currentDate,
     );
-  }, [calendar?.days, now]);
+  }, [calendar?.days, currentDate]);
 
   const mergedTodayRecord = useMemo<MergedTodayRecord | undefined>(() => {
-    const today = now.format('YYYY-MM-DD');
     const baseRecord: MergedTodayRecord = todayRecord
       ? { ...todayRecord }
-      : { date: today };
+      : { date: currentDate };
 
     if (!localTodayRecord) {
       return todayRecord ? baseRecord : undefined;
     }
 
-    if (normalizeDate(localTodayRecord.date as BackendDateValue) !== today) {
+    if (
+      normalizeDate(localTodayRecord.date as BackendDateValue) !== currentDate
+    ) {
       return todayRecord ? baseRecord : undefined;
     }
 
@@ -363,7 +416,7 @@ const AttendancePunchPage: React.FC = () => {
       clockOutIp: localTodayRecord.clockOutIp ?? baseRecord.clockOutIp,
       dayStatus: localTodayRecord.dayStatus ?? baseRecord.dayStatus,
     };
-  }, [localTodayRecord, now, todayRecord]);
+  }, [currentDate, localTodayRecord, todayRecord]);
 
   const latestNetworkIp =
     localTodayRecord?.clockOutIp || localTodayRecord?.clockInIp;
