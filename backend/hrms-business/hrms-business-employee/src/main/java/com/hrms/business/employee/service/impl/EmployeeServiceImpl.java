@@ -193,6 +193,9 @@ public class EmployeeServiceImpl implements EmployeeService {
             validatePostExists(updateDTO.getPostId());
         }
 
+        // 记录原部门ID（用于事件通知）——必须在更新entity.deptId之前记录
+        Long oldDeptId = entity.getDeptId();
+
         // 更新字段
         if (updateDTO.getEmployeeName() != null) {
             entity.setEmployeeName(updateDTO.getEmployeeName());
@@ -275,9 +278,6 @@ public class EmployeeServiceImpl implements EmployeeService {
         if (updateDTO.getRemark() != null) {
             entity.setRemark(updateDTO.getRemark());
         }
-
-        // 记录原部门ID（用于事件通知）
-        Long oldDeptId = entity.getDeptId();
 
         employeeMapper.updateById(entity);
 
