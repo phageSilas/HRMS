@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.hrms.business.employee.convert.EmployeeConvert;
 import com.hrms.business.employee.dto.EmployeeCreateDTO;
 import com.hrms.business.employee.dto.EmployeeQueryDTO;
 import com.hrms.business.employee.dto.EmployeeUpdateDTO;
@@ -26,7 +27,9 @@ import com.hrms.system.auth.service.UserService;
 import com.hrms.system.auth.vo.FieldPermissionVO;
 import com.hrms.system.auth.vo.UserCreateResultVO;
 import com.hrms.system.organization.service.DeptService;
+import com.hrms.system.organization.service.PostService;
 import com.hrms.system.organization.vo.DeptDetailVO;
+import com.hrms.system.organization.vo.PostVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -47,6 +50,7 @@ public class EmployeeServiceImpl implements EmployeeService {
     private final EmployeeMapper employeeMapper;
     private final FieldPermissionService fieldPermissionService;
     private final DeptService deptService;
+    private final PostService postService;
     private final UserService userService;
 
     @Override
@@ -123,42 +127,22 @@ public class EmployeeServiceImpl implements EmployeeService {
     @Transactional(rollbackFor = Exception.class)
     public EmployeeEntity createEmployee(EmployeeCreateDTO createDTO) {
         // 检查手机号是否已存在
-        EmployeeEntity existing = employeeMapper.selectOne(
-                Wrappers.<EmployeeEntity>lambdaQuery()
-                        .eq(EmployeeEntity::getPhone, createDTO.getPhone())
-        );
-        if (existing != null) {
-            throw new GlobalException(ErrorCode.EMPLOYEE_PHONE_EXISTS);
+        checkPhoneUnique(createDTO.getPhone(), null);
+
+        // 校验部门是否存在
+        validateDeptExists(createDTO.getDeptId());
+
+        // 校验职位是否存在（如果传了职位ID）
+        if (createDTO.getPostId() != null) {
+            validatePostExists(createDTO.getPostId());
         }
 
-        // 创建员工实体
-        EmployeeEntity entity = new EmployeeEntity();
-        entity.setEmployeeName(createDTO.getEmployeeName());
-        entity.setGender(createDTO.getGender());
-        entity.setPhone(createDTO.getPhone());
-        entity.setEmail(createDTO.getEmail());
-        entity.setDeptId(createDTO.getDeptId());
-        entity.setPostId(createDTO.getPostId());
-        entity.setJobLevel(createDTO.getJobLevel());
-        entity.setLeaderId(createDTO.getLeaderId());
-        entity.setWorkLocation(createDTO.getWorkLocation());
-        entity.setHireType(createDTO.getHireType());
-        entity.setHireDate(createDTO.getHireDate());
-        entity.setProbationMonth(createDTO.getProbationMonth());
-        entity.setProbationSalaryRatio(createDTO.getProbationSalaryRatio());
-        entity.setContractType(createDTO.getContractType());
-        entity.setContractExpireDate(createDTO.getContractExpireDate());
-        entity.setSalaryTemplateId(createDTO.getSalaryTemplateId());
-        entity.setBaseSalary(createDTO.getBaseSalary());
+        // 使用 MapStruct 转换 DTO 为 Entity
+        EmployeeEntity entity = EmployeeConvert.INSTANCE.toEntity(createDTO);
+
+        // 加密敏感字段
         entity.setIdCardNo(AesEncryptUtil.encrypt(createDTO.getIdCardNo()));
-        entity.setBirthday(createDTO.getBirthday());
-        entity.setDomicileAddress(createDTO.getDomicileAddress());
-        entity.setCurrentAddress(createDTO.getCurrentAddress());
         entity.setBankAccount(AesEncryptUtil.encrypt(createDTO.getBankAccount()));
-        entity.setBankName(createDTO.getBankName());
-        entity.setEmergencyContact(createDTO.getEmergencyContact());
-        entity.setEmergencyPhone(createDTO.getEmergencyPhone());
-        entity.setRemark(createDTO.getRemark());
 
         // 设置在职状态为试用期
         entity.setEmploymentStatus(EmploymentStatusEnum.PROBATION.getCode());
@@ -186,6 +170,21 @@ public class EmployeeServiceImpl implements EmployeeService {
         EmployeeEntity entity = employeeMapper.selectById(id);
         if (entity == null) {
             throw new GlobalException(ErrorCode.EMPLOYEE_NOT_FOUND);
+        }
+
+        // 校验手机号唯一性（如果变更了手机号）
+        if (updateDTO.getPhone() != null && !updateDTO.getPhone().equals(entity.getPhone())) {
+            checkPhoneUnique(updateDTO.getPhone(), id);
+        }
+
+        // 校验部门是否存在（如果变更了部门）
+        if (updateDTO.getDeptId() != null && !updateDTO.getDeptId().equals(entity.getDeptId())) {
+            validateDeptExists(updateDTO.getDeptId());
+        }
+
+        // 校验职位是否存在（如果变更了职位）
+        if (updateDTO.getPostId() != null && !updateDTO.getPostId().equals(entity.getPostId())) {
+            validatePostExists(updateDTO.getPostId());
         }
 
         // 更新字段
@@ -403,17 +402,47 @@ public class EmployeeServiceImpl implements EmployeeService {
      * 转换为列表 VO
      */
     private EmployeeListVO convertToListVO(EmployeeEntity entity) {
-        EmployeeListVO vo = new EmployeeListVO();
-        vo.setId(entity.getId());
-        vo.setEmployeeNo(entity.getEmployeeNo());
-        vo.setEmployeeName(entity.getEmployeeName());
-        vo.setGender(entity.getGender());
+        EmployeeListVO vo = EmployeeConvert.INSTANCE.toListVO(entity);
+
+        // 填充部门名称
+        if (entity.getDeptId() != null) {
+            try {
+                DeptDetailVO dept = deptService.getDeptById(entity.getDeptId());
+                if (dept != null) {
+                    vo.setDeptName(dept.getDeptName());
+                }
+            } catch (Exception e) {
+                log.warn("获取部门名称失败，deptId={}", entity.getDeptId());
+            }
+        }
+
+        // 填充职位名称
+        if (entity.getPostId() != null) {
+            try {
+                PostVO post = postService.getPostById(entity.getPostId());
+                if (post != null) {
+                    vo.setPostName(post.getPostName());
+                }
+            } catch (Exception e) {
+                log.warn("获取职位名称失败，postId={}", entity.getPostId());
+            }
+        }
+
+        // 填充汇报人姓名
+        if (entity.getLeaderId() != null) {
+            try {
+                EmployeeEntity leader = employeeMapper.selectById(entity.getLeaderId());
+                if (leader != null) {
+                    vo.setLeaderName(leader.getEmployeeName());
+                }
+            } catch (Exception e) {
+                log.warn("获取汇报人姓名失败，leaderId={}", entity.getLeaderId());
+            }
+        }
+
+        // 脱敏手机号
         vo.setPhone(DesensitizationUtil.desensitizePhone(entity.getPhone()));
-        vo.setDeptId(entity.getDeptId());
-        vo.setJobLevel(entity.getJobLevel());
-        vo.setEmploymentStatus(entity.getEmploymentStatus());
-        vo.setHireDate(entity.getHireDate());
-        vo.setCreateTime(entity.getCreateTime());
+
         return vo;
     }
 
@@ -421,37 +450,50 @@ public class EmployeeServiceImpl implements EmployeeService {
      * 转换为详情 VO
      */
     private EmployeeDetailVO convertToDetailVO(EmployeeEntity entity) {
-        EmployeeDetailVO vo = new EmployeeDetailVO();
-        vo.setId(entity.getId());
-        vo.setEmployeeNo(entity.getEmployeeNo());
-        vo.setUserId(entity.getUserId());
-        vo.setEmployeeName(entity.getEmployeeName());
-        vo.setGender(entity.getGender());
+        EmployeeDetailVO vo = EmployeeConvert.INSTANCE.toDetailVO(entity);
+
+        // 填充部门名称
+        if (entity.getDeptId() != null) {
+            try {
+                DeptDetailVO dept = deptService.getDeptById(entity.getDeptId());
+                if (dept != null) {
+                    vo.setDeptName(dept.getDeptName());
+                }
+            } catch (Exception e) {
+                log.warn("获取部门名称失败，deptId={}", entity.getDeptId());
+            }
+        }
+
+        // 填充职位名称
+        if (entity.getPostId() != null) {
+            try {
+                PostVO post = postService.getPostById(entity.getPostId());
+                if (post != null) {
+                    vo.setPostName(post.getPostName());
+                }
+            } catch (Exception e) {
+                log.warn("获取职位名称失败，postId={}", entity.getPostId());
+            }
+        }
+
+        // 填充汇报人姓名
+        if (entity.getLeaderId() != null) {
+            try {
+                EmployeeEntity leader = employeeMapper.selectById(entity.getLeaderId());
+                if (leader != null) {
+                    vo.setLeaderName(leader.getEmployeeName());
+                }
+            } catch (Exception e) {
+                log.warn("获取汇报人姓名失败，leaderId={}", entity.getLeaderId());
+            }
+        }
+
+        // 脱敏敏感字段
         vo.setPhone(DesensitizationUtil.desensitizePhone(entity.getPhone()));
-        vo.setEmail(entity.getEmail());
         vo.setIdCardNo(DesensitizationUtil.desensitizeIdCardNo(AesEncryptUtil.decrypt(entity.getIdCardNo())));
-        vo.setBirthday(entity.getBirthday());
-        vo.setDomicileAddress(entity.getDomicileAddress());
-        vo.setCurrentAddress(entity.getCurrentAddress());
-        vo.setDeptId(entity.getDeptId());
-        vo.setPostId(entity.getPostId());
-        vo.setJobLevel(entity.getJobLevel());
-        vo.setLeaderId(entity.getLeaderId());
-        vo.setWorkLocation(entity.getWorkLocation());
-        vo.setHireType(entity.getHireType());
-        vo.setEmploymentStatus(entity.getEmploymentStatus());
-        vo.setHireDate(entity.getHireDate());
-        vo.setProbationMonth(entity.getProbationMonth());
-        vo.setProbationSalaryRatio(entity.getProbationSalaryRatio());
-        vo.setContractType(entity.getContractType());
-        vo.setContractExpireDate(entity.getContractExpireDate());
-        vo.setSalaryTemplateId(entity.getSalaryTemplateId());
-        vo.setBaseSalary(entity.getBaseSalary());
         vo.setBankAccount(DesensitizationUtil.desensitizeBankAccount(AesEncryptUtil.decrypt(entity.getBankAccount())));
-        vo.setBankName(entity.getBankName());
-        vo.setEmergencyContact(entity.getEmergencyContact());
         vo.setEmergencyPhone(DesensitizationUtil.desensitizePhone(entity.getEmergencyPhone()));
-        vo.setCreateTime(entity.getCreateTime());
+
         return vo;
     }
 
@@ -528,11 +570,57 @@ public class EmployeeServiceImpl implements EmployeeService {
     private String generateRandomPassword() {
         String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
         StringBuilder sb = new StringBuilder();
-        java.util.Random random = new java.util.Random();
+        java.security.SecureRandom random = new java.security.SecureRandom();
         for (int i = 0; i < 8; i++) {
             sb.append(chars.charAt(random.nextInt(chars.length())));
         }
         return sb.toString();
+    }
+
+    /**
+     * 校验手机号唯一性
+     *
+     * @param phone 手机号
+     * @param excludeId 排除的员工ID（更新时使用）
+     */
+    private void checkPhoneUnique(String phone, Long excludeId) {
+        EmployeeEntity existing = employeeMapper.selectOne(
+                Wrappers.<EmployeeEntity>lambdaQuery()
+                        .eq(EmployeeEntity::getPhone, phone)
+        );
+        if (existing != null && !existing.getId().equals(excludeId)) {
+            throw new GlobalException(ErrorCode.EMPLOYEE_PHONE_EXISTS);
+        }
+    }
+
+    /**
+     * 校验部门是否存在
+     *
+     * @param deptId 部门ID
+     */
+    private void validateDeptExists(Long deptId) {
+        if (deptId == null) {
+            return;
+        }
+        DeptDetailVO dept = deptService.getDeptById(deptId);
+        if (dept == null) {
+            throw new GlobalException(ErrorCode.EMPLOYEE_DEPT_NOT_FOUND);
+        }
+    }
+
+    /**
+     * 校验职位是否存在
+     *
+     * @param postId 职位ID
+     */
+    private void validatePostExists(Long postId) {
+        if (postId == null) {
+            return;
+        }
+        PostVO post = postService.getPostById(postId);
+        if (post == null) {
+            throw new GlobalException(ErrorCode.EMPLOYEE_POST_NOT_FOUND);
+        }
     }
 
 }

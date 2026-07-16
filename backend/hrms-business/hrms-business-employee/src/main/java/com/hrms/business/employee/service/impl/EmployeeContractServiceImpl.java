@@ -33,6 +33,9 @@ public class EmployeeContractServiceImpl implements EmployeeContractService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public EmployeeContractEntity createContract(ContractCreateDTO createDTO) {
+        // 校验日期逻辑
+        validateContractDates(createDTO.getStartDate(), createDTO.getEndDate());
+
         EmployeeContractEntity entity = new EmployeeContractEntity();
         entity.setEmployeeId(createDTO.getEmployeeId());
         entity.setContractNo(createDTO.getContractNo());
@@ -81,6 +84,9 @@ public class EmployeeContractServiceImpl implements EmployeeContractService {
         if (updateDTO.getRemark() != null) {
             entity.setRemark(updateDTO.getRemark());
         }
+
+        // 校验日期逻辑
+        validateContractDates(entity.getStartDate(), entity.getEndDate());
 
         contractMapper.updateById(entity);
         return entity;
@@ -152,6 +158,20 @@ public class EmployeeContractServiceImpl implements EmployeeContractService {
     private String getContractTypeDesc(Integer contractType) {
         ContractTypeEnum enumValue = ContractTypeEnum.fromCode(contractType);
         return enumValue != null ? enumValue.getDesc() : "未知";
+    }
+
+    /**
+     * 校验合同日期逻辑
+     *
+     * @param startDate 开始日期
+     * @param endDate   结束日期
+     */
+    private void validateContractDates(LocalDate startDate, LocalDate endDate) {
+        if (startDate != null && endDate != null) {
+            if (!endDate.isAfter(startDate)) {
+                throw new GlobalException(ErrorCode.PARAM_VALIDATION_FAILED, "合同结束日期必须晚于开始日期");
+            }
+        }
     }
 
 }
