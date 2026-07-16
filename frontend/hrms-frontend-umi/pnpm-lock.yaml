@@ -26,6 +26,12 @@ importers:
       dayjs:
         specifier: ^1.11.21
         version: 1.11.21
+      three:
+        specifier: ^0.121.1
+        version: 0.121.1
+      vanta:
+        specifier: ^0.5.24
+        version: 0.5.24
     devDependencies:
       '@playwright/test':
         specifier: ^1.61.1
@@ -6594,6 +6600,9 @@ packages:
   thread-stream@0.15.1:
     resolution: {integrity: sha512-SCnuIT27gc2h/F/RY2peuC7brgLy+1oXU+7yOIAITz1z5stDpXCF5rAoFcykjuK6ifbTlKAHL7Ccq8oc5Btv1w==}
 
+  three@0.121.1:
+    resolution: {integrity: sha512-+rYhNpW5W1aBdLkPQDld/GA4Sj/uOKJJKVpCAZUbpk/HZEiYRUlPt8+s+9nmxRglWmRHdBa3ERvUwqg4nmoA5w==}
+
   throttle-debounce@5.0.2:
     resolution: {integrity: sha512-B71/4oyj61iNH0KeCamLuE2rmKuTO5byTOSVwECM5FA7TiAiAW+UqTKZ9ERueC4qvgSttUhdmq1mXC3kJqGX7A==}
     engines: {node: '>=12.22'}
@@ -6822,6 +6831,9 @@ packages:
 
   value-equal@1.0.1:
     resolution: {integrity: sha512-NOJ6JZCAWr0zlxZt+xqCHNTEKOsrks2HQd4MqhP1qy4z1SkbEP467eNx6TgDKXMvUOb+OENfJCZwM+16n7fRfw==}
+
+  vanta@0.5.24:
+    resolution: {integrity: sha512-fvieEbHy1ZS23zrcX+topzqAgA4Uct1enngOEWLFBgs9TtOf6RDFOYatH7KSVdrABzQDMCQ5myQy+nTSZZwLzg==}
 
   vary@1.1.2:
     resolution: {integrity: sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg==}
@@ -15193,6 +15205,8 @@ snapshots:
     dependencies:
       real-require: 0.1.0
 
+  three@0.121.1: {}
+
   throttle-debounce@5.0.2: {}
 
   through@2.3.8: {}
@@ -15448,6 +15462,8 @@ snapshots:
       react: 18.3.1
 
   value-equal@1.0.1: {}
+
+  vanta@0.5.24: {}
 
   vary@1.1.2: {}
 

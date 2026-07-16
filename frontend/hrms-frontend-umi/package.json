@@ -16,7 +16,9 @@
     "@umijs/max": "^4.6.73",
     "antd": "^5.4.0",
     "axios": "^1.18.1",
-    "dayjs": "^1.11.21"
+    "dayjs": "^1.11.21",
+    "three": "^0.121.1",
+    "vanta": "^0.5.24"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
