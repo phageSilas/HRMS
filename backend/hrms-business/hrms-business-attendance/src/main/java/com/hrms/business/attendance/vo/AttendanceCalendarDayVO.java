@@ -33,6 +33,16 @@ public class AttendanceCalendarDayVO {
     private LocalDateTime clockOutTime;
 
     /**
+     * 上班打卡IP。
+     */
+    private String clockInIp;
+
+    /**
+     * 下班打卡IP。
+     */
+    private String clockOutIp;
+
+    /**
      * 上班状态。
      */
     private String clockInStatus;

@@ -1240,6 +1240,8 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .leave(leaveDates.contains(date))
                 .clockInTime(record == null ? null : record.getClockInTime())
                 .clockOutTime(record == null ? null : record.getClockOutTime())
+                .clockInIp(record == null ? null : record.getClockInIp())
+                .clockOutIp(record == null ? null : record.getClockOutIp())
                 .clockInStatus(record == null ? null : record.getClockInStatus())
                 .clockOutStatus(record == null ? null : record.getClockOutStatus())
                 .build();
@@ -1248,6 +1250,8 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .leave(day.getLeave())
                 .clockInTime(day.getClockInTime())
                 .clockOutTime(day.getClockOutTime())
+                .clockInIp(day.getClockInIp())
+                .clockOutIp(day.getClockOutIp())
                 .clockInStatus(day.getClockInStatus())
                 .clockOutStatus(day.getClockOutStatus())
                 .dayStatus(resolveDayStatus(day))
