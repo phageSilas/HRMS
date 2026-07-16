@@ -91,9 +91,9 @@ hrms:
     header: Authorization
     token-prefix: Bearer
 
-  # AES 加密配置（敏感字段加密）
+  # AES 加密配置（敏感字段加密）,注意此处长度最好为32位
   aes:
-    secret-key: ${HRMS_AES_KEY:hrms-default-aes-key-256-bit-long-key-2026}
+    secret-key: ${HRMS_AES_KEY:hrmsDefaultAesKey32CharactersL2!}
 
 # SpringDoc OpenAPI
 springdoc:
