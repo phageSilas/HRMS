@@ -1,4 +1,4 @@
-package com.hrms.business.attendance.mq;
+package com.hrms.business.attendance.mq.event;
 
 import com.hrms.common.mq.HrmsMqMessage;
 import lombok.AllArgsConstructor;

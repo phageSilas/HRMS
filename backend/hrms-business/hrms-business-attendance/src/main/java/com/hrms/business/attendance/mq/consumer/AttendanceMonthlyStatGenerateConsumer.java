@@ -1,5 +1,7 @@
-package com.hrms.business.attendance.mq;
+package com.hrms.business.attendance.mq.consumer;
 
+import com.hrms.business.attendance.mq.event.AttendanceMonthlyStatGenerateMessage;
+import com.hrms.business.attendance.mq.constants.AttendanceMqConstants;
 import com.hrms.business.attendance.service.impl.AttendanceServiceImpl;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;

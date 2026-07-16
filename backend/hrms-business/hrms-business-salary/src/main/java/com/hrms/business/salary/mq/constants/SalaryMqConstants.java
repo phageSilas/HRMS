@@ -1,4 +1,4 @@
-package com.hrms.business.salary.mq;
+package com.hrms.business.salary.mq.constants;
 
 /**
  * 薪资模块 MQ 常量。
