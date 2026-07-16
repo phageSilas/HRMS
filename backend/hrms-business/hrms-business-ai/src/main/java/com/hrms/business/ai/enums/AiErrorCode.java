@@ -1,0 +1,35 @@
+package com.hrms.business.ai.enums;
+
+import com.hrms.common.exception.ErrorCode;
+
+/**
+ * AI 智能助手模块错误码
+ * <p>
+ * 错误码范围：40120-40129
+ */
+public class AiErrorCode {
+
+    private AiErrorCode() {
+    }
+
+    /**
+     * 40120 - 消息内容不能为空
+     */
+    public static final ErrorCode MESSAGE_EMPTY = new ErrorCode(40120, "消息内容不能为空");
+
+    /**
+     * 40121 - AI 服务调用失败（DashScope 超时/不可用）
+     */
+    public static final ErrorCode AI_SERVICE_ERROR = new ErrorCode(40121, "AI 服务调用失败，请稍后重试");
+
+    /**
+     * 40122 - 知识库检索异常（百炼接口异常）
+     */
+    public static final ErrorCode KNOWLEDGE_RETRIEVAL_ERROR = new ErrorCode(40122, "知识库检索异常，请稍后重试");
+
+    /**
+     * 40123 - 会话不存在或不属于当前用户
+     */
+    public static final ErrorCode CONVERSATION_NOT_FOUND = new ErrorCode(40123, "会话不存在或无权访问");
+
+}

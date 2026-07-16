@@ -17,13 +17,12 @@
     <packaging>jar</packaging>
 
     <dependencies>
-        <!-- 依赖 hrms-business-salary -->
+        <!-- 依赖 hrms-common（获取 BaseEntity、SecurityContextHolder 等） -->
         <dependency>
             <groupId>com.hrms</groupId>
-            <artifactId>hrms-business-salary</artifactId>
+            <artifactId>hrms-common</artifactId>
             <version>${project.version}</version>
         </dependency>
-
 
         <!-- Spring Boot Starter Web -->
         <dependency>
@@ -49,6 +48,18 @@
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
         -->
+
+        <!-- OkHttp：调用 DashScope 百炼 API（SSE 流式） -->
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp</artifactId>
+            <version>${okhttp.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp-sse</artifactId>
+            <version>${okhttp.version}</version>
+        </dependency>
 
         <!-- SpringDoc OpenAPI -->
         <dependency>
