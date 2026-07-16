@@ -230,8 +230,8 @@ public class DeptServiceImpl implements DeptService {
             throw new GlobalException(ErrorCode.DEPT_HAS_CHILDREN);
         }
 
-        // TODO: 检查是否有在职员工（后续通过 EmployeeService 检查）
-        // 暂时简化处理，假设没有员工
+        // 注意：部门下是否有员工的校验由调用方（employee模块）负责
+        // 因为organization模块不能反向依赖employee模块
 
         deptMapper.deleteById(id);
     }

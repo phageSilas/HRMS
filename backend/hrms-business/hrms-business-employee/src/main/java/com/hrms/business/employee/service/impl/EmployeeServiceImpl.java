@@ -396,6 +396,29 @@ public class EmployeeServiceImpl implements EmployeeService {
         return employeeMapper.selectList(wrapper);
     }
 
+    @Override
+    public List<EmployeeEntity> getEmployeesByPostId(Long postId) {
+        LambdaQueryWrapper<EmployeeEntity> wrapper = Wrappers.lambdaQuery();
+        wrapper.eq(EmployeeEntity::getPostId, postId);
+        // 只查询在职员工（试用期和正式）
+        wrapper.in(EmployeeEntity::getEmploymentStatus,
+                EmploymentStatusEnum.PROBATION.getCode(),
+                EmploymentStatusEnum.FORMAL.getCode());
+        return employeeMapper.selectList(wrapper);
+    }
+
+    @Override
+    public boolean hasEmployeesInDept(Long deptId) {
+        List<EmployeeEntity> employees = getEmployeesByDept(deptId);
+        return !employees.isEmpty();
+    }
+
+    @Override
+    public boolean hasEmployeesInPost(Long postId) {
+        List<EmployeeEntity> employees = getEmployeesByPostId(postId);
+        return !employees.isEmpty();
+    }
+
     // ==================== 私有方法 ====================
 
     /**

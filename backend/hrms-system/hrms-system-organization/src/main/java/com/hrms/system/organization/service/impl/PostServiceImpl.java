@@ -130,6 +130,9 @@ public class PostServiceImpl implements PostService {
             throw new GlobalException(ErrorCode.NOT_FOUND);
         }
 
+        // 注意：职位下是否有员工的校验由调用方（employee模块）负责
+        // 因为organization模块不能反向依赖employee模块
+
         postMapper.deleteById(id);
     }
 
