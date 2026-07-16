@@ -37,13 +37,18 @@ export interface Application {
   currentStep: string;
 }
 
+/** 待办任务（与后端 PendingTaskVO 对齐） */
 export interface PendingTask {
-  id: number;
-  bizType: string;
-  applicant: string;
-  deptName: string;
-  submitTime: string;
-  title: string;
+  id: number;           // 审批实例ID
+  taskId: number;       // 审批任务ID（操作时使用）
+  businessType: string; // 业务类型编码
+  businessTypeName: string; // 业务类型名称
+  title: string;        // 审批标题
+  applicantName: string; // 申请人姓名
+  nodeName: string;     // 当前审批节点名称
+  createdAt: string;    // 申请时间
+  deadline: string;     // 截止时间
+  status: string;       // 状态编码
 }
 
 // ============ 接口定义 ============
@@ -98,8 +103,8 @@ export async function getMyApplications(): Promise<{ records: Application[]; tot
 }
 
 /**
- * 获取待办任务列表
+ * 获取待办任务列表（调审批模块待办列表接口）
  */
 export async function getPendingList(): Promise<{ records: PendingTask[]; total: number }> {
-  return request.get('/api/v1/approval/pending-list');
+  return request.get('/api/v1/approval/tasks/pending');
 }

@@ -64,14 +64,14 @@ const PendingList: React.FC = () => {
           <List.Item.Meta
             title={
               <span>
-                <Tag color="blue">{item.bizType}</Tag>
+                <Tag color="blue">{item.businessTypeName}</Tag>
                 {item.title}
               </span>
             }
             description={
               <span>
-                申请人：{item.applicant} | 部门：{item.deptName} | 提交时间：
-                {item.submitTime}
+                申请人：{item.applicantName} | 当前节点：{item.nodeName} | 提交时间：
+                {item.createdAt}
               </span>
             }
           />
