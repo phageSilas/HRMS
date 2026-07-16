@@ -20,6 +20,8 @@ import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
 import com.hrms.system.auth.service.FieldPermissionService;
 import com.hrms.system.auth.vo.FieldPermissionVO;
+import com.hrms.system.organization.service.DeptService;
+import com.hrms.system.organization.vo.DeptDetailVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -39,6 +41,7 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     private final EmployeeMapper employeeMapper;
     private final FieldPermissionService fieldPermissionService;
+    private final DeptService deptService;
 
     @Override
     public PageResult<EmployeeListVO> listEmployees(EmployeeQueryDTO queryDTO) {
@@ -154,9 +157,13 @@ public class EmployeeServiceImpl implements EmployeeService {
         // 设置在职状态为试用期
         entity.setEmploymentStatus(EmploymentStatusEnum.PROBATION.getCode());
 
-        // 生成工号
-        // TODO: 实现工号生成逻辑
-        entity.setEmployeeNo("TEMP" + System.currentTimeMillis());
+        // 生成工号：查询部门编码，按规范生成
+        DeptDetailVO dept = deptService.getDeptById(createDTO.getDeptId());
+        if (dept == null || dept.getDeptCode() == null || dept.getDeptCode().isEmpty()) {
+            throw new GlobalException(ErrorCode.PARAM_VALIDATION_FAILED, "部门编码不存在，无法生成工号");
+        }
+        EmployeeGenNoVO genNoVO = generateEmployeeNo(dept.getDeptCode());
+        entity.setEmployeeNo(genNoVO.getEmployeeNo());
 
         employeeMapper.insert(entity);
         return entity;
