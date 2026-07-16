@@ -50,6 +50,8 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
 
     private static final ErrorCode ENTRY_APPLICATION_NOT_APPROVED = new ErrorCode(40044, "审批未通过，无法确认入职");
 
+    private static final ErrorCode ENTRY_APPLICATION_EMPLOYEE_MISSING = new ErrorCode(40046, "已入职申请缺少员工回写信息");
+
     private static final Map<Long, Object> ENTRY_CONFIRM_LOCKS = new ConcurrentHashMap<>();
 
     private static final int DEFAULT_PAGE_NUM = 1;
@@ -163,14 +165,14 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
     public EntryApplicationConfirmVO confirmEntryApplication(Long id, EntryApplicationConfirmRequestDTO requestDTO) {
         EntryApplicationEntity entity = getRequiredEntryApplication(id);
         if (entity.getApprovalStatus() != null && entity.getApprovalStatus() == ApplicationStatusEnum.ENTERED.getCode()) {
-            return tempBuildConfirmedEmployee(entity);
+            return buildConfirmedEmployee(entity);
         }
         Object confirmLock = getEntryConfirmLock(id);
         synchronized (confirmLock) {
             EntryApplicationEntity lockedEntity = getRequiredEntryApplication(id);
             if (lockedEntity.getApprovalStatus() != null
                     && lockedEntity.getApprovalStatus() == ApplicationStatusEnum.ENTERED.getCode()) {
-                return tempBuildConfirmedEmployee(lockedEntity);
+                return buildConfirmedEmployee(lockedEntity);
             }
             assertApproved(lockedEntity);
             // employeeService.generateEmployeeNo(lockedEntity); 本接口需要调用 hrms-business-employee 模块的生成员工工号接口
@@ -210,19 +212,23 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
      * @param entity 入职申请实体
      * @return 入职确认结果
      */
-    private EntryApplicationConfirmVO tempBuildConfirmedEmployee(EntryApplicationEntity entity) {
-        return buildConfirmVO(entity.getId(), tempGenerateEmployeeNo(entity));
+    private EntryApplicationConfirmVO buildConfirmedEmployee(EntryApplicationEntity entity) {
+        if (entity.getEmployeeId() == null || StrUtil.isBlank(entity.getEmployeeNo())) {
+            throw new GlobalException(ENTRY_APPLICATION_EMPLOYEE_MISSING);
+        }
+        return buildConfirmVO(entity.getEmployeeId(), entity.getEmployeeNo());
     }
 
-    /**
-     * 临时生成员工工号。
-     *
-     * @param entity 入职申请实体
-     * @return 员工工号
-     */
-    private String tempGenerateEmployeeNo(EntryApplicationEntity entity) {
-        return String.format("EMP%06d", entity.getId());
-    }
+    // 已停用：员工工号由 EmployeeService#createEmployee(createDTO) 统一生成。
+    //     /**
+    //      * 临时生成员工工号。
+    //      *
+    //      * @param entity 入职申请实体
+    //      * @return 员工工号
+    //      */
+    //     private String tempGenerateEmployeeNo(EntryApplicationEntity entity) {
+    //         return String.format("EMP%06d", entity.getId());
+    //     }
 
     // 已停用：账号创建已由 EmployeeService#createEmployee(createDTO) 内部完成，避免重复创建手机号账号。
     //     /**
