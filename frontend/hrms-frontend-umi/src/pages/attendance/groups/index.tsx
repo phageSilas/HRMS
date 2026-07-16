@@ -64,6 +64,14 @@ type GroupFormValues = Omit<
   enabled?: boolean;
 };
 
+type AttendanceGroupPageLike =
+  | {
+      records?: AttendanceGroup[];
+      data?: { records?: AttendanceGroup[] } | AttendanceGroup[];
+    }
+  | AttendanceGroup[]
+  | undefined;
+
 const shiftTypeMap: Record<string, { label: string; color: string }> = {
   FIXED: { label: '固定班', color: 'blue' },
   FLEXIBLE: { label: '弹性班', color: 'purple' },
@@ -97,18 +105,33 @@ function getShiftMeta(type?: string) {
   };
 }
 
+function normalizeGroups(pageData: AttendanceGroupPageLike) {
+  if (Array.isArray(pageData)) return pageData;
+  if (Array.isArray(pageData?.records)) return pageData.records;
+  if (Array.isArray(pageData?.data)) return pageData.data;
+  if (Array.isArray(pageData?.data?.records)) return pageData.data.records;
+  return [];
+}
+
 const AttendanceGroupsPage: React.FC = () => {
   const [form] = Form.useForm<GroupFormValues>();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<AttendanceGroup>();
   const [query, setQuery] = useState({ pageNum: 1, pageSize: 20 });
+  const [localGroups, setLocalGroups] = useState<AttendanceGroup[]>([]);
 
   const { data, loading, refresh } = useRequest(
     () => getAttendanceGroups(query),
     { refreshDeps: [query] },
   );
 
-  const groups = data?.records || [];
+  const groups = useMemo(() => {
+    const remoteGroups = normalizeGroups(data as AttendanceGroupPageLike);
+    const groupMap = new Map<number, AttendanceGroup>();
+    remoteGroups.forEach((item) => groupMap.set(item.id, item));
+    localGroups.forEach((item) => groupMap.set(item.id, item));
+    return Array.from(groupMap.values()).sort((a, b) => b.id - a.id);
+  }, [data, localGroups]);
 
   const activeCount = useMemo(
     () => groups.filter((item) => item.status !== 0).length,
@@ -180,10 +203,16 @@ const AttendanceGroupsPage: React.FC = () => {
     };
 
     if (editingGroup) {
-      await updateAttendanceGroup(editingGroup.id, payload);
+      const updatedGroup = await updateAttendanceGroup(editingGroup.id, payload);
+      setLocalGroups((previous) =>
+        previous.map((item) =>
+          item.id === updatedGroup.id ? updatedGroup : item,
+        ),
+      );
       message.success('考勤组已更新');
     } else {
-      await createAttendanceGroup(payload);
+      const createdGroup = await createAttendanceGroup(payload);
+      setLocalGroups((previous) => [createdGroup, ...previous]);
       message.success('考勤组已新增');
     }
 
