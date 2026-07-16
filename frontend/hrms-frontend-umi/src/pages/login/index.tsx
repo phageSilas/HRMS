@@ -109,8 +109,9 @@ const LoginPage: React.FC = () => {
       message.success('登录成功');
       await refresh();
       history.push('/home');
-    } catch (error) {
-      message.error('登录失败，请稍后重试');
+    } catch (error: any) {
+      const msg = error?.message || error?.response?.data?.message || '登录失败，请稍后重试';
+      message.error(msg);
     } finally {
       setLoading(false);
     }
@@ -141,7 +142,7 @@ const LoginPage: React.FC = () => {
               onFinish={handleLogin}
               initialValues={{
                 username: 'admin',
-                password: 'admin123',
+                password: '123456',
                 remember: true,
               }}
               size="large"

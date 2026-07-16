@@ -130,6 +130,18 @@ export default defineConfig({
           component: '@/pages/employee',
         },
         {
+          path: '/employee/create',
+          name: '新增员工',
+          component: '@/pages/employee/edit',
+          hideInMenu: true,
+        },
+        {
+          path: '/employee/:id/edit',
+          name: '编辑员工',
+          component: '@/pages/employee/edit',
+          hideInMenu: true,
+        },
+        {
           path: '/employee/detail/:id',
           name: '员工详情',
           component: '@/pages/employee/detail',

@@ -104,21 +104,28 @@ export async function login(data: LoginRequest): Promise<LoginResult> {
       roleCode: user.roleCode,
       permissions: user.permissions,
     };
-  } catch {
-    // 后端不可用时降级到本地登录（开发/演示环境）
-    const localUser = buildLocalUser(data);
-    const token = `try-frontend-token-${Date.now()}`;
-    localStorage.setItem('token', token);
-    localStorage.setItem('userInfo', JSON.stringify(localUser));
+  } catch (error: any) {
+    // 仅在网络不可达时降级到本地登录（开发/演示环境）
+    // 业务错误（密码错误、账号锁定等）由拦截器抛出 plain Error，直接向上传递
+    const networkCodes = ['ECONNREFUSED', 'ERR_NETWORK', 'ECONNABORTED', 'ERR_CONNECTION_REFUSED', 'ETIMEDOUT'];
+    if (error?.code && networkCodes.includes(error.code)) {
+      const localUser = buildLocalUser(data);
+      const token = `try-frontend-token-${Date.now()}`;
+      localStorage.setItem('token', token);
+      localStorage.setItem('userInfo', JSON.stringify(localUser));
 
-    return {
-      token,
-      userId: localUser.userId,
-      username: localUser.username,
-      nickname: localUser.nickname,
-      roleCode: localUser.roleCode,
-      permissions: localUser.permissions,
-    };
+      return {
+        token,
+        userId: localUser.userId,
+        username: localUser.username,
+        nickname: localUser.nickname,
+        roleCode: localUser.roleCode,
+        permissions: localUser.permissions,
+      };
+    }
+
+    // 业务错误：直接抛出
+    throw error;
   }
 }
 

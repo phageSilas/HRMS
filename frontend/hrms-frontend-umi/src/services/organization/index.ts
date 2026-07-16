@@ -10,27 +10,31 @@ import type { Result, PageResult, PageQuery } from '@/types/api';
 
 export interface Department {
   id: number;
-  name: string;
+  deptName: string;
   parentId: number | null;
-  sort: number;
-  leaderId: number | null;
-  leaderName: string | null;
+  sortNo: number;
+  leaderUserId: number | null;
+  leaderEmployeeId: number | null;
   children?: Department[];
 }
 
 export interface DepartmentTree {
   id: number;
-  name: string;
+  deptName: string;
+  deptCode: string;
   parentId: number | null;
   children?: DepartmentTree[];
 }
 
 export interface Post {
   id: number;
-  name: string;
-  code: string;
-  sort: number;
+  postName: string;
+  postCode: string;
+  sequenceCode: string;
+  deptId: number | null;
+  defaultProbationMonth: number;
   status: number;
+  sortNo: number;
 }
 
 export interface DictData {
@@ -48,21 +52,21 @@ export interface DictData {
  * 获取部门树
  */
 export async function getDepartmentTree() {
-  return request.get<Result<DepartmentTree[]>>('/departments/tree');
+  return request.get<DepartmentTree[]>('/api/v1/depts/tree');
 }
 
 /**
  * 获取部门列表
  */
 export async function getDepartmentList(params?: PageQuery) {
-  return request.get<Result<PageResult<Department>>>('/departments', { params });
+  return request.get<PageResult<Department>>('/api/v1/depts', { params });
 }
 
 /**
  * 获取部门详情
  */
 export async function getDepartmentDetail(id: number) {
-  return request.get<Result<Department>>(`/departments/${id}`);
+  return request.get<Department>(`/api/v1/depts/${id}`);
 }
 
 // ============ 职位接口 ============
@@ -71,7 +75,7 @@ export async function getDepartmentDetail(id: number) {
  * 获取职位列表
  */
 export async function getPostList(params?: PageQuery) {
-  return request.get<Result<PageResult<Post>>>('/posts', { params });
+  return request.get<PageResult<Post>>('/api/v1/posts', { params });
 }
 
 // ============ 字典接口 ============
@@ -80,5 +84,5 @@ export async function getPostList(params?: PageQuery) {
  * 按类型获取字典数据
  */
 export async function getDictDataByType(dictType: string) {
-  return request.get<Result<DictData[]>>(`/dict-data/type/${dictType}`);
+  return request.get<DictData[]>(`/api/v1/dicts/data/${dictType}`);
 }
