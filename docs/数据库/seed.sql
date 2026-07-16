@@ -134,3 +134,22 @@ INSERT IGNORE INTO `sys_field_permission` (`biz_type`, `field_name`, `field_desc
 ('employee', 'postId', '职位ID', 2, 1, 0, 1),
 ('employee', 'entryDate', '入职日期', 2, 1, 0, 0),
 ('employee', 'bankAccount', '银行卡号', 2, 0, 0, 0);
+
+-- ----------------------------------------
+-- 11. 考勤组成员 (hr_attendance_group_member)
+-- ----------------------------------------
+INSERT INTO hr_attendance_group_member (
+    group_id,
+    employee_id,
+    effective_start_date,
+    effective_end_date,
+    status,
+    remark
+) VALUES (
+             1,
+             9001,
+             CURDATE(),
+             NULL,
+             1,
+             '测试员工加入默认考勤组'
+         );
