@@ -45,7 +45,12 @@ public enum ApprovalTypeEnum {
     /**
      * 薪资批次审批
      */
-    SALARY("SALARY", "薪资批次审批");
+    SALARY("SALARY", "薪资批次审批"),
+
+    /**
+     * 加班审批
+     */
+    OVERTIME("OVERTIME", "加班审批");
 
     /**
      * 类型编码（与 DB 存储值一致）

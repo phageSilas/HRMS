@@ -2,7 +2,9 @@ package com.hrms.business.mycenter.listener;
 
 import com.hrms.business.approval.service.event.ApprovalCompletedEvent;
 import com.hrms.business.mycenter.entity.AttendanceCorrectionEntity;
+import com.hrms.business.mycenter.entity.AttendanceOvertimeEntity;
 import com.hrms.business.mycenter.entity.LeaveRequestEntity;
+import com.hrms.business.mycenter.mapper.AttendanceOvertimeMapper;
 import com.hrms.business.mycenter.mapper.MyCenterAttendanceCorrectionMapper;
 import com.hrms.business.mycenter.mapper.MyCenterLeaveRequestMapper;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
  * <ul>
  *   <li>LEAVE_REQUEST — 请假申请审批通过/驳回后更新请假记录状态</li>
  *   <li>CORRECTION — 补卡申请审批通过/驳回后更新补卡记录状态</li>
+ *   <li>OVERTIME — 加班申请审批通过/驳回后更新加班记录状态</li>
  * </ul>
  * </p>
  */
@@ -28,6 +31,7 @@ public class ApprovalEventListener {
 
     private final MyCenterLeaveRequestMapper leaveRequestMapper;
     private final MyCenterAttendanceCorrectionMapper correctionMapper;
+    private final AttendanceOvertimeMapper overtimeMapper;
 
     @EventListener
     @Transactional(rollbackFor = Exception.class)
@@ -38,6 +42,7 @@ public class ApprovalEventListener {
         switch (event.getApprovalType()) {
             case "LEAVE_REQUEST" -> handleLeaveCompleted(event);
             case "CORRECTION" -> handleCorrectionCompleted(event);
+            case "OVERTIME" -> handleOvertimeCompleted(event);
             default -> log.debug("忽略非本模块的审批类型: {}", event.getApprovalType());
         }
     }
@@ -76,5 +81,23 @@ public class ApprovalEventListener {
         correctionMapper.updateById(correction);
 
         log.info("补卡审批完成: correctionId={}, newStatus={}", event.getBizId(), newStatus);
+    }
+
+    /**
+     * 处理加班审批完成：根据审批结果更新加班记录状态
+     */
+    private void handleOvertimeCompleted(ApprovalCompletedEvent event) {
+        AttendanceOvertimeEntity overtime = overtimeMapper.selectById(event.getBizId());
+        if (overtime == null) {
+            log.warn("加班记录不存在: id={}", event.getBizId());
+            return;
+        }
+
+        // instanceStatus: 2=已通过, 3=已驳回
+        int newStatus = event.getInstanceStatus() == 2 ? 2 : 3;
+        overtime.setApprovalStatus(newStatus);
+        overtimeMapper.updateById(overtime);
+
+        log.info("加班审批完成: overtimeId={}, newStatus={}", event.getBizId(), newStatus);
     }
 }

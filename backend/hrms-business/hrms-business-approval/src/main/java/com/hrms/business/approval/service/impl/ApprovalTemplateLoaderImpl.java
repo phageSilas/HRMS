@@ -23,6 +23,7 @@ import java.util.Map;
  * │ LEAVE         │ HR       │ 部门负责人 → HR负责人                │
  * │ LEAVE_REQUEST │ 员工     │ ≤3天：直接上级 / >3天：直接上级→部门负责人 │
  * │ CORRECTION    │ 员工     │ 直接上级                             │
+ * │ OVERTIME      │ 员工     │ 直接上级（与补卡审批规则一致）        │
  * │ SALARY        │ HR       │ 财务专员 → [老板可选]                │
  * └───────────────┴──────────┴──────────────────────────────────────┘
  * </p>
@@ -68,6 +69,11 @@ public class ApprovalTemplateLoaderImpl implements ApprovalTemplateLoader {
 
         // CORRECTION 补卡审批：直接上级
         TEMPLATES.put("CORRECTION", List.of(
+                new ApprovalNodeDef("SUPERIOR", "直接上级审批", "SUPERIOR_DEPT_HEAD", 1, false)
+        ));
+
+        // OVERTIME 加班审批：直接上级（与补卡审批规则一致）
+        TEMPLATES.put("OVERTIME", List.of(
                 new ApprovalNodeDef("SUPERIOR", "直接上级审批", "SUPERIOR_DEPT_HEAD", 1, false)
         ));
 
