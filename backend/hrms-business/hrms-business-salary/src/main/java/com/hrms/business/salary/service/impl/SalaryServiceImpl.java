@@ -461,9 +461,8 @@ public class SalaryServiceImpl implements SalaryService {
         }
         boolean passwordOk = StrUtil.isNotBlank(requestDTO.getPassword())
                 && getPasswordEncoder().matches(requestDTO.getPassword(), user.getPassword());
-        boolean smsOk = StrUtil.isNotBlank(requestDTO.getSmsCode()) && tempVerifySmsCode(userId, requestDTO.getSmsCode());
-        if (!passwordOk && !smsOk) {
-            throw new GlobalException(ErrorCode.FORBIDDEN, "工资条二次验证失败");
+        if (!passwordOk) {
+            throw new GlobalException(ErrorCode.FORBIDDEN, "登录密码验证失败");
         }
         String token = IdUtil.fastSimpleUUID();
         StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
@@ -817,17 +816,6 @@ public class SalaryServiceImpl implements SalaryService {
     //    // 本方法未来替换为 hrms-business-approval 的薪资批次审批发起接口。
     //    return Math.abs(IdUtil.getSnowflakeNextId());
     //}
-
-    /**
-     * 临时验证短信验证码。
-     * @param userId 用户ID
-     * @param smsCode 短信验证码
-     * @return 是否验证通过
-     */
-    private boolean tempVerifySmsCode(Long userId, String smsCode) {
-        // 本方法未来替换为 auth/notification 模块短信验证码校验接口。
-        return "123456".equals(smsCode);
-    }
 
     /**
      * 保存薪资模板项。
