@@ -1,5 +1,7 @@
-package com.hrms.business.salary.mq;
+package com.hrms.business.salary.mq.consumer;
 
+import com.hrms.business.salary.mq.event.SalaryBatchCalculateMessage;
+import com.hrms.business.salary.mq.constants.SalaryMqConstants;
 import com.hrms.business.salary.service.impl.SalaryServiceImpl;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;

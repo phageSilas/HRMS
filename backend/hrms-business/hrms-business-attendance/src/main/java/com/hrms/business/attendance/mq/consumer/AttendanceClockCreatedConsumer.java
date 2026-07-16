@@ -1,5 +1,8 @@
-package com.hrms.business.attendance.mq;
+package com.hrms.business.attendance.mq.consumer;
 
+import com.hrms.business.attendance.mq.event.AttendanceClockCreatedEvent;
+import com.hrms.business.attendance.mq.handler.AttendanceClockEventHandler;
+import com.hrms.business.attendance.mq.constants.AttendanceMqConstants;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
 import com.hrms.common.mq.MessageQueueIdempotentHandler;
