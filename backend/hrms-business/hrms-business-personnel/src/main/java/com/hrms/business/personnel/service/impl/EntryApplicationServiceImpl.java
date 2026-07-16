@@ -25,8 +25,6 @@ import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
 import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
-import com.hrms.system.auth.dto.UserCreateDTO;
-import com.hrms.system.auth.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,6 +50,8 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
 
     private static final ErrorCode ENTRY_APPLICATION_NOT_APPROVED = new ErrorCode(40044, "审批未通过，无法确认入职");
 
+    private static final ErrorCode ENTRY_APPLICATION_EMPLOYEE_MISSING = new ErrorCode(40046, "已入职申请缺少员工回写信息");
+
     private static final Map<Long, Object> ENTRY_CONFIRM_LOCKS = new ConcurrentHashMap<>();
 
     private static final int DEFAULT_PAGE_NUM = 1;
@@ -66,9 +66,6 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
     private final ApprovalEngine approvalEngine;
 
     private final EmployeeService employeeService;
-
-    private final UserService userService;
-
 
     /**
      * 分页查询入职申请。
@@ -168,33 +165,33 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
     public EntryApplicationConfirmVO confirmEntryApplication(Long id, EntryApplicationConfirmRequestDTO requestDTO) {
         EntryApplicationEntity entity = getRequiredEntryApplication(id);
         if (entity.getApprovalStatus() != null && entity.getApprovalStatus() == ApplicationStatusEnum.ENTERED.getCode()) {
-            return tempBuildConfirmedEmployee(entity);
+            return buildConfirmedEmployee(entity);
         }
         Object confirmLock = getEntryConfirmLock(id);
         synchronized (confirmLock) {
             EntryApplicationEntity lockedEntity = getRequiredEntryApplication(id);
             if (lockedEntity.getApprovalStatus() != null
                     && lockedEntity.getApprovalStatus() == ApplicationStatusEnum.ENTERED.getCode()) {
-                return tempBuildConfirmedEmployee(lockedEntity);
+                return buildConfirmedEmployee(lockedEntity);
             }
             assertApproved(lockedEntity);
             // employeeService.generateEmployeeNo(lockedEntity); 本接口需要调用 hrms-business-employee 模块的生成员工工号接口
-            String employeeNo = tempGenerateEmployeeNo(lockedEntity);
             lockedEntity.setActualHireDate(requestDTO.getActualHireDate());
 
             // TODO 跨模块调用已完成：当前调用 EmployeeService#createEmployee(createDTO) 创建员工档案。
-            EmployeeEntity createdEmployee = tempCreateEmployee(lockedEntity, employeeNo);
+            EmployeeEntity createdEmployee = createEmployeeFromEntryApplication(lockedEntity);
 
             Long employeeId = createdEmployee.getId();
-            employeeNo = StrUtil.blankToDefault(createdEmployee.getEmployeeNo(), employeeNo);
+            String employeeNo = createdEmployee.getEmployeeNo();
 
-            // TODO 跨模块调用已完成：当前调用 UserService#createUser(createDTO) 创建入职账号。
-            tempCreateEntryAccount(lockedEntity, employeeNo, employeeId);
+            // TODO 跨模块调用已完成：账号创建已由 EmployeeService#createEmployee(createDTO) 内部完成，personnel 不再重复调用 UserService#createUser(...)。
 
+            lockedEntity.setEmployeeId(employeeId);
+            lockedEntity.setEmployeeNo(employeeNo);
             lockedEntity.setApprovalStatus(ApplicationStatusEnum.ENTERED.getCode());
             entryApplicationMapper.updateById(lockedEntity);
-            // entryConfirmedProducer.send(event); 本接口需要调用通知/MQ模块发送 personnel.entry.confirmed 事件和欢迎通知
-            tempSendEntryConfirmedNotice(lockedEntity, employeeId, employeeNo);
+            // entryConfirmedProducer.send(event); 本接口需要调用通知/MQ模块发送 personnel.entry.confirmed 事件和欢迎通知,本次项目暂不实现
+            //tempSendEntryConfirmedNotice(lockedEntity, employeeId, employeeNo);
             return buildConfirmVO(employeeId, employeeNo);
         }
     }
@@ -215,49 +212,53 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
      * @param entity 入职申请实体
      * @return 入职确认结果
      */
-    private EntryApplicationConfirmVO tempBuildConfirmedEmployee(EntryApplicationEntity entity) {
-        return buildConfirmVO(entity.getId(), tempGenerateEmployeeNo(entity));
+    private EntryApplicationConfirmVO buildConfirmedEmployee(EntryApplicationEntity entity) {
+        if (entity.getEmployeeId() == null || StrUtil.isBlank(entity.getEmployeeNo())) {
+            throw new GlobalException(ENTRY_APPLICATION_EMPLOYEE_MISSING);
+        }
+        return buildConfirmVO(entity.getEmployeeId(), entity.getEmployeeNo());
     }
 
-    /**
-     * 临时生成员工工号。
-     *
-     * @param entity 入职申请实体
-     * @return 员工工号
-     */
-    private String tempGenerateEmployeeNo(EntryApplicationEntity entity) {
-        return String.format("EMP%06d", entity.getId());
-    }
+    // 已停用：员工工号由 EmployeeService#createEmployee(createDTO) 统一生成。
+    //     /**
+    //      * 临时生成员工工号。
+    //      *
+    //      * @param entity 入职申请实体
+    //      * @return 员工工号
+    //      */
+    //     private String tempGenerateEmployeeNo(EntryApplicationEntity entity) {
+    //         return String.format("EMP%06d", entity.getId());
+    //     }
 
-    /**
-     * 临时创建入职账号。
-     *
-     * @param entity 入职申请实体
-     * @param employeeNo 员工工号
-     * @param employeeId 员工ID
-     * 本方法使用的工具类: UserService(hrms-system-auth)
-     */
-    private void tempCreateEntryAccount(EntryApplicationEntity entity, String employeeNo, Long employeeId) {
-        UserCreateDTO createDTO = new UserCreateDTO();
-        createDTO.setUsername(employeeNo);
-        createDTO.setPassword(entity.getPhone().substring(entity.getPhone().length() - 6));
-        createDTO.setRealName(entity.getCandidateName());
-        createDTO.setPhone(entity.getPhone());
-        createDTO.setEmail(entity.getEmail());
-        createDTO.setEmployeeId(employeeId);
+    // 已停用：账号创建已由 EmployeeService#createEmployee(createDTO) 内部完成，避免重复创建手机号账号。
+    //     /**
+    //      * 临时创建入职账号。
+    //      *
+    //      * @param entity 入职申请实体
+    //      * @param employeeNo 员工工号
+    //      * @param employeeId 员工ID
+    //      * 本方法使用的工具类: UserService(hrms-system-auth)
+    //      */
+    //     private void tempCreateEntryAccount(EntryApplicationEntity entity, String employeeNo, Long employeeId) {
+    //         UserCreateDTO createDTO = new UserCreateDTO();
+    //         createDTO.setUsername(employeeNo);
+    //         createDTO.setPassword(entity.getPhone().substring(entity.getPhone().length() - 6));
+    //         createDTO.setRealName(entity.getCandidateName());
+    //         createDTO.setPhone(entity.getPhone());
+    //         createDTO.setEmail(entity.getEmail());
+    //         createDTO.setEmployeeId(employeeId);
         // 当前 auth 模块尚无“入职默认角色/按岗位分配角色”公开接口，roleIds 暂不传，由账号或权限模块后续补齐。
-        userService.createUser(createDTO);
-    }
+    //         userService.createUser(createDTO);
+    //     }
 
     /**
      * 临时创建员工档案。
      *
      * @param entity 入职申请实体
-     * @param employeeNo 员工工号
      * @return 员工模块创建后的员工实体
      * 本方法使用的工具类: EmployeeService(hrms-business-employee)
      */
-    private EmployeeEntity tempCreateEmployee(EntryApplicationEntity entity, String employeeNo) {
+    private EmployeeEntity createEmployeeFromEntryApplication(EntryApplicationEntity entity) {
         EmployeeCreateDTO createDTO = new EmployeeCreateDTO();
         createDTO.setEmployeeName(entity.getCandidateName());
         createDTO.setGender(entity.getGender());
@@ -271,7 +272,8 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         createDTO.setProbationMonth(entity.getProbationMonth());
         createDTO.setProbationSalaryRatio(entity.getProbationSalaryRatio());
         createDTO.setIdCardNo(entity.getIdCardNo());
-        createDTO.setRemark("由入职申请确认创建，申请ID：" + entity.getId() + "，预生成工号：" + employeeNo);
+        createDTO.setRemark("由入职申请确认创建，申请ID：" + entity.getId());
+        // TODO 跨模块调用已完成：当前调用 EmployeeService#createEmployee(createDTO) 创建员工档案并由员工模块生成工号。
         return employeeService.createEmployee(createDTO);
     }
 
@@ -282,9 +284,9 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
      * @param employeeId 员工ID
      * @param employeeNo 员工工号
      */
-    private void tempSendEntryConfirmedNotice(EntryApplicationEntity entity, Long employeeId, String employeeNo) {
-        // 临时空实现，等待通知模块或 RabbitMQ 事件生产者提供后替换。
-    }
+    //private void tempSendEntryConfirmedNotice(EntryApplicationEntity entity, Long employeeId, String employeeNo) {
+    //    // 临时空实现，等待通知模块或 RabbitMQ 事件生产者提供后替换。
+    //}
 
     /**
      * 构造入职确认结果。

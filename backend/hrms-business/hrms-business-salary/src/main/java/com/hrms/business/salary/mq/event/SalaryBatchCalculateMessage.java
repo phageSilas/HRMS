@@ -1,4 +1,4 @@
-package com.hrms.business.salary.mq;
+package com.hrms.business.salary.mq.event;
 
 import com.hrms.common.mq.HrmsMqMessage;
 import lombok.AllArgsConstructor;

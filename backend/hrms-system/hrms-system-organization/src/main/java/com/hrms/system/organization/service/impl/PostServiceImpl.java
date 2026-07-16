@@ -130,6 +130,13 @@ public class PostServiceImpl implements PostService {
             throw new GlobalException(ErrorCode.NOT_FOUND);
         }
 
+        // 注意：职位下是否有在职员工的校验由调用方（前端/客户端）负责
+        // 原因：
+        // 1. organization模块不能反向依赖employee模块（避免循环依赖）
+        // 2. 前端应在删除职位前先调用 /api/v1/employees/check-post?postId={id} 接口校验
+        // 3. 如果该校验接口返回 true（有在职员工），前端应阻止删除操作并提示用户
+        // 4. 后端此处不重复校验员工（避免跨模块耦合）
+
         postMapper.deleteById(id);
     }
 

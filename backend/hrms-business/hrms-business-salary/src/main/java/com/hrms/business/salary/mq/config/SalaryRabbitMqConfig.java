@@ -1,5 +1,6 @@
-package com.hrms.business.salary.mq;
+package com.hrms.business.salary.mq.config;
 
+import com.hrms.business.salary.mq.constants.SalaryMqConstants;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.DirectExchange;

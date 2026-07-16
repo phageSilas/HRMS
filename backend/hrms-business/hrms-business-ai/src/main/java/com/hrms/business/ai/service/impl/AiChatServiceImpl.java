@@ -1,6 +1,7 @@
 package com.hrms.business.ai.service.impl;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hrms.business.ai.config.AiConfig;
 import com.hrms.business.ai.dto.ChatRequestDTO;
@@ -88,14 +89,22 @@ public class AiChatServiceImpl implements AiChatService {
                 // 调用 DashScope 百炼流式生成
                 String fullResponse = callDashScope(emitter, history, request.getContent(), knowledgeContext);
 
-                // 发送 end 事件
-                String endData = objectMapper.writeValueAsString(
-                        Map.of("type", "end", "reason", "stop"));
+                // 解析路由建议（从 AI 回复中提取）
+                List<Map<String, String>> suggestions = parseSuggestions(fullResponse);
+
+                // 发送 end 事件（含路由建议）
+                Map<String, Object> endPayload = new HashMap<>();
+                endPayload.put("type", "end");
+                endPayload.put("reason", "stop");
+                if (!suggestions.isEmpty()) {
+                    endPayload.put("suggestions", suggestions);
+                }
+                String endData = objectMapper.writeValueAsString(endPayload);
                 emitter.send(SseEmitter.event().name("message").data(endData));
                 emitter.complete();
 
-                // 保存 AI 回复
-                saveAiResponse(finalConversationId, fullResponse);
+                // 保存 AI 回复（含路由建议）
+                saveAiResponse(finalConversationId, fullResponse, suggestions);
 
             } catch (Exception e) {
                 log.error("AI 对话流式处理异常", e);
@@ -161,6 +170,7 @@ public class AiChatServiceImpl implements AiChatService {
                 .build();
 
         StringBuilder fullContent = new StringBuilder();
+        boolean[] markerReached = {false}; // 使用数组以便在 lambda 中修改
 
         // 使用锁同步等待流式完成
         Object lock = new Object();
@@ -182,13 +192,50 @@ public class AiChatServiceImpl implements AiChatService {
                     Map<String, Object> delta = (Map<String, Object>) choice.get("delta");
                     if (delta == null) return;
 
-                    String content = (String) delta.get("content");
-                    if (content != null && !content.isEmpty()) {
-                        fullContent.append(content);
-                        String contentEvent = objectMapper.writeValueAsString(
-                                Map.of("type", "content", "text", content));
+                    String chunkText = (String) delta.get("content");
+                    if (chunkText == null || chunkText.isEmpty()) return;
+
+                    fullContent.append(chunkText);
+
+                    // 已经到达 SUGGESTIONS 标记，不再推送
+                    if (markerReached[0]) return;
+
+                    String currentFull = fullContent.toString();
+                    int markerIdx = currentFull.indexOf("---SUGGESTIONS---");
+                    if (markerIdx >= 0) {
+                        markerReached[0] = true;
+                        // 标记在此 chunk 中完成，只推送标记前的内容
+                        int prevLen = fullContent.length() - chunkText.length();
+                        if (markerIdx > prevLen) {
+                            String safePart = chunkText.substring(0, markerIdx - prevLen);
+                            if (!safePart.isEmpty()) {
+                                try {
+                                    emitter.send(SseEmitter.event().name("message")
+                                            .data(objectMapper.writeValueAsString(Map.of("type", "content", "text", safePart))));
+                                } catch (IOException e) {
+                                    eventSource.cancel();
+                                }
+                            }
+                        }
+                        return;
+                    }
+
+                    // 检查当前 fullContent 末尾是否匹配 marker 的前缀（标记被跨 chunk 分割时）
+                    // 如以 "---" "---SUG" 结尾时，不推送重叠部分
+                    String pushText = chunkText;
+                    int maxOverlap = Math.min("---SUGGESTIONS---".length(), currentFull.length());
+                    for (int i = 1; i <= maxOverlap; i++) {
+                        String suffix = currentFull.substring(currentFull.length() - i);
+                        if ("---SUGGESTIONS---".startsWith(suffix)) {
+                            pushText = chunkText.substring(0, chunkText.length() - Math.min(i, chunkText.length()));
+                            break;
+                        }
+                    }
+
+                    if (!pushText.isEmpty()) {
                         try {
-                            emitter.send(SseEmitter.event().name("message").data(contentEvent));
+                            emitter.send(SseEmitter.event().name("message")
+                                    .data(objectMapper.writeValueAsString(Map.of("type", "content", "text", pushText))));
                         } catch (IOException e) {
                             eventSource.cancel();
                         }
@@ -230,14 +277,35 @@ public class AiChatServiceImpl implements AiChatService {
 
     private String buildSystemPrompt(String knowledgeContext) {
         StringBuilder sb = new StringBuilder();
-        sb.append("你是 HRMS（人力资源管理系统）的智能助手。请根据以下规则回答：\n\n");
-        sb.append("1. 如果你擅长的问题，请直接回答。\n");
-        sb.append("2. 如果用户询问公司制度或政策，请优先使用提供的知识片段回答。\n");
-        sb.append("3. 如果知识片段不足以回答，请说明不确定，不要编造信息。\n");
-        sb.append("4. 回答应简洁、专业、友好，使用中文。\n");
+        sb.append("你是 HRMS（人力资源管理系统）的智能助手。请严格遵守以下规则：\n\n");
+
+        sb.append("## 回答规则\n");
+        sb.append("1. 如果用户询问公司制度或政策，请优先使用提供的知识片段回答，并标注引用来源。\n");
+        sb.append("2. 如果知识片段不足以回答，请说明不确定，不要编造信息。\n");
+        sb.append("3. 回答应简洁、专业、友好，使用中文。\n");
+
+        sb.append("\n## 意图识别与路由建议\n");
+        sb.append("识别用户的操作意图，在回答末尾输出路由建议。格式如下：\n\n");
+        sb.append("---SUGGESTIONS---\n");
+        sb.append("[{\"label\":\"去请假\",\"path\":\"/attendance/leave\"}]\n\n");
+        sb.append("### 可识别的意图与对应路由\n");
+        sb.append("- 请假相关 → /attendance/leave\n");
+        sb.append("- 查工资/薪资/工资条 → /salary/payslip\n");
+        sb.append("- 查考勤记录 → /attendance/record\n");
+        sb.append("- 查加班 → /attendance/record\n");
+        sb.append("- 调岗/转岗 → /process/transfer\n");
+        sb.append("- 入职申请 → /process/entry\n");
+        sb.append("- 转正申请 → /process/regular\n");
+        sb.append("- 离职申请 → /process/leave\n");
+        sb.append("- 查员工信息 → /employee/list\n");
+        sb.append("- 查个人档案 → /profile/index\n");
+        sb.append("- 审批/待审批 → /approval/workspace\n\n");
+        sb.append("如果无法识别明确意图，不输出 SUGGESTIONS 块。\n");
+        sb.append("如果识别到多个意图，可以输出多条建议。\n");
 
         if (knowledgeContext != null && !knowledgeContext.isBlank()) {
-            sb.append("\n以下是相关制度文档片段供参考：\n");
+            sb.append("\n## 知识库参考\n");
+            sb.append("以下是相关制度文档片段供参考：\n");
             sb.append(knowledgeContext);
         }
 
@@ -249,21 +317,121 @@ public class AiChatServiceImpl implements AiChatService {
     /**
      * DashScope 百炼知识库检索
      * <p>
-     * 用户提问时检索公司制度相关文档片段，拼入 Prompt 上下文。
-     * 未配置 knowledgeBaseId 时返回空，不影响基础对话。
-     * <p>
-     * TODO: 接入 DashScope Knowledge Base Retrieve API
-     * API 地址：POST https://dashscope.aliyuncs.com/api/v2/apps/memory/search
-     * 参考：https://help.aliyun.com/zh/model-studio/memory-library
+     * 调用 DashScope SearchMemory API 检索知识库，返回相关文档片段。
+     * 未配置 knowledgeBaseId 时返回空字符串。
      */
+    @SuppressWarnings("unchecked")
     private String retrieveKnowledge(String query) {
         String apiKey = aiConfig.getApiKey();
         String kbId = aiConfig.getKnowledgeBaseId();
-        if (apiKey != null && !apiKey.isBlank() && kbId != null && !kbId.isBlank()) {
-            log.info("DashScope 知识库已配置（ID: {}），检索集成待后续实现。配置后请求时将自动检索相关知识片段拼入 Prompt", kbId);
-            // TODO: 调用 DashScope SearchMemory API
+        if (apiKey == null || apiKey.isBlank() || kbId == null || kbId.isBlank()) {
+            return "";
         }
-        return "";
+
+        try {
+            OkHttpClient client = new OkHttpClient.Builder()
+                    .callTimeout(java.time.Duration.ofMillis(aiConfig.getTimeout()))
+                    .readTimeout(java.time.Duration.ofMillis(aiConfig.getTimeout()))
+                    .build();
+
+            Map<String, Object> body = new HashMap<>();
+            body.put("memory_id", kbId);
+            body.put("query", query);
+            body.put("top_k", 5);
+            body.put("threshold", 0.5);
+
+            Request request = new Request.Builder()
+                    .url("https://dashscope.aliyuncs.com/api/v2/apps/memory/search")
+                    .post(RequestBody.create(objectMapper.writeValueAsString(body),
+                            okhttp3.MediaType.parse("application/json")))
+                    .header("Authorization", "Bearer " + apiKey)
+                    .build();
+
+            try (Response response = client.newCall(request).execute()) {
+                if (!response.isSuccessful() || response.body() == null) {
+                    log.warn("DashScope 知识库检索失败: HTTP {}", response.code());
+                    return "";
+                }
+
+                String respBody = response.body().string();
+                Map<String, Object> result = objectMapper.readValue(respBody, Map.class);
+
+                // 解析返回的 chunks
+                Map<String, Object> data = (Map<String, Object>) result.get("data");
+                if (data == null) return "";
+
+                List<Map<String, Object>> chunks = (List<Map<String, Object>>) data.get("chunks");
+                if (chunks == null || chunks.isEmpty()) return "";
+
+                StringBuilder context = new StringBuilder();
+                for (int i = 0; i < chunks.size(); i++) {
+                    Map<String, Object> chunk = chunks.get(i);
+                    String content = (String) chunk.get("content");
+                    String source = (String) chunk.get("source");
+                    if (content != null && !content.isBlank()) {
+                        context.append("\n[").append(i + 1).append("] ");
+                        if (source != null) {
+                            context.append("（来源：").append(source).append("）");
+                        }
+                        context.append(content).append("\n");
+                    }
+                }
+
+                if (context.length() > 0) {
+                    log.info("知识库检索成功，获取到 {} 个相关片段", chunks.size());
+                }
+                return context.toString();
+            }
+        } catch (Exception e) {
+            log.error("DashScope 知识库检索异常", e);
+            return "";
+        }
+    }
+
+    // ==================== 路由建议解析 ====================
+
+    /**
+     * 从 AI 完整回复中解析路由建议
+     * <p>
+     * AI 被要求以 ---SUGGESTIONS--- 标记输出路由建议 JSON。
+     */
+    private List<Map<String, String>> parseSuggestions(String fullResponse) {
+        if (fullResponse == null || !fullResponse.contains("---SUGGESTIONS---")) {
+            return List.of();
+        }
+
+        int markerIdx = fullResponse.indexOf("---SUGGESTIONS---");
+        int jsonStart = markerIdx + "---SUGGESTIONS---".length();
+
+        while (jsonStart < fullResponse.length()
+                && Character.isWhitespace(fullResponse.charAt(jsonStart))) {
+            jsonStart++;
+        }
+
+        try {
+            String jsonPart = fullResponse.substring(jsonStart).trim();
+            int jsonEnd = jsonPart.indexOf('\n');
+            if (jsonEnd > 0) {
+                jsonPart = jsonPart.substring(0, jsonEnd);
+            }
+
+            List<Map<String, String>> suggestions = objectMapper.readValue(
+                    jsonPart, new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, String>>>() {});
+            return suggestions != null ? suggestions : List.of();
+        } catch (Exception e) {
+            log.warn("解析路由建议失败", e);
+            return List.of();
+        }
+    }
+
+    /**
+     * 从 AI 完整回复中移除 SUGGESTIONS 标记和 JSON，返回纯文本
+     */
+    private String stripSuggestions(String fullResponse) {
+        if (fullResponse == null) return "";
+        int markerIdx = fullResponse.indexOf("---SUGGESTIONS---");
+        if (markerIdx < 0) return fullResponse;
+        return fullResponse.substring(0, markerIdx).trim();
     }
 
     // ==================== 数据库操作 ====================
@@ -297,14 +465,37 @@ public class AiChatServiceImpl implements AiChatService {
         messageMapper.insert(msg);
     }
 
-    public void saveAiResponse(Long conversationId, String content) {
-        if (content == null || content.isBlank()) {
+    /**
+     * 保存 AI 回复（自动去除 SUGGESTIONS 标记，将路由建议存入 metadata）
+     */
+    public void saveAiResponse(Long conversationId, String fullResponse,
+                               List<Map<String, String>> suggestions) {
+        if (fullResponse == null || fullResponse.isBlank()) {
             return;
         }
+
+        // 去除 SUGGESTIONS 标记，只保存纯文本
+        String cleanContent = stripSuggestions(fullResponse);
+        if (cleanContent.isBlank()) {
+            return;
+        }
+
         MessageEntity msg = new MessageEntity();
         msg.setConversationId(conversationId);
         msg.setRole("assistant");
-        msg.setContent(content);
+        msg.setContent(cleanContent);
+
+        // 如果有路由建议，存入 metadata
+        if (!suggestions.isEmpty()) {
+            try {
+                Map<String, Object> meta = new HashMap<>();
+                meta.put("suggestions", suggestions);
+                msg.setMetadata(objectMapper.writeValueAsString(meta));
+            } catch (JsonProcessingException e) {
+                log.warn("序列化路由建议失败", e);
+            }
+        }
+
         messageMapper.insert(msg);
         incrementMessageCount(conversationId);
     }

@@ -1,7 +1,8 @@
-package com.hrms.business.attendance.mq;
+package com.hrms.business.attendance.mq.handler;
 
 import cn.hutool.json.JSONUtil;
 import com.hrms.business.attendance.cache.AttendanceCacheKeys;
+import com.hrms.business.attendance.mq.event.AttendanceClockCreatedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -10,7 +11,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 
 /**
- * 打卡成功事件处理入口，后续接入 RabbitMQ Consumer 后复用本类逻辑。
+ * 打卡成功事件处理入口，接入 RabbitMQ Consumer 后复用本类逻辑。
  */
 @Component
 @RequiredArgsConstructor

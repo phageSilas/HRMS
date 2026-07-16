@@ -5,7 +5,6 @@ import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hrms.business.attendance.service.AttendanceService;
@@ -35,8 +34,8 @@ import com.hrms.business.salary.mapper.SalaryEmployeeSnapshotMapper;
 import com.hrms.business.salary.mapper.SalarySysUserMapper;
 import com.hrms.business.salary.mapper.SalaryTemplateItemMapper;
 import com.hrms.business.salary.mapper.SalaryTemplateMapper;
-import com.hrms.business.salary.mq.SalaryBatchCalculateProducer;
-import com.hrms.business.salary.mq.SalaryBatchCalculateMessage;
+import com.hrms.business.salary.mq.producer.SalaryBatchCalculateProducer;
+import com.hrms.business.salary.mq.event.SalaryBatchCalculateMessage;
 import com.hrms.business.salary.service.SalaryService;
 import com.hrms.business.salary.vo.EmployeeSalaryProfileVO;
 import com.hrms.business.salary.vo.SalaryBatchItemVO;
@@ -63,12 +62,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -461,9 +458,8 @@ public class SalaryServiceImpl implements SalaryService {
         }
         boolean passwordOk = StrUtil.isNotBlank(requestDTO.getPassword())
                 && getPasswordEncoder().matches(requestDTO.getPassword(), user.getPassword());
-        boolean smsOk = StrUtil.isNotBlank(requestDTO.getSmsCode()) && tempVerifySmsCode(userId, requestDTO.getSmsCode());
-        if (!passwordOk && !smsOk) {
-            throw new GlobalException(ErrorCode.FORBIDDEN, "工资条二次验证失败");
+        if (!passwordOk) {
+            throw new GlobalException(ErrorCode.FORBIDDEN, "登录密码验证失败");
         }
         String token = IdUtil.fastSimpleUUID();
         StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
@@ -817,17 +813,6 @@ public class SalaryServiceImpl implements SalaryService {
     //    // 本方法未来替换为 hrms-business-approval 的薪资批次审批发起接口。
     //    return Math.abs(IdUtil.getSnowflakeNextId());
     //}
-
-    /**
-     * 临时验证短信验证码。
-     * @param userId 用户ID
-     * @param smsCode 短信验证码
-     * @return 是否验证通过
-     */
-    private boolean tempVerifySmsCode(Long userId, String smsCode) {
-        // 本方法未来替换为 auth/notification 模块短信验证码校验接口。
-        return "123456".equals(smsCode);
-    }
 
     /**
      * 保存薪资模板项。

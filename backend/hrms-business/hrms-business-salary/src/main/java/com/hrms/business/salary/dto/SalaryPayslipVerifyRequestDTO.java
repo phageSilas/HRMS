@@ -18,7 +18,6 @@ public class SalaryPayslipVerifyRequestDTO {
     @NotBlank
     private String month;
 
+    @NotBlank(message = "登录密码不能为空")
     private String password;
-
-    private String smsCode;
 }

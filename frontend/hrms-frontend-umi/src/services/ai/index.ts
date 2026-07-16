@@ -64,7 +64,7 @@ export type SseEvent = SseStartEvent | SseContentEvent | SseEndEvent | SseErrorE
 export interface SseCallbacks {
   onStart?: (conversationId: number) => void;
   onContent?: (text: string) => void;
-  onEnd?: (reason: string) => void;
+  onEnd?: (reason: string, rawData?: string) => void;
   onError?: (code: number, message: string) => void;
 }
 
@@ -118,7 +118,7 @@ export async function sendChatMessage(request: ChatRequest, callbacks: SseCallba
           if (!jsonStr) continue;
           try {
             const event: SseEvent = JSON.parse(jsonStr);
-            handleSseEvent(event, callbacks);
+            handleSseEvent(event, callbacks, jsonStr);
           } catch (e) {
             console.warn('SSE 数据解析失败:', jsonStr);
           }
@@ -131,7 +131,7 @@ export async function sendChatMessage(request: ChatRequest, callbacks: SseCallba
   }
 }
 
-function handleSseEvent(event: SseEvent, callbacks: SseCallbacks): void {
+function handleSseEvent(event: SseEvent, callbacks: SseCallbacks, rawJson?: string): void {
   switch (event.type) {
     case 'start':
       callbacks.onStart?.(event.conversationId);
@@ -140,7 +140,7 @@ function handleSseEvent(event: SseEvent, callbacks: SseCallbacks): void {
       callbacks.onContent?.(event.text);
       break;
     case 'end':
-      callbacks.onEnd?.(event.reason);
+      callbacks.onEnd?.(event.reason, rawJson);
       break;
     case 'error':
       callbacks.onError?.(event.code, event.message);
@@ -156,4 +156,14 @@ export async function getConversations(params?: { pageNum?: number; pageSize?: n
 /** 获取消息记录 */
 export async function getMessages(conversationId: number) {
   return request.get<ConversationDetail>(`/api/v1/ai/conversations/${conversationId}/messages`);
+}
+
+/** 删除会话 */
+export async function deleteConversation(id: number) {
+  return request.delete(`/api/v1/ai/conversations/${id}`);
+}
+
+/** 修改会话标题 */
+export async function updateTitle(id: number, title: string): Promise<void> {
+  return request.put(`/api/v1/ai/conversations/${id}/title`, { title });
 }
