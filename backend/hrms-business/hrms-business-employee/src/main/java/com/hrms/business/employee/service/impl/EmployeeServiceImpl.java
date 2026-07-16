@@ -278,8 +278,37 @@ public class EmployeeServiceImpl implements EmployeeService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public EmployeeEntity patchEmployee(Long id, EmployeeUpdateDTO updateDTO) {
-        // PATCH 逻辑与 PUT 相同，都是更新非空字段
-        return updateEmployee(id, updateDTO);
+        EmployeeEntity entity = employeeMapper.selectById(id);
+        if (entity == null) {
+            throw new GlobalException(ErrorCode.EMPLOYEE_NOT_FOUND);
+        }
+
+        // PATCH 只允许更新部分字段（状态、联系方式、地址等）
+        // 不允许更新：姓名、部门、职位、职级、工号、薪资等核心字段
+        if (updateDTO.getPhone() != null) {
+            entity.setPhone(updateDTO.getPhone());
+        }
+        if (updateDTO.getEmail() != null) {
+            entity.setEmail(updateDTO.getEmail());
+        }
+        if (updateDTO.getEmploymentStatus() != null) {
+            entity.setEmploymentStatus(updateDTO.getEmploymentStatus());
+        }
+        if (updateDTO.getCurrentAddress() != null) {
+            entity.setCurrentAddress(updateDTO.getCurrentAddress());
+        }
+        if (updateDTO.getEmergencyContact() != null) {
+            entity.setEmergencyContact(updateDTO.getEmergencyContact());
+        }
+        if (updateDTO.getEmergencyPhone() != null) {
+            entity.setEmergencyPhone(updateDTO.getEmergencyPhone());
+        }
+        if (updateDTO.getRemark() != null) {
+            entity.setRemark(updateDTO.getRemark());
+        }
+
+        employeeMapper.updateById(entity);
+        return entity;
     }
 
     @Override
