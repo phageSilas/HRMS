@@ -73,7 +73,28 @@ export async function getInitialState(): Promise<InitialState> {
 }
 
 /**
+ * 自定义渲染 - 在应用渲染前进行权限拦截
+ * 这是最早能拦截路由重定向的时机
+ */
+export function render(oldRender: () => void) {
+  const token = localStorage.getItem('token');
+  const pathname = window.location.pathname;
+
+  // 未登录且访问根路径时，阻止默认渲染（默认会重定向到 /home）
+  // 强制跳转到登录页
+  if (!token && (pathname === '/' || pathname === '/home')) {
+    history.push('/login');
+    // 不调用 oldRender，直接返回
+    return;
+  }
+
+  oldRender();
+}
+
+/**
  * 路由变化监听 - 未登录时强制跳转登录页
+ * 注意：onRouteChange 在路由匹配后执行，此时重定向已经发生
+ * 因此需要在 render 阶段进行权限拦截
  */
 export function onRouteChange({ location }: { location: { pathname: string } }) {
   const token = localStorage.getItem('token');

@@ -314,7 +314,7 @@ export default defineConfig({
       component: '@/pages/ai',
     },
 
-    // 首页重定向
+    // 首页重定向（带权限控制，未登录时会被路由守卫拦截）
     { path: '/', redirect: '/home' },
 
     // 403 无权限页面
