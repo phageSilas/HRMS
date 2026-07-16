@@ -18,8 +18,11 @@ import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
 import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
+import com.hrms.system.auth.dto.UserCreateDTO;
 import com.hrms.system.auth.service.FieldPermissionService;
+import com.hrms.system.auth.service.UserService;
 import com.hrms.system.auth.vo.FieldPermissionVO;
+import com.hrms.system.auth.vo.UserCreateResultVO;
 import com.hrms.system.organization.service.DeptService;
 import com.hrms.system.organization.vo.DeptDetailVO;
 import lombok.RequiredArgsConstructor;
@@ -42,6 +45,7 @@ public class EmployeeServiceImpl implements EmployeeService {
     private final EmployeeMapper employeeMapper;
     private final FieldPermissionService fieldPermissionService;
     private final DeptService deptService;
+    private final UserService userService;
 
     @Override
     public PageResult<EmployeeListVO> listEmployees(EmployeeQueryDTO queryDTO) {
@@ -165,7 +169,12 @@ public class EmployeeServiceImpl implements EmployeeService {
         EmployeeGenNoVO genNoVO = generateEmployeeNo(dept.getDeptCode());
         entity.setEmployeeNo(genNoVO.getEmployeeNo());
 
+        // 保存员工记录
         employeeMapper.insert(entity);
+
+        // 创建系统账号
+        createUserAccount(entity);
+
         return entity;
     }
 
@@ -426,6 +435,57 @@ public class EmployeeServiceImpl implements EmployeeService {
                     "flowRequiredFields", java.util.List.of()
             );
         }
+    }
+
+    /**
+     * 创建系统账号
+     * <p>
+     * 新增员工时自动创建系统账号，登录账号=手机号，初始密码随机生成
+     * </p>
+     *
+     * @param entity 员工实体
+     */
+    private void createUserAccount(EmployeeEntity entity) {
+        try {
+            // 生成随机初始密码
+            String initialPassword = generateRandomPassword();
+
+            // 构建创建用户 DTO
+            UserCreateDTO userCreateDTO = new UserCreateDTO();
+            userCreateDTO.setUsername(entity.getPhone());           // 登录账号 = 手机号
+            userCreateDTO.setPassword(initialPassword);              // 初始密码
+            userCreateDTO.setRealName(entity.getEmployeeName());     // 真实姓名
+            userCreateDTO.setPhone(entity.getPhone());               // 手机号
+            userCreateDTO.setEmail(entity.getEmail());               // 邮箱
+            userCreateDTO.setEmployeeId(entity.getId());             // 关联员工ID
+
+            // 调用用户服务创建账号
+            UserCreateResultVO result = userService.createUser(userCreateDTO);
+
+            // 回填 user_id 到员工记录
+            entity.setUserId(result.getId());
+            employeeMapper.updateById(entity);
+
+            log.info("员工 [{}] 系统账号创建成功，userId={}", entity.getEmployeeName(), result.getId());
+        } catch (Exception e) {
+            log.error("创建员工作业账号失败，employeeId={}", entity.getId(), e);
+            // 不阻断主流程，记录日志即可
+        }
+    }
+
+    /**
+     * 生成随机密码
+     *
+     * @return 8位随机密码
+     */
+    private String generateRandomPassword() {
+        String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        StringBuilder sb = new StringBuilder();
+        java.util.Random random = new java.util.Random();
+        for (int i = 0; i < 8; i++) {
+            sb.append(chars.charAt(random.nextInt(chars.length())));
+        }
+        return sb.toString();
     }
 
 }
