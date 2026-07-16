@@ -11,10 +11,10 @@ import {
   UserOutlined,
 } from '@ant-design/icons';
 import { history } from '@umijs/max';
-import { useRequest } from '@umijs/max';
-import { Avatar, Card, Col, Row, Space, Spin, Tag, Typography, message } from 'antd';
-import React from 'react';
+import { Avatar, Card, Col, Row, Space, Spin, Tag, Typography } from 'antd';
+import React, { useEffect, useState } from 'react';
 import { getProfile } from '@/services/profile';
+import type { ProfileVO } from '@/services/profile';
 
 const { Paragraph, Text, Title } = Typography;
 
@@ -75,9 +75,27 @@ const QUICK_ENTRIES: QuickEntry[] = [
 // ============ 页面组件 ============
 
 const ProfileIndexPage: React.FC = () => {
-  const { data, loading, error } = useRequest(getProfile);
+  const [profile, setProfile] = useState<ProfileVO | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const profile = data;
+  useEffect(() => {
+    let cancelled = false;
+    getProfile()
+      .then((data) => {
+        if (!cancelled) {
+          setProfile(data);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err?.message || '获取个人信息失败');
+          setLoading(false);
+        }
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   return (
     <div style={{ padding: 24 }}>
