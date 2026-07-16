@@ -22,8 +22,10 @@ import {
   ProTable,
 } from '@ant-design/pro-components';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
-import { Button, Space, Tabs, Tag, message } from 'antd';
+import { Avatar, Button, Space, Tabs, Tag, Typography, message } from 'antd';
 import React, { useRef, useState } from 'react';
+
+const { Text } = Typography;
 
 const departmentOptions = [
   { label: '人力资源部', value: 1 },
@@ -37,6 +39,10 @@ const resultOptions = [
   { label: '延长试用', value: 'extend' },
   { label: '辞退', value: 'terminate' },
 ];
+
+function getInitial(name?: string) {
+  return name?.slice(0, 1) || '员';
+}
 
 function renderRemainingDays(days?: number) {
   if (days === undefined || days === null) {
@@ -74,29 +80,20 @@ const RegularPage: React.FC = () => {
     {
       title: '员工',
       dataIndex: 'employeeName',
-      width: 150,
+      width: 170,
       search: false,
       render: (_, record) => (
-        <Space direction="vertical" size={0}>
-          <strong>{record.employeeName}</strong>
-          <span style={{ color: '#6b7280', fontSize: 12 }}>
-            {record.employeeNo || `ID ${record.employeeId}`}
-          </span>
+        <Space>
+          <Avatar style={{ background: '#2f6fed' }}>{getInitial(record.employeeName)}</Avatar>
+          <Space direction="vertical" size={0}>
+            <strong>{record.employeeName}</strong>
+            <Text type="secondary">{record.employeeNo || `ID ${record.employeeId}`}</Text>
+          </Space>
         </Space>
       ),
     },
-    {
-      title: '部门',
-      dataIndex: 'departmentName',
-      width: 120,
-      search: false,
-    },
-    {
-      title: '职位',
-      dataIndex: 'positionName',
-      width: 160,
-      search: false,
-    },
+    { title: '部门', dataIndex: 'departmentName', width: 120, search: false },
+    { title: '职位', dataIndex: 'positionName', width: 160, search: false },
     {
       title: '入职日期',
       dataIndex: 'hireDate',
@@ -123,16 +120,14 @@ const RegularPage: React.FC = () => {
       dataIndex: 'approvalStatus',
       width: 120,
       search: false,
-      render: (_, record) => {
-        if (activeTab === 'pending') {
-          return <Tag color="gold">待转正</Tag>;
-        }
-        return (
+      render: (_, record) =>
+        activeTab === 'pending' ? (
+          <Tag color="gold">待转正</Tag>
+        ) : (
           <Tag color={record.approvalStatus === 2 ? 'success' : 'processing'}>
             {record.approvalStatusDesc || '已评估'}
           </Tag>
-        );
-      },
+        ),
     },
     {
       title: '申请时间',
@@ -229,11 +224,16 @@ const RegularPage: React.FC = () => {
         }}
       >
         <Space direction="vertical" size={4} style={{ marginBottom: 16 }}>
-          <strong>{currentRow?.employeeName}</strong>
-          <span style={{ color: '#6b7280' }}>
-            {currentRow?.departmentName || '-'} / {currentRow?.positionName || '-'} / 入职：
-            {currentRow?.hireDate || '-'}
-          </span>
+          <Space>
+            <Avatar style={{ background: '#2f6fed' }}>{getInitial(currentRow?.employeeName)}</Avatar>
+            <Space direction="vertical" size={0}>
+              <strong>{currentRow?.employeeName}</strong>
+              <Text type="secondary">
+                {currentRow?.departmentName || '-'} / {currentRow?.positionName || '-'} / 入职：
+                {currentRow?.hireDate || '-'}
+              </Text>
+            </Space>
+          </Space>
         </Space>
         <ProFormTextArea
           name="evaluateOpinion"

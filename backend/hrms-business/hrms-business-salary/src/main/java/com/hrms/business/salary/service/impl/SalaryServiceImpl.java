@@ -768,13 +768,15 @@ public class SalaryServiceImpl implements SalaryService {
             return Map.of();
         }
         AttendanceService attendanceService = attendanceServiceProvider.getIfAvailable();
-        List<AttendancePayrollSourceVO> summary;
-        if (attendanceService != null) {
-            summary = attendanceService.getPayrollSource(month, employeeIds);
-        } else {
-            summary = tempGetAttendanceMonthlySummary(month, employeeIds);
+        if (attendanceService == null) {
+            throw new GlobalException(ErrorCode.SYSTEM_ERROR, "考勤服务不可用，无法获取薪资核算所需考勤汇总");
         }
-        return summary.stream().collect(Collectors.toMap(AttendancePayrollSourceVO::getEmployeeId, Function.identity(), (a, b) -> a));
+        List<AttendancePayrollSourceVO> summary = attendanceService.getPayrollSource(month, employeeIds);
+        return summary.stream().collect(Collectors.toMap(
+                AttendancePayrollSourceVO::getEmployeeId,
+                Function.identity(),
+                (a, b) -> a
+        ));
     }
 
     /**
@@ -783,38 +785,38 @@ public class SalaryServiceImpl implements SalaryService {
      * @param employeeIds 员工ID列表
      * @return 考勤月度汇总
      */
-    private List<AttendancePayrollSourceVO> tempGetAttendanceMonthlySummary(String month, List<Long> employeeIds) {
-        // 本方法未来替换为 hrms-business-attendance 的 AttendanceService#getPayrollSource(month, employeeIds)。
-        return employeeIds.stream().map(employeeId -> AttendancePayrollSourceVO.builder()
-                .employeeId(employeeId)
-                .shouldAttendDays(22)
-                .actualAttendDays(22)
-                .lateCount(0)
-                .earlyLeaveCount(0)
-                .absenceDays(BigDecimal.ZERO)
-                .leaveDays(BigDecimal.ZERO)
-                .overtimeHours(BigDecimal.ZERO)
-                .build()).toList();
-    }
+    //private List<AttendancePayrollSourceVO> tempGetAttendanceMonthlySummary(String month, List<Long> employeeIds) {
+    //    // 本方法未来替换为 hrms-business-attendance 的 AttendanceService#getPayrollSource(month, employeeIds)。
+    //    return employeeIds.stream().map(employeeId -> AttendancePayrollSourceVO.builder()
+    //            .employeeId(employeeId)
+    //            .shouldAttendDays(22)
+    //            .actualAttendDays(22)
+    //            .lateCount(0)
+    //            .earlyLeaveCount(0)
+    //            .absenceDays(BigDecimal.ZERO)
+    //            .leaveDays(BigDecimal.ZERO)
+    //            .overtimeHours(BigDecimal.ZERO)
+    //            .build()).toList();
+    //}
 
     /**
      * 临时发布薪资核算消息。
      * @param message 消息
      */
-    private void tempPublishCalculateMessage(SalaryBatchCalculateMessage message) {
-        // 本方法未来替换为 salary.batch.calculate Producer，用于异步触发薪资批次核算。
-        log.info("temp salary.batch.calculate message: {}", JSONUtil.toJsonStr(message));
-    }
+    //private void tempPublishCalculateMessage(SalaryBatchCalculateMessage message) {
+    //    // 本方法未来替换为 salary.batch.calculate Producer，用于异步触发薪资批次核算。
+    //    log.info("temp salary.batch.calculate message: {}", JSONUtil.toJsonStr(message));
+    //}
 
     /**
      * 临时启动薪资批次审批。
      * @param batch 批次
      * @return 审批ID
      */
-    private Long tempStartSalaryBatchApproval(SalaryBatchEntity batch) {
-        // 本方法未来替换为 hrms-business-approval 的薪资批次审批发起接口。
-        return Math.abs(IdUtil.getSnowflakeNextId());
-    }
+    //private Long tempStartSalaryBatchApproval(SalaryBatchEntity batch) {
+    //    // 本方法未来替换为 hrms-business-approval 的薪资批次审批发起接口。
+    //    return Math.abs(IdUtil.getSnowflakeNextId());
+    //}
 
     /**
      * 临时验证短信验证码。

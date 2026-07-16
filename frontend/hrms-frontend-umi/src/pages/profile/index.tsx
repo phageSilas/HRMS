@@ -103,12 +103,12 @@ const ProfileIndexPage: React.FC = () => {
                 </Title>
                 <Space split={<Text type="secondary">|</Text>}>
                   <Text>{profile.employeeNo}</Text>
-                  <Text>{profile.departmentName}</Text>
-                  <Text>{profile.positionName}</Text>
+                  <Text>{profile.deptName}</Text>
+                  <Text>{profile.postName}</Text>
                 </Space>
                 <Space>
                   <Tag icon={<UserOutlined />} color="blue">
-                    {profile.gender === 'MALE' ? '男' : profile.gender === 'FEMALE' ? '女' : '-'}
+                    {profile.gender === 1 ? '男' : profile.gender === 2 ? '女' : '-'}
                   </Tag>
                   <Text type="secondary">入职 {profile.hireDate}</Text>
                 </Space>

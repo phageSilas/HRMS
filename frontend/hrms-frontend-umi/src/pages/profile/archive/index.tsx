@@ -28,6 +28,7 @@ const { Text } = Typography;
 const FIELD_LABEL_MAP: Record<string, string> = {
   phone: '手机号',
   email: '邮箱',
+  currentAddress: '现居地址',
   emergencyContact: '紧急联系人',
   emergencyPhone: '紧急联系人电话',
 };
@@ -81,8 +82,8 @@ const ProfileArchivePage: React.FC = () => {
 
   /** 渲染单个字段值，带编辑按钮或锁定提示 */
   const renderField = (field: string, value: string | undefined) => {
-    const isEditable = profile.editableFields?.includes(field);
-    const isFlow = profile.flowFields?.includes(field);
+    const isEditable = profile.fieldPermissions?.editableFields?.includes(field);
+    const isFlow = profile.fieldPermissions?.flowRequiredFields?.includes(field);
 
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -113,9 +114,9 @@ const ProfileArchivePage: React.FC = () => {
         <Descriptions column={2}>
           <Descriptions.Item label="姓名">{profile.employeeName}</Descriptions.Item>
           <Descriptions.Item label="性别">
-            {profile.gender === 'MALE' ? '男' : profile.gender === 'FEMALE' ? '女' : '-'}
+            {profile.gender === 1 ? '男' : profile.gender === 2 ? '女' : profile.genderDesc || '-'}
           </Descriptions.Item>
-          <Descriptions.Item label="出生日期">{profile.birthDate || '-'}</Descriptions.Item>
+          <Descriptions.Item label="出生日期">{profile.birthday || '-'}</Descriptions.Item>
           <Descriptions.Item label="工号">{profile.employeeNo}</Descriptions.Item>
         </Descriptions>
       </Card>
@@ -131,7 +132,7 @@ const ProfileArchivePage: React.FC = () => {
           </Descriptions.Item>
           <Descriptions.Item label="身份证号">
             <span>{profile.idCard || '-'}</span>
-            {profile.flowFields?.includes('idCard') && (
+            {profile.fieldPermissions?.flowRequiredFields?.includes('idCard') && (
               <Tooltip title="如需修改请联系 HR">
                 <InfoCircleOutlined style={{ color: '#faad14', cursor: 'help', marginLeft: 4 }} />
               </Tooltip>
@@ -149,8 +150,8 @@ const ProfileArchivePage: React.FC = () => {
       {/* 工作信息 */}
       <Card title="工作信息" bordered={false} style={{ marginBottom: 16 }}>
         <Descriptions column={2}>
-          <Descriptions.Item label="部门">{profile.departmentName}</Descriptions.Item>
-          <Descriptions.Item label="职位">{profile.positionName}</Descriptions.Item>
+          <Descriptions.Item label="部门">{profile.deptName}</Descriptions.Item>
+          <Descriptions.Item label="职位">{profile.postName}</Descriptions.Item>
           <Descriptions.Item label="入职日期">{profile.hireDate}</Descriptions.Item>
         </Descriptions>
       </Card>

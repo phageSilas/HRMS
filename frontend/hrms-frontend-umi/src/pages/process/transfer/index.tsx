@@ -14,7 +14,7 @@ import type {
 } from '@/services/process';
 import { PlusOutlined } from '@ant-design/icons';
 import {
-  DrawerForm,
+  ModalForm,
   PageContainer,
   ProFormDatePicker,
   ProFormDigit,
@@ -25,8 +25,10 @@ import {
   ProTable,
 } from '@ant-design/pro-components';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
-import { Button, Space, Tag, message } from 'antd';
+import { Button, Card, Col, Row, Space, Tag, Typography, message } from 'antd';
 import React, { useRef, useState } from 'react';
+
+const { Text } = Typography;
 
 const statusMeta: Record<number, { text: string; color: string }> = {
   [ApprovalStatus.DRAFT]: { text: '草稿', color: 'default' },
@@ -59,26 +61,33 @@ const leaderOptions = [
   { label: '赵琳（1003）', value: 1003 },
 ];
 
+type TransferFormValues = TransferApplicationCreateRequest & {
+  employeeName?: string;
+  employeeNo?: string;
+  fromDeptName?: string;
+  fromPostName?: string;
+};
+
 const TransferPage: React.FC = () => {
   const actionRef = useRef<ActionType>();
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
 
   const columns: ProColumns<TransferApplication>[] = [
     {
-      title: '关键词',
+      title: '员工姓名',
       dataIndex: 'keyword',
       hideInTable: true,
-      fieldProps: { placeholder: '员工姓名 / 工号' },
+      fieldProps: { placeholder: '请输入员工姓名 / 工号' },
     },
     {
       title: '原部门',
       dataIndex: 'departmentId',
       hideInTable: true,
       valueType: 'select',
-      fieldProps: { options: departmentOptions, allowClear: true },
+      fieldProps: { options: departmentOptions, allowClear: true, placeholder: '请选择原部门' },
     },
     {
-      title: '状态',
+      title: '调岗状态',
       dataIndex: 'approvalStatus',
       hideInTable: true,
       valueType: 'select',
@@ -90,23 +99,36 @@ const TransferPage: React.FC = () => {
       },
     },
     {
-      title: '员工',
+      title: '员工姓名',
       dataIndex: 'employeeName',
-      width: 150,
+      width: 140,
+      search: false,
+      renderText: (_, record) => record.employeeName || `员工 ${record.employeeId}`,
+    },
+    {
+      title: '原部门 / 新部门',
+      dataIndex: 'fromDeptName',
+      width: 180,
       search: false,
       render: (_, record) => (
         <Space direction="vertical" size={0}>
-          <strong>{record.employeeName || `员工 ${record.employeeId}`}</strong>
-          <span style={{ color: '#6b7280', fontSize: 12 }}>
-            {record.employeeNo || `ID ${record.employeeId}`}
-          </span>
+          <span>{record.fromDeptName || '-'}</span>
+          <Text type="secondary">/ {record.toDeptName || '-'}</Text>
         </Space>
       ),
     },
-    { title: '原部门', dataIndex: 'fromDeptName', width: 120, search: false },
-    { title: '原职位', dataIndex: 'fromPostName', width: 160, search: false },
-    { title: '新部门', dataIndex: 'toDeptName', width: 120, search: false },
-    { title: '新职位', dataIndex: 'toPostName', width: 160, search: false },
+    {
+      title: '原职位 / 新职位',
+      dataIndex: 'fromPostName',
+      width: 200,
+      search: false,
+      render: (_, record) => (
+        <Space direction="vertical" size={0}>
+          <span>{record.fromPostName || '-'}</span>
+          <Text type="secondary">/ {record.toPostName || '-'}</Text>
+        </Space>
+      ),
+    },
     {
       title: '生效日期',
       dataIndex: 'effectiveDate',
@@ -144,7 +166,7 @@ const TransferPage: React.FC = () => {
         actionRef={actionRef}
         rowKey="id"
         columns={columns}
-        scroll={{ x: 1180 }}
+        scroll={{ x: 1080 }}
         request={async (params) => {
           const result = await getTransferApplicationList({
             pageNum: params.current || 1,
@@ -168,25 +190,20 @@ const TransferPage: React.FC = () => {
               key="create"
               type="primary"
               icon={<PlusOutlined />}
-              onClick={() => setDrawerOpen(true)}
+              onClick={() => setModalOpen(true)}
             >
-              新建调岗申请
+              创建调岗申请
             </Button>,
           ],
         }}
       />
 
-      <DrawerForm<TransferApplicationCreateRequest & {
-        employeeName?: string;
-        employeeNo?: string;
-        fromDeptName?: string;
-        fromPostName?: string;
-      }>
-        title="新建调岗申请"
+      <ModalForm<TransferFormValues>
+        title="创建调岗申请"
         width={760}
-        open={drawerOpen}
-        onOpenChange={setDrawerOpen}
-        drawerProps={{ destroyOnClose: true }}
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        modalProps={{ destroyOnClose: true, centered: true }}
         submitter={{ searchConfig: { submitText: '提交审批' } }}
         onFinish={async (values) => {
           const payload: TransferApplicationCreateRequest = {
@@ -201,12 +218,12 @@ const TransferPage: React.FC = () => {
           };
           await createTransferApplication(payload);
           message.success('调岗申请已提交');
-          setDrawerOpen(false);
+          setModalOpen(false);
           actionRef.current?.reload();
           return true;
         }}
       >
-        <ProFormGroup title="员工与原岗位">
+        <ProFormGroup title="员工选择">
           <ProFormDigit
             name="employeeId"
             label="员工 ID"
@@ -216,40 +233,48 @@ const TransferPage: React.FC = () => {
           />
           <ProFormText name="employeeName" label="员工姓名" width="md" />
           <ProFormText name="employeeNo" label="员工工号" width="md" />
-          <ProFormText name="fromDeptName" label="原部门" width="md" disabled />
-          <ProFormText name="fromPostName" label="原职位" width="md" disabled />
         </ProFormGroup>
-        <ProFormGroup title="新岗位">
-          <ProFormSelect
-            name="toDeptId"
-            label="新部门"
-            width="md"
-            options={departmentOptions}
-            rules={[{ required: true, message: '请选择新部门' }]}
-          />
-          <ProFormSelect
-            name="toPostId"
-            label="新职位"
-            width="md"
-            options={positionOptions}
-            rules={[{ required: true, message: '请选择新职位' }]}
-          />
-          <ProFormSelect
-            name="toJobLevel"
-            label="新职级"
-            width="sm"
-            options={[
-              { label: 'P5', value: 'P5' },
-              { label: 'P6', value: 'P6' },
-              { label: 'P7', value: 'P7' },
-            ]}
-          />
-          <ProFormSelect
-            name="toLeaderId"
-            label="新汇报人"
-            width="md"
-            options={leaderOptions}
-          />
+
+        <Row gutter={16}>
+          <Col span={12}>
+            <Card size="small" title="原岗位信息（只读）" style={{ minHeight: 252 }}>
+              <ProFormText name="fromDeptName" label="原部门" disabled placeholder="员工接口完善后自动带出" />
+              <ProFormText name="fromPostName" label="原职位" disabled placeholder="员工接口完善后自动带出" />
+            </Card>
+          </Col>
+          <Col span={12}>
+            <Card size="small" title="新岗位信息" style={{ minHeight: 252 }}>
+              <ProFormSelect
+                name="toDeptId"
+                label="新部门"
+                options={departmentOptions}
+                rules={[{ required: true, message: '请选择新部门' }]}
+              />
+              <ProFormSelect
+                name="toPostId"
+                label="新职位"
+                options={positionOptions}
+                rules={[{ required: true, message: '请选择新职位' }]}
+              />
+              <ProFormSelect
+                name="toJobLevel"
+                label="新职级"
+                options={[
+                  { label: 'P5', value: 'P5' },
+                  { label: 'P6', value: 'P6' },
+                  { label: 'P7', value: 'P7' },
+                ]}
+              />
+              <ProFormSelect
+                name="toLeaderId"
+                label="新汇报人"
+                options={leaderOptions}
+              />
+            </Card>
+          </Col>
+        </Row>
+
+        <ProFormGroup>
           <ProFormDatePicker
             name="effectiveDate"
             label="生效日期"
@@ -266,10 +291,10 @@ const TransferPage: React.FC = () => {
         <ProFormTextArea
           name="reason"
           label="调岗原因"
-          fieldProps={{ rows: 4 }}
+          fieldProps={{ rows: 4, maxLength: 200, showCount: true }}
           rules={[{ required: true, message: '请输入调岗原因' }]}
         />
-      </DrawerForm>
+      </ModalForm>
     </PageContainer>
   );
 };

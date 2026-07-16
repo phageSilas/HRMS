@@ -53,4 +53,12 @@ public class AccountController {
         Long userId = SecurityContextHolder.getUserId();
         return Result.success(accountService.getLoginLogs(userId));
     }
+
+    @PostMapping("/phone/unbind")
+    @Operation(summary = "解绑手机", description = "解绑已绑定的手机号")
+    public Result<Void> unbindPhone() {
+        Long userId = SecurityContextHolder.getUserId();
+        accountService.unbindPhone(userId);
+        return Result.success();
+    }
 }

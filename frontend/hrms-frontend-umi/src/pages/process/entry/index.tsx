@@ -1,6 +1,6 @@
 /**
- * 入职申请页面。
- * 对接后端入职申请列表、创建、更新、提交审批、确认入职接口。
+ * 入职管理页面。
+ * 对接入职申请列表、创建、更新、提交审批、确认入职接口。
  */
 
 import {
@@ -16,6 +16,12 @@ import type {
   EntryApplicationFormValues,
 } from '@/services/process';
 import {
+  CheckCircleOutlined,
+  EditOutlined,
+  PlusOutlined,
+  SendOutlined,
+} from '@ant-design/icons';
+import {
   DrawerForm,
   PageContainer,
   ProFormDatePicker,
@@ -27,17 +33,33 @@ import {
   ProTable,
 } from '@ant-design/pro-components';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
-import { CheckCircleOutlined, EditOutlined, PlusOutlined, SendOutlined } from '@ant-design/icons';
-import { Button, DatePicker, Form, Modal, Popconfirm, Space, Tag, message } from 'antd';
+import {
+  Avatar,
+  Button,
+  Card,
+  DatePicker,
+  Form,
+  Modal,
+  Popconfirm,
+  Row,
+  Col,
+  Space,
+  Tabs,
+  Tag,
+  Typography,
+  message,
+} from 'antd';
 import type { Dayjs } from 'dayjs';
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
+
+const { Text } = Typography;
 
 const statusMeta: Record<number, { text: string; color: string }> = {
   [ApprovalStatus.DRAFT]: { text: '草稿', color: 'default' },
-  [ApprovalStatus.APPROVING]: { text: '审批中', color: 'processing' },
-  [ApprovalStatus.APPROVED]: { text: '已通过', color: 'success' },
-  [ApprovalStatus.REJECTED]: { text: '已拒绝', color: 'error' },
-  [ApprovalStatus.ENTERED]: { text: '已入职', color: 'cyan' },
+  [ApprovalStatus.APPROVING]: { text: '审批中', color: 'gold' },
+  [ApprovalStatus.APPROVED]: { text: '已批准待入职', color: 'blue' },
+  [ApprovalStatus.REJECTED]: { text: '已拒绝', color: 'red' },
+  [ApprovalStatus.ENTERED]: { text: '已入职', color: 'green' },
 };
 
 const departmentOptions = [
@@ -45,6 +67,7 @@ const departmentOptions = [
   { label: '技术部', value: 2 },
   { label: '产品部', value: 3 },
   { label: '财务部', value: 4 },
+  { label: '运营部', value: 5 },
 ];
 
 const postOptions = [
@@ -53,12 +76,28 @@ const postOptions = [
   { label: '前端开发工程师', value: 103 },
   { label: '产品经理', value: 104 },
   { label: '薪资专员', value: 105 },
+  { label: '运营专员', value: 106 },
 ];
 
 const leaderOptions = [
   { label: '王敏', value: 1001 },
   { label: '李强', value: 1002 },
   { label: '赵琳', value: 1003 },
+];
+
+const hireTypeOptions = [
+  { label: '全职', value: 1 },
+  { label: '兼职', value: 2 },
+  { label: '实习', value: 3 },
+];
+
+const statusTabs = [
+  { key: 'all', label: '全部' },
+  { key: String(ApprovalStatus.DRAFT), label: '草稿' },
+  { key: String(ApprovalStatus.APPROVING), label: '审批中' },
+  { key: String(ApprovalStatus.APPROVED), label: '已批准待入职' },
+  { key: String(ApprovalStatus.REJECTED), label: '已拒绝' },
+  { key: String(ApprovalStatus.ENTERED), label: '已入职' },
 ];
 
 function formatDateValue(value?: string | Dayjs): string | undefined {
@@ -78,13 +117,53 @@ function buildFormValues(values: EntryApplicationFormValues) {
   };
 }
 
+function getInitial(name?: string) {
+  return name?.slice(0, 1) || '人';
+}
+
 const EntryPage: React.FC = () => {
   const actionRef = useRef<ActionType>();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<EntryApplication>();
   const [confirmRecord, setConfirmRecord] = useState<EntryApplication>();
   const [confirmLoading, setConfirmLoading] = useState(false);
+  const [activeStatus, setActiveStatus] = useState<string>('all');
+  const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
   const [confirmForm] = Form.useForm<{ actualHireDate: Dayjs }>();
+
+  const statisticCards = useMemo(
+    () => [
+      {
+        label: '草稿',
+        value: statusCounts[String(ApprovalStatus.DRAFT)] || 0,
+        color: '#6b7280',
+        border: '#e5e7eb',
+        background: '#ffffff',
+      },
+      {
+        label: '审批中',
+        value: statusCounts[String(ApprovalStatus.APPROVING)] || 0,
+        color: '#b7791f',
+        border: '#fde68a',
+        background: '#fffbeb',
+      },
+      {
+        label: '待入职',
+        value: statusCounts[String(ApprovalStatus.APPROVED)] || 0,
+        color: '#2563eb',
+        border: '#bfdbfe',
+        background: '#eff6ff',
+      },
+      {
+        label: '已入职',
+        value: statusCounts[String(ApprovalStatus.ENTERED)] || 0,
+        color: '#16a34a',
+        border: '#bbf7d0',
+        background: '#f0fdf4',
+      },
+    ],
+    [statusCounts],
+  );
 
   const reloadTable = () => actionRef.current?.reload();
 
@@ -140,25 +219,22 @@ const EntryPage: React.FC = () => {
       },
     },
     {
-      title: '候选人',
+      title: '姓名',
       dataIndex: 'candidateName',
-      width: 120,
+      width: 180,
       search: false,
       render: (_, record) => (
-        <Space direction="vertical" size={0}>
-          <strong>{record.candidateName}</strong>
-          <span style={{ color: '#6b7280', fontSize: 12 }}>{record.phone}</span>
+        <Space>
+          <Avatar style={{ background: '#2f6fed' }}>{getInitial(record.candidateName)}</Avatar>
+          <Space direction="vertical" size={0}>
+            <strong>{record.candidateName}</strong>
+            <Text type="secondary">{record.phone}</Text>
+          </Space>
         </Space>
       ),
     },
     {
-      title: '手机号',
-      dataIndex: 'phone',
-      width: 130,
-      search: false,
-    },
-    {
-      title: '入职部门',
+      title: '部门',
       dataIndex: 'deptName',
       width: 130,
       search: false,
@@ -172,24 +248,28 @@ const EntryPage: React.FC = () => {
       renderText: (_, record) => record.postName || `职位 ${record.postId}`,
     },
     {
+      title: '录用类型',
+      dataIndex: 'hireType',
+      width: 100,
+      search: false,
+      render: (_, record) => {
+        const label =
+          hireTypeOptions.find((item) => item.value === record.hireType)?.label || '全职';
+        return <Tag>{label}</Tag>;
+      },
+    },
+    {
       title: '预计入职日期',
       dataIndex: 'expectedHireDate',
       valueType: 'date',
-      width: 130,
+      width: 140,
       search: false,
     },
     {
       title: '状态',
       dataIndex: 'approvalStatus',
-      width: 110,
-      valueType: 'select',
-      valueEnum: {
-        [ApprovalStatus.DRAFT]: { text: '草稿' },
-        [ApprovalStatus.APPROVING]: { text: '审批中' },
-        [ApprovalStatus.APPROVED]: { text: '已通过' },
-        [ApprovalStatus.REJECTED]: { text: '已拒绝' },
-        [ApprovalStatus.ENTERED]: { text: '已入职' },
-      },
+      width: 140,
+      search: false,
       render: (_, record) => {
         const meta = statusMeta[record.approvalStatus] || {
           text: record.approvalStatusDesc || '未知',
@@ -231,7 +311,7 @@ const EntryPage: React.FC = () => {
               onConfirm={() => handleSubmitApproval(record)}
             >
               <Button size="small" type="link" icon={<SendOutlined />}>
-                提交
+                提交审批
               </Button>
             </Popconfirm>
           )}
@@ -256,54 +336,102 @@ const EntryPage: React.FC = () => {
   return (
     <PageContainer
       header={{
-        title: '入职申请',
-        subTitle: '候选人录入、入职审批与确认入职',
+        title: '入职管理',
+        subTitle: '管理候选人入职申请与审批流程',
       }}
     >
-      <ProTable<EntryApplication>
-        actionRef={actionRef}
-        rowKey="id"
-        columns={columns}
-        scroll={{ x: 1180 }}
-        request={async (params) => {
-          const result = await getEntryApplicationList({
-            pageNum: params.current || 1,
-            pageSize: params.pageSize || 20,
-            keyword: params.keyword as string,
-            approvalStatus: params.approvalStatus as number,
-            departmentId: params.departmentId as number,
-            dateStart: params.dateStart as string,
-            dateEnd: params.dateEnd as string,
-          });
-          return {
-            data: result.records || [],
-            total: result.total || 0,
-            success: true,
-          };
-        }}
-        pagination={{ defaultPageSize: 20, showSizeChanger: true }}
-        search={{ labelWidth: 88, span: 6 }}
-        toolbar={{
-          title: '入职申请列表',
-          actions: [
-            <Button
-              key="create"
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={() => {
-                setEditingRecord(undefined);
-                setDrawerOpen(true);
+      <Row gutter={16} style={{ marginBottom: 16 }}>
+        {statisticCards.map((item) => (
+          <Col xs={24} sm={12} xl={6} key={item.label}>
+            <Card
+              bordered
+              style={{
+                borderColor: item.border,
+                background: item.background,
+                borderRadius: 8,
               }}
             >
-              新建入职申请
-            </Button>,
-          ],
-        }}
-      />
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <Text strong>{item.label}</Text>
+                <div style={{ color: item.color, fontSize: 30, fontWeight: 700 }}>
+                  {item.value}
+                </div>
+              </Space>
+            </Card>
+          </Col>
+        ))}
+      </Row>
+
+      <Card bodyStyle={{ padding: '0 20px 20px' }} style={{ borderRadius: 8 }}>
+        <Tabs
+          activeKey={activeStatus}
+          onChange={(key) => {
+            setActiveStatus(key);
+            setTimeout(() => reloadTable(), 0);
+          }}
+          items={statusTabs.map((item) => ({
+            key: item.key,
+            label: `${item.label} ${
+              item.key === 'all' ? statusCounts.all || 0 : statusCounts[item.key] || 0
+            }`,
+          }))}
+        />
+
+        <ProTable<EntryApplication>
+          actionRef={actionRef}
+          rowKey="id"
+          columns={columns}
+          scroll={{ x: 1180 }}
+          request={async (params) => {
+            const result = await getEntryApplicationList({
+              pageNum: params.current || 1,
+              pageSize: params.pageSize || 20,
+              keyword: params.keyword as string,
+              approvalStatus:
+                activeStatus === 'all' ? undefined : Number(activeStatus),
+              departmentId: params.departmentId as number,
+              dateStart: params.dateStart as string,
+              dateEnd: params.dateEnd as string,
+            });
+            const counts = (result.records || []).reduce<Record<string, number>>(
+              (map, item) => {
+                const key = String(item.approvalStatus);
+                map[key] = (map[key] || 0) + 1;
+                return map;
+              },
+              { all: result.total || 0 },
+            );
+            setStatusCounts(counts);
+            return {
+              data: result.records || [],
+              total: result.total || 0,
+              success: true,
+            };
+          }}
+          pagination={{ defaultPageSize: 20, showSizeChanger: true }}
+          search={{ labelWidth: 88, span: 8 }}
+          toolbar={{
+            title: '入职申请列表',
+            actions: [
+              <Button
+                key="create"
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={() => {
+                  setEditingRecord(undefined);
+                  setDrawerOpen(true);
+                }}
+              >
+                新建入职申请
+              </Button>,
+            ],
+          }}
+        />
+      </Card>
 
       <DrawerForm<EntryApplicationFormValues>
         title={editingRecord ? '编辑入职申请' : '新建入职申请'}
-        width={720}
+        width={760}
         open={drawerOpen}
         onOpenChange={(open) => {
           setDrawerOpen(open);
@@ -342,12 +470,12 @@ const EntryPage: React.FC = () => {
           return true;
         }}
       >
-        <ProFormGroup title="候选人信息">
+        <ProFormGroup title="候选人基本信息">
           <ProFormText
             name="candidateName"
-            label="候选人姓名"
+            label="姓名"
             width="md"
-            rules={[{ required: true, message: '请输入候选人姓名' }]}
+            rules={[{ required: true, message: '请输入姓名' }]}
           />
           <ProFormSelect
             name="gender"
@@ -373,36 +501,25 @@ const EntryPage: React.FC = () => {
         </ProFormGroup>
 
         <ProFormGroup title="入职信息">
-          <ProFormSelect
-            name="deptId"
-            label="拟入职部门"
-            width="md"
-            options={departmentOptions}
-            rules={[{ required: true, message: '请选择拟入职部门' }]}
-          />
-          <ProFormSelect
-            name="postId"
-            label="拟入职职位"
-            width="md"
-            options={postOptions}
-            rules={[{ required: true, message: '请选择拟入职职位' }]}
-          />
-          <ProFormSelect
-            name="hireType"
-            label="录用类型"
-            width="sm"
-            options={[
-              { label: '全职', value: 1 },
-              { label: '兼职', value: 2 },
-              { label: '实习', value: 3 },
-            ]}
-            rules={[{ required: true, message: '请选择录用类型' }]}
-          />
           <ProFormDatePicker
             name="expectedHireDate"
             label="预计入职日期"
             width="md"
             rules={[{ required: true, message: '请选择预计入职日期' }]}
+          />
+          <ProFormSelect
+            name="deptId"
+            label="所属部门"
+            width="md"
+            options={departmentOptions}
+            rules={[{ required: true, message: '请选择所属部门' }]}
+          />
+          <ProFormSelect
+            name="postId"
+            label="职位"
+            width="md"
+            options={postOptions}
+            rules={[{ required: true, message: '请选择职位' }]}
           />
           <ProFormSelect
             name="leaderId"
@@ -412,7 +529,14 @@ const EntryPage: React.FC = () => {
           />
         </ProFormGroup>
 
-        <ProFormGroup title="试用期与备注">
+        <ProFormGroup title="录用类型与试用期">
+          <ProFormSelect
+            name="hireType"
+            label="录用类型"
+            width="sm"
+            options={hireTypeOptions}
+            rules={[{ required: true, message: '请选择录用类型' }]}
+          />
           <ProFormDigit
             name="probationMonth"
             label="试用期（月）"
@@ -451,9 +575,14 @@ const EntryPage: React.FC = () => {
       >
         <Form form={confirmForm} layout="vertical">
           <Form.Item label="候选人">
-            <Space direction="vertical" size={0}>
-              <strong>{confirmRecord?.candidateName}</strong>
-              <span style={{ color: '#6b7280' }}>{confirmRecord?.phone}</span>
+            <Space>
+              <Avatar style={{ background: '#2f6fed' }}>
+                {getInitial(confirmRecord?.candidateName)}
+              </Avatar>
+              <Space direction="vertical" size={0}>
+                <strong>{confirmRecord?.candidateName}</strong>
+                <Text type="secondary">{confirmRecord?.phone}</Text>
+              </Space>
             </Space>
           </Form.Item>
           <Form.Item
