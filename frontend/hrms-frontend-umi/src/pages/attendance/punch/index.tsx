@@ -74,6 +74,18 @@ interface LatestClockState {
   location?: AmapLocationResult;
 }
 
+type ClockPeriod = 'CLOCK_IN' | 'CLOCK_OUT';
+
+type ClockResponsePayload =
+  | AttendanceClockVO
+  | {
+      code?: number;
+      data?: AttendanceClockVO;
+      message?: string;
+    }
+  | undefined
+  | null;
+
 const LOCATION_STATUS_COLOR: Record<AmapLocationStatus, string> = {
   idle: 'default',
   locating: 'processing',
@@ -98,8 +110,38 @@ function getClockLabel(period?: string) {
   return period === 'CLOCK_OUT' ? '下班打卡' : '上班打卡';
 }
 
+function getClockRecordDate(recordDate?: string) {
+  if (!recordDate) return undefined;
+  const parsed = dayjs(recordDate);
+  return parsed.isValid() ? parsed.format('YYYY-MM-DD') : undefined;
+}
+
 function getClockIp(result?: AttendanceClockVO) {
   return result?.networkIp || result?.clientIp;
+}
+
+function unwrapClockResponse(payload: ClockResponsePayload) {
+  if (!payload) return undefined;
+  if ('data' in payload && payload.data) {
+    return payload.data;
+  }
+  return payload as AttendanceClockVO;
+}
+
+function normalizeClockResult(payload: ClockResponsePayload, fallbackPeriod: ClockPeriod) {
+  const data = unwrapClockResponse(payload);
+  const fallbackNow = dayjs();
+  return {
+    recordId: data?.recordId || 0,
+    employeeId: data?.employeeId || 0,
+    groupId: data?.groupId,
+    recordDate: getClockRecordDate(data?.recordDate) || fallbackNow.format('YYYY-MM-DD'),
+    period: data?.period || fallbackPeriod,
+    status: data?.status || 'NORMAL',
+    clockTime: data?.clockTime || fallbackNow.format('YYYY-MM-DDTHH:mm:ss'),
+    networkIp: data?.networkIp,
+    clientIp: data?.clientIp,
+  } satisfies AttendanceClockVO;
 }
 
 function formatLocationText(location?: AmapLocationResult) {
@@ -150,7 +192,7 @@ const AttendancePunchPage: React.FC = () => {
   });
 
   const { run: submitClock, loading: clocking } = useRequest(
-    async (type: 'CLOCK_IN' | 'CLOCK_OUT') => {
+    async (type: ClockPeriod) => {
       let location: AmapLocationResult | undefined;
       setLocationState({
         status: 'locating',
@@ -176,34 +218,44 @@ const AttendancePunchPage: React.FC = () => {
         message.warning(`${errorMessage}，将继续尝试打卡`);
       }
 
-      const result = await clockAttendance({
+      const response = await clockAttendance({
         type,
         latitude: location?.latitude,
         longitude: location?.longitude,
         deviceInfo: getDeviceInfo(location),
       });
 
-      return { result, location };
+      const result = normalizeClockResult(response as ClockResponsePayload, type);
+
+      const label = getClockLabel(result.period);
+      const networkIp = getClockIp(result);
+      const locationDetail = formatLocationDetail(location);
+
+      setLatestClock({ result, location });
+      Modal.success({
+        title: `${label}成功`,
+        content: (
+          <div className={styles.successModalContent}>
+            <p>打卡时间：{formatTime(result.clockTime)}</p>
+            <p>打卡状态：{getStatusLabel(result.status)}</p>
+            <p>打卡位置：{formatLocationText(location)}</p>
+            {locationDetail && <p>{locationDetail}</p>}
+            <p>网络 IP：{networkIp || '后端暂未返回'}</p>
+          </div>
+        ),
+        okText: '我知道了',
+      });
+      refresh();
+
+      return result;
     },
     {
       manual: true,
-      onSuccess: ({ result, location }) => {
-        const label = getClockLabel(result.period);
-        const networkIp = getClockIp(result);
-        const locationDetail = formatLocationDetail(location);
-
-        setLatestClock({ result, location });
-        Modal.success({
-          title: `${label}成功`,
-          content: (
-            <div className={styles.successModalContent}>
-              <p>打卡时间：{formatTime(result.clockTime)}</p>
-              <p>打卡状态：{getStatusLabel(result.status)}</p>
-              <p>打卡位置：{formatLocationText(location)}</p>
-              {locationDetail && <p>{locationDetail}</p>}
-              <p>网络 IP：{networkIp || '后端暂未返回'}</p>
-            </div>
-          ),
+      onError: (error) => {
+        const errorMessage = error instanceof Error ? error.message : '打卡提交失败';
+        Modal.error({
+          title: '打卡提交失败',
+          content: errorMessage,
           okText: '我知道了',
         });
         refresh();
@@ -233,10 +285,8 @@ const AttendancePunchPage: React.FC = () => {
       return todayRecord ? baseRecord : undefined;
     }
 
-    const recordDate = dayjs(latestClock.result.recordDate).format(
-      'YYYY-MM-DD',
-    );
-    if (recordDate !== today) {
+    const recordDate = getClockRecordDate(latestClock.result.recordDate);
+    if (recordDate && recordDate !== today) {
       return todayRecord ? baseRecord : undefined;
     }
 
