@@ -15,6 +15,8 @@ import {
   getMyAttendanceCalendar,
 } from '@/services/attendance';
 import type { AttendanceCalendarDayVO } from '@/services/attendance';
+import { resolveAmapLocation } from '@/utils/amapLocation';
+import type { AmapLocationResult, AmapLocationStatus } from '@/utils/amapLocation';
 import styles from './index.less';
 
 const { Text, Title } = Typography;
@@ -50,37 +52,39 @@ function getStatusLabel(status?: string) {
   return STATUS_LABEL_MAP[status] || status;
 }
 
-function getDeviceInfo() {
-  const platform = navigator.platform || 'unknown';
-  const language = navigator.language || 'unknown';
-  return `web:${platform};lang:${language}`;
+interface LocationState {
+  status: AmapLocationStatus;
+  text: string;
+  detail?: string;
 }
 
-async function resolveLocation() {
-  if (!navigator.geolocation) {
-    return {};
-  }
+const LOCATION_STATUS_COLOR: Record<AmapLocationStatus, string> = {
+  idle: 'default',
+  locating: 'processing',
+  success: 'success',
+  failed: 'warning',
+};
 
-  return new Promise<{ latitude?: number; longitude?: number }>((resolve) => {
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        resolve({
-          latitude: Number(position.coords.latitude.toFixed(6)),
-          longitude: Number(position.coords.longitude.toFixed(6)),
-        });
-      },
-      () => resolve({}),
-      {
-        enableHighAccuracy: true,
-        timeout: 5000,
-        maximumAge: 60000,
-      },
-    );
-  });
+function getDeviceInfo(location?: AmapLocationResult) {
+  const platform = navigator.platform || 'unknown';
+  const language = navigator.language || 'unknown';
+  const browser = navigator.userAgent.includes('Edg')
+    ? 'Edge'
+    : navigator.userAgent.includes('Chrome')
+      ? 'Chrome'
+      : 'Browser';
+  const locationInfo = location
+    ? `;amap=${location.locationType || 'unknown'};accuracy=${location.accuracy ?? 'unknown'}m`
+    : ';amap=unavailable';
+  return `web:${browser}-${platform};lang:${language}${locationInfo}`;
 }
 
 const AttendancePunchPage: React.FC = () => {
   const [now, setNow] = useState(dayjs());
+  const [locationState, setLocationState] = useState<LocationState>({
+    status: 'idle',
+    text: '点击打卡时获取高德定位',
+  });
   const currentMonth = now.format('YYYY-MM');
 
   const {
@@ -93,11 +97,34 @@ const AttendancePunchPage: React.FC = () => {
 
   const { run: submitClock, loading: clocking } = useRequest(
     async (type: 'CLOCK_IN' | 'CLOCK_OUT') => {
-      const location = await resolveLocation();
+      let location: AmapLocationResult | undefined;
+      setLocationState({
+        status: 'locating',
+        text: '正在通过高德定位...',
+      });
+
+      try {
+        location = await resolveAmapLocation();
+        setLocationState({
+          status: 'success',
+          text: '高德定位成功',
+          detail: `精度 ${location.accuracy ?? '--'} 米，类型 ${location.locationType || '--'}`,
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : '高德定位失败';
+        setLocationState({
+          status: 'failed',
+          text: errorMessage,
+          detail: '将继续尝试提交打卡，由后端返回最终校验结果',
+        });
+        message.warning(`${errorMessage}，将继续尝试打卡`);
+      }
+
       return clockAttendance({
         type,
-        ...location,
-        deviceInfo: getDeviceInfo(),
+        latitude: location?.latitude,
+        longitude: location?.longitude,
+        deviceInfo: getDeviceInfo(location),
       });
     },
     {
@@ -201,7 +228,13 @@ const AttendancePunchPage: React.FC = () => {
               <div className={styles.footerStatus}>
                 <Space>
                   <EnvironmentOutlined style={{ color: '#1fbf63', fontSize: 22 }} />
-                  定位状态：点击打卡时获取
+                  <span>
+                    定位状态：
+                    <Tag color={LOCATION_STATUS_COLOR[locationState.status]} style={{ marginLeft: 8 }}>
+                      {locationState.text}
+                    </Tag>
+                    {locationState.detail && <Text type="secondary">{locationState.detail}</Text>}
+                  </span>
                 </Space>
                 <Space>
                   <SafetyCertificateFilled style={{ color: '#1fbf63', fontSize: 22 }} />
