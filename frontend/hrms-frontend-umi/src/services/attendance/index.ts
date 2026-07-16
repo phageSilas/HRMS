@@ -53,6 +53,39 @@ export interface AttendanceQuery extends PageQuery {
   endDate?: string;
 }
 
+export interface AttendanceClockRequest {
+  type?: 'CLOCK_IN' | 'CLOCK_OUT' | 'in' | 'out' | '1' | '2';
+  latitude?: number;
+  longitude?: number;
+  deviceInfo?: string;
+}
+
+export interface AttendanceClockVO {
+  recordId: number;
+  employeeId: number;
+  groupId?: number;
+  recordDate: string;
+  period: 'CLOCK_IN' | 'CLOCK_OUT' | string;
+  status: string;
+  clockTime: string;
+}
+
+export interface AttendanceCalendarDayVO {
+  date: string;
+  clockInTime?: string;
+  clockOutTime?: string;
+  clockInStatus?: string;
+  clockOutStatus?: string;
+  dayStatus?: string;
+  leave?: boolean;
+}
+
+export interface AttendanceCalendarVO {
+  employeeId?: number;
+  yearMonth: string;
+  days: AttendanceCalendarDayVO[];
+}
+
 // ============ 考勤记录接口 ============
 
 /**
@@ -67,6 +100,22 @@ export async function getAttendanceRecordList(params: AttendanceQuery) {
  */
 export async function clockIn(data: { type: 'in' | 'out' }) {
   return request.post<Result<AttendanceRecord>>('/attendance/records/clock', data);
+}
+
+/**
+ * 当前登录员工打卡。
+ */
+export async function clockAttendance(data: AttendanceClockRequest) {
+  return request.post<AttendanceClockVO>('/api/v1/attendance/clock', data);
+}
+
+/**
+ * 查询当前登录员工个人月度打卡日历。
+ */
+export async function getMyAttendanceCalendar(yearMonth: string) {
+  return request.get<AttendanceCalendarVO>('/api/v1/attendance/records/my-calendar', {
+    params: { yearMonth },
+  });
 }
 
 // ============ 请假申请接口 ============

@@ -87,6 +87,13 @@ export const shellRoutes: ShellRouteMeta[] = [
   { path: '/process/transfer', title: '调岗申请', group: '入转调离', keywords: ['调岗'] },
   { path: '/process/leave', title: '离职申请', group: '入转调离', keywords: ['离职'] },
   {
+    path: '/attendance/punch',
+    title: '员工打卡',
+    group: '考勤管理',
+    icon: <ClockCircleOutlined />,
+    keywords: ['考勤', '打卡', '上班打卡', '下班打卡'],
+  },
+  {
     path: '/attendance/record',
     title: '考勤记录',
     group: '考勤管理',

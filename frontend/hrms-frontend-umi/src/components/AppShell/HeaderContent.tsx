@@ -17,7 +17,7 @@ const HeaderContent: React.FC<HeaderContentProps> = ({ defaultDom }) => {
   const location = useLocation();
   const trail = getRouteTrail(location.pathname);
   const quickRoutes = shellRoutes.filter((item) =>
-    ['/home', '/process/entry', '/attendance/record', '/salary/batch', '/approval/workspace', '/ai'].includes(
+    ['/home', '/process/entry', '/attendance/punch', '/salary/batch', '/approval/workspace', '/ai'].includes(
       item.path
     )
   );

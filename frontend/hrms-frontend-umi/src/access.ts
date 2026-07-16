@@ -29,6 +29,7 @@ export default function access(initialState: { currentUser?: UserInfo }) {
     employee: hasPermission('employee'),
     process: hasPermission('process'),
     attendance: hasPermission('attendance'),
+    attendancePunch: Boolean(currentUser),
     salary: hasPermission('salary'),
     approval: hasPermission('approval'),
     mycenter: true, // 个人中心所有人可见
