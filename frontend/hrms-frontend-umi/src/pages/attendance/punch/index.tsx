@@ -69,11 +69,6 @@ type MergedTodayRecord = AttendanceCalendarDayVO & {
   clockOutIp?: string;
 };
 
-interface LatestClockState {
-  result: AttendanceClockVO;
-  location?: AmapLocationResult;
-}
-
 type ClockPeriod = 'CLOCK_IN' | 'CLOCK_OUT';
 
 type BackendDateValue = string | number[] | Date | undefined | null;
@@ -208,7 +203,8 @@ function getDeviceInfo(location?: AmapLocationResult) {
 
 const AttendancePunchPage: React.FC = () => {
   const [now, setNow] = useState(dayjs());
-  const [latestClock, setLatestClock] = useState<LatestClockState>();
+  const [localTodayRecord, setLocalTodayRecord] =
+    useState<MergedTodayRecord>();
   const [clocking, setClocking] = useState(false);
   const [locationState, setLocationState] = useState<LocationState>({
     status: 'idle',
@@ -270,7 +266,36 @@ const AttendancePunchPage: React.FC = () => {
       const networkIp = getClockIp(result);
       const locationDetail = formatLocationDetail(location);
 
-      setLatestClock({ result, location });
+      setLocalTodayRecord((previous) => {
+        const today = now.format('YYYY-MM-DD');
+        const todayLocalRecord =
+          normalizeDate(previous?.date as BackendDateValue) === today
+            ? previous
+            : undefined;
+        const baseRecord: MergedTodayRecord = {
+          date: today,
+          ...(todayRecord || {}),
+          ...(todayLocalRecord || {}),
+        };
+
+        if (result.period === 'CLOCK_OUT') {
+          return {
+            ...baseRecord,
+            clockOutTime: result.clockTime,
+            clockOutStatus: result.status,
+            clockOutIp: networkIp,
+            dayStatus: result.status || baseRecord.dayStatus,
+          };
+        }
+
+        return {
+          ...baseRecord,
+          clockInTime: result.clockTime,
+          clockInStatus: result.status,
+          clockInIp: networkIp,
+          dayStatus: result.status || baseRecord.dayStatus,
+        };
+      });
       Modal.success({
         title: `${label}成功`,
         content: (
@@ -317,33 +342,31 @@ const AttendancePunchPage: React.FC = () => {
       ? { ...todayRecord }
       : { date: today };
 
-    if (!latestClock?.result) {
+    if (!localTodayRecord) {
       return todayRecord ? baseRecord : undefined;
     }
 
-    const clockIp = getClockIp(latestClock.result);
-    if (latestClock.result.period === 'CLOCK_OUT') {
-      return {
-        ...baseRecord,
-        clockOutTime: latestClock.result.clockTime,
-        clockOutStatus: latestClock.result.status,
-        clockOutIp: clockIp,
-        dayStatus: latestClock.result.status || baseRecord.dayStatus,
-      };
+    if (normalizeDate(localTodayRecord.date as BackendDateValue) !== today) {
+      return todayRecord ? baseRecord : undefined;
     }
 
     return {
       ...baseRecord,
-      clockInTime: latestClock.result.clockTime,
-      clockInStatus: latestClock.result.status,
-      clockInIp: clockIp,
-      dayStatus: latestClock.result.status || baseRecord.dayStatus,
+      ...localTodayRecord,
+      clockInTime: localTodayRecord.clockInTime ?? baseRecord.clockInTime,
+      clockInStatus:
+        localTodayRecord.clockInStatus ?? baseRecord.clockInStatus,
+      clockInIp: localTodayRecord.clockInIp ?? baseRecord.clockInIp,
+      clockOutTime: localTodayRecord.clockOutTime ?? baseRecord.clockOutTime,
+      clockOutStatus:
+        localTodayRecord.clockOutStatus ?? baseRecord.clockOutStatus,
+      clockOutIp: localTodayRecord.clockOutIp ?? baseRecord.clockOutIp,
+      dayStatus: localTodayRecord.dayStatus ?? baseRecord.dayStatus,
     };
-  }, [latestClock, now, todayRecord]);
+  }, [localTodayRecord, now, todayRecord]);
 
-  const latestNetworkIp = latestClock?.result
-    ? getClockIp(latestClock.result)
-    : undefined;
+  const latestNetworkIp =
+    localTodayRecord?.clockOutIp || localTodayRecord?.clockInIp;
   const clockInDone = Boolean(mergedTodayRecord?.clockInTime);
   const clockOutDone = Boolean(mergedTodayRecord?.clockOutTime);
   const nextClockType: ClockPeriod = clockInDone ? 'CLOCK_OUT' : 'CLOCK_IN';
