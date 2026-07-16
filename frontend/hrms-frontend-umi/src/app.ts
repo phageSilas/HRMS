@@ -3,11 +3,14 @@
  * https://umijs.org/docs/api/runtime-config
  */
 
+import LayoutFrame from '@/components/AppShell/LayoutFrame';
 import { getCurrentUser } from '@/services/auth';
 import type { UserInfo } from '@/types/user';
 import type { RunTimeLayoutConfig } from '@umijs/max';
 import { history } from '@umijs/max';
 import { message } from 'antd';
+import React from 'react';
+import './global.less';
 
 // 全局状态类型
 export interface InitialState {
@@ -72,27 +75,56 @@ export async function getInitialState(): Promise<InitialState> {
  * Layout 配置
  */
 export const layout: RunTimeLayoutConfig = ({ initialState }) => {
+  const avatarUrl = initialState?.currentUser?.avatar;
+  const displayName =
+    initialState?.currentUser?.nickname ||
+    initialState?.currentUser?.username ||
+    '未登录';
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('userInfo');
+    message.success('已退出登录');
+    history.push('/login');
+  };
+
   return {
-    logo: 'https://img.alicdn.com/tfs/TB1YHEpwUT1gK0jSZFhXXaAtVXa-28-27.svg',
-    title: 'HRMS 人资管理系统',
+    logo: false,
+    title: false,
+    layout: 'side',
+    navTheme: 'light',
+    fixedHeader: true,
+    fixSiderbar: true,
+    className: 'hrms-art-layout',
     menu: {
       locale: false,
     },
-    // 用户信息显示
-    avatar:
-      initialState?.currentUser?.avatar ||
-      'https://gw.alipayobjects.com/zos/antfincdn/efFD%24gQ%24g/LC_ChangX.png',
-    name:
-      initialState?.currentUser?.nickname ||
-      initialState?.currentUser?.username ||
-      '未登录',
-    // 退出登录
+    menuHeaderRender: () =>
+      React.createElement(
+        'div',
+        { className: 'hrms-art-brand' },
+        React.createElement('span', { className: 'hrms-art-logo' }),
+        React.createElement(
+          'span',
+          { className: 'hrms-art-brand-text' },
+          React.createElement('strong', null, 'HRMS'),
+          React.createElement('small', null, '管理平台')
+        )
+      ),
+    childrenRender: (children) =>
+      React.createElement(
+        LayoutFrame,
+        {
+          currentUser: initialState?.currentUser,
+          avatarUrl,
+          displayName,
+          onLogout: handleLogout,
+        },
+        children
+      ),
     onMenuClick: ({ key }) => {
       if (key === 'logout') {
-        localStorage.removeItem('token');
-        localStorage.removeItem('userInfo');
-        message.success('已退出登录');
-        history.push('/login');
+        handleLogout();
       }
     },
   };

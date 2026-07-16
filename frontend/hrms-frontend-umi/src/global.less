@@ -1,0 +1,335 @@
+:root {
+  --hrms-shell-bg: #f7f8fb;
+  --hrms-card-bg: #ffffff;
+  --hrms-border: #e8edf5;
+  --hrms-text: #263348;
+  --hrms-muted: #7a8aa0;
+  --hrms-primary: #4b7cff;
+  --hrms-primary-soft: #edf4ff;
+  --hrms-shadow: 0 14px 38px rgba(28, 42, 70, 0.08);
+  --hrms-radius: 14px;
+}
+
+html.hrms-art-dark {
+  --hrms-shell-bg: #121722;
+  --hrms-card-bg: #1b2330;
+  --hrms-border: #2b3545;
+  --hrms-text: #e8eef8;
+  --hrms-muted: #9aa8ba;
+  --hrms-primary: #6e93ff;
+  --hrms-primary-soft: #1f2d4c;
+  --hrms-shadow: 0 14px 38px rgba(0, 0, 0, 0.22);
+}
+
+body {
+  color: var(--hrms-text);
+  background: var(--hrms-shell-bg);
+}
+
+.hrms-art-layout {
+  min-height: 100vh;
+  background: var(--hrms-shell-bg) !important;
+}
+
+.hrms-art-layout .ant-pro-layout-container,
+.hrms-art-layout .ant-pro-layout-content {
+  background: var(--hrms-shell-bg) !important;
+}
+
+.hrms-art-layout .ant-pro-layout-content {
+  padding: 0 !important;
+}
+
+.hrms-art-layout .ant-pro-sider {
+  border-right: 1px solid var(--hrms-border);
+  background: var(--hrms-card-bg) !important;
+  box-shadow: none;
+}
+
+.hrms-art-layout .ant-pro-sider .ant-layout-sider-children {
+  background: var(--hrms-card-bg);
+}
+
+.hrms-art-brand {
+  display: flex;
+  height: 58px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 20px;
+}
+
+.hrms-art-logo {
+  position: relative;
+  width: 34px;
+  height: 28px;
+  flex: 0 0 34px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #43d6ff 0%, #4b7cff 62%, #8d7cff 100%);
+  clip-path: polygon(8% 86%, 40% 14%, 62% 58%, 76% 30%, 96% 86%);
+}
+
+.hrms-art-logo::after {
+  position: absolute;
+  top: 2px;
+  right: -1px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #42d6ff;
+  content: '';
+}
+
+.hrms-art-brand-text {
+  display: grid;
+  color: var(--hrms-text);
+  line-height: 1.15;
+}
+
+.hrms-art-brand-text strong {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.hrms-art-brand-text small {
+  color: var(--hrms-muted);
+  font-size: 12px;
+}
+
+.hrms-art-layout .ant-pro-base-menu-inline-item-title,
+.hrms-art-layout .ant-menu-title-content {
+  font-size: 14px;
+}
+
+.hrms-art-layout .ant-menu-light {
+  background: transparent;
+}
+
+.hrms-art-layout .ant-menu-item,
+.hrms-art-layout .ant-menu-submenu-title {
+  width: calc(100% - 20px);
+  margin: 4px 10px;
+  border-radius: 10px;
+  color: #526174;
+}
+
+.hrms-art-layout .ant-menu-item-selected {
+  color: var(--hrms-primary) !important;
+  background: var(--hrms-primary-soft) !important;
+}
+
+.hrms-art-layout .ant-menu-item:hover,
+.hrms-art-layout .ant-menu-submenu-title:hover {
+  color: var(--hrms-primary) !important;
+  background: #f4f7ff !important;
+}
+
+.hrms-art-layout .ant-pro-layout-header {
+  height: 56px !important;
+  border-bottom: 1px solid var(--hrms-border);
+  background: rgba(255, 255, 255, 0.92) !important;
+  backdrop-filter: blur(14px);
+  box-shadow: none;
+}
+
+.hrms-art-layout .ant-pro-global-header {
+  position: relative;
+  padding-inline: 16px 18px;
+}
+
+.hrms-art-layout .ant-pro-global-header > div:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+  padding-right: 440px;
+}
+
+.hrms-art-layout .ant-pro-global-header-right-content,
+.hrms-art-layout .ant-pro-global-header > div:last-child {
+  position: absolute;
+  right: 18px;
+  top: 0;
+  height: 56px;
+  display: flex;
+  align-items: center;
+}
+
+.hrms-art-layout .ant-pro-sider-actions {
+  position: fixed !important;
+  left: 13px !important;
+  top: auto !important;
+  bottom: 118px !important;
+  z-index: 30;
+  width: 38px !important;
+  height: 38px !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  user-select: none;
+  pointer-events: none;
+}
+
+.hrms-art-layout .ant-pro-global-header-collapsed-button,
+.hrms-art-layout .ant-pro-sider-collapsed-button {
+  position: fixed !important;
+  left: 13px !important;
+  top: auto !important;
+  bottom: 118px !important;
+  z-index: 31;
+  display: inline-flex !important;
+  width: 38px !important;
+  height: 38px !important;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--hrms-border);
+  border-radius: 11px !important;
+  background: var(--hrms-card-bg) !important;
+  box-shadow: 0 10px 26px rgba(28, 42, 70, 0.12);
+  outline: none !important;
+  user-select: none;
+  pointer-events: auto;
+}
+
+.hrms-art-layout .ant-pro-sider-actions-avatar,
+.hrms-art-layout .ant-pro-sider-actions-list {
+  display: none !important;
+}
+
+.hrms-art-layout .ant-pro-sider-actions .ant-pro-sider-collapsed-button {
+  display: inline-flex !important;
+}
+
+.hrms-art-layout .ant-pro-sider:not(.ant-pro-sider-collapsed) .ant-pro-global-header-collapsed-button,
+.hrms-art-layout .ant-pro-sider:not(.ant-pro-sider-collapsed) .ant-pro-sider-collapsed-button,
+.hrms-art-layout .ant-pro-sider:not(.ant-pro-sider-collapsed) .ant-pro-sider-actions {
+  left: 228px !important;
+}
+
+html.hrms-art-dark .hrms-art-layout .ant-pro-layout-header {
+  background: rgba(27, 35, 48, 0.92) !important;
+}
+
+.hrms-art-layout .ant-pro-layout-bg-list {
+  display: none;
+}
+
+.hrms-art-layout .ant-pro-page-container {
+  background: transparent !important;
+}
+
+.hrms-art-layout .ant-pro-page-container-children-container {
+  padding: 24px !important;
+}
+
+.hrms-art-layout .ant-pro-page-container-warp-page-header {
+  border-radius: var(--hrms-radius);
+  margin: 16px 24px 0;
+  background: var(--hrms-card-bg) !important;
+  box-shadow: none;
+}
+
+.hrms-art-layout .ant-card,
+.hrms-art-layout .ant-pro-table,
+.hrms-art-layout .ant-pro-table-search,
+.hrms-art-layout .ant-pro-table-list-toolbar-container,
+.hrms-art-layout .ant-table-wrapper .ant-table {
+  border-radius: var(--hrms-radius) !important;
+}
+
+.hrms-art-layout .ant-card {
+  border: 1px solid var(--hrms-border);
+  background: var(--hrms-card-bg);
+  box-shadow: 0 1px 0 rgba(28, 42, 70, 0.03);
+}
+
+.hrms-art-layout .ant-card-bordered {
+  border-color: var(--hrms-border);
+}
+
+.hrms-art-layout .ant-pro-table-search {
+  border: 1px solid var(--hrms-border);
+  background: var(--hrms-card-bg);
+  box-shadow: none;
+}
+
+.hrms-art-layout .ant-pro-table .ant-card {
+  overflow: hidden;
+}
+
+.hrms-art-layout .ant-table-wrapper .ant-table {
+  overflow: hidden;
+  border: 1px solid var(--hrms-border);
+}
+
+.hrms-art-layout .ant-table-thead > tr > th {
+  background: #f8fafd !important;
+  color: #526174;
+  font-weight: 600;
+}
+
+.hrms-art-layout .ant-table-tbody > tr:hover > td {
+  background: #f7faff !important;
+}
+
+.hrms-art-layout .ant-btn {
+  border-radius: 9px;
+}
+
+.hrms-art-layout .ant-btn-primary {
+  box-shadow: 0 8px 18px rgba(75, 124, 255, 0.18);
+}
+
+.hrms-art-layout .ant-tag {
+  border-radius: 999px;
+  padding-inline: 8px;
+}
+
+.hrms-art-layout .ant-drawer-content,
+.hrms-art-layout .ant-modal-content,
+.hrms-art-layout .ant-popover-inner,
+.hrms-art-layout .ant-dropdown-menu {
+  border-radius: var(--hrms-radius) !important;
+}
+
+.hrms-art-layout .ant-drawer-content,
+.hrms-art-layout .ant-modal-content {
+  background: var(--hrms-card-bg) !important;
+}
+
+.hrms-art-layout .ant-form-item-label > label {
+  color: #59687c;
+  font-weight: 500;
+}
+
+.hrms-art-layout .ant-input,
+.hrms-art-layout .ant-input-affix-wrapper,
+.hrms-art-layout .ant-select-selector,
+.hrms-art-layout .ant-picker,
+.hrms-art-layout .ant-input-number {
+  border-radius: 9px !important;
+}
+
+html.hrms-art-dark .hrms-art-layout,
+html.hrms-art-dark .hrms-art-layout .ant-card,
+html.hrms-art-dark .hrms-art-layout .ant-pro-table-search,
+html.hrms-art-dark .hrms-art-layout .ant-table-wrapper .ant-table,
+html.hrms-art-dark .hrms-art-layout .ant-drawer-content,
+html.hrms-art-dark .hrms-art-layout .ant-modal-content {
+  color: var(--hrms-text);
+  background: var(--hrms-card-bg) !important;
+}
+
+html.hrms-art-dark .hrms-art-layout .ant-table-thead > tr > th,
+html.hrms-art-dark .hrms-art-layout .ant-table-tbody > tr > td {
+  border-color: var(--hrms-border);
+  background: var(--hrms-card-bg) !important;
+  color: var(--hrms-text);
+}
+
+@media (max-width: 768px) {
+  .hrms-art-layout .ant-pro-page-container-children-container {
+    padding: 16px !important;
+  }
+
+  .hrms-art-layout .ant-pro-page-container-warp-page-header {
+    margin: 12px 16px 0;
+  }
+}

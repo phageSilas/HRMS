@@ -1267,6 +1267,7 @@ public class AttendanceServiceImpl implements AttendanceService {
      * 本方法使用的工具类: 无
      */
     private AttendanceClockVO buildClockVO(AttendanceRecordEntity record, ClockPeriodEnum period, String status, LocalDateTime clockTime) {
+        String clientIp = ClockPeriodEnum.CLOCK_IN.equals(period) ? record.getClockInIp() : record.getClockOutIp();
         return AttendanceClockVO.builder()
                 .recordId(record.getId())
                 .employeeId(record.getEmployeeId())
@@ -1275,6 +1276,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .period(period.name())
                 .status(status)
                 .clockTime(clockTime)
+                .clientIp(clientIp)
                 .build();
     }
 

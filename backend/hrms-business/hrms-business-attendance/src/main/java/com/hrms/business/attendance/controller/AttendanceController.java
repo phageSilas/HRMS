@@ -170,18 +170,44 @@ public class AttendanceController {
      *
      * @param request HTTP 请求
      * @return 客户端 IP
-     * 本方法使用的工具类: 无
+     * 本方法使用的工具类: HttpServletRequest(jakarta.servlet)
      */
     private String resolveClientIp(HttpServletRequest request) {
-        String forwardedFor = request.getHeader("X-Forwarded-For");
-        if (forwardedFor != null && !forwardedFor.isBlank()) {
-            return forwardedFor.split(",")[0].trim();
+        String[] headerNames = {
+                "X-Forwarded-For",
+                "Proxy-Client-IP",
+                "WL-Proxy-Client-IP",
+                "HTTP_CLIENT_IP",
+                "HTTP_X_FORWARDED_FOR",
+                "X-Real-IP"
+        };
+        for (String headerName : headerNames) {
+            String ip = firstValidIp(request.getHeader(headerName));
+            if (ip != null) {
+                return ip;
+            }
         }
-        String realIp = request.getHeader("X-Real-IP");
-        if (realIp != null && !realIp.isBlank()) {
-            return realIp;
+        return firstValidIp(request.getRemoteAddr());
+    }
+
+    /**
+     * 从代理 IP 列表中获取第一个有效 IP。
+     *
+     * @param ipValue IP 或逗号分隔的 IP 列表
+     * @return 第一个有效 IP
+     * 本方法使用的工具类: 无
+     */
+    private String firstValidIp(String ipValue) {
+        if (ipValue == null || ipValue.isBlank()) {
+            return null;
         }
-        return request.getRemoteAddr();
+        for (String ip : ipValue.split(",")) {
+            String trimmedIp = ip.trim();
+            if (!trimmedIp.isBlank() && !"unknown".equalsIgnoreCase(trimmedIp)) {
+                return trimmedIp;
+            }
+        }
+        return null;
     }
 
 
