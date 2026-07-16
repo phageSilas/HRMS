@@ -281,3 +281,4 @@ backend/hrms-server/src/main/resources/application-dev.yml
 backend\hrms-business\hrms-business-salary\.factorypath
 
 /backend/hrms-business/hrms-business-salary/.factorypath
+/backend/hrms-business/hrms-business-attendance/.factorypath
