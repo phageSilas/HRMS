@@ -59,12 +59,8 @@ export async function getInitialState(): Promise<InitialState> {
       // 清除 token 并跳转登录页
       localStorage.removeItem('token');
       localStorage.removeItem('userInfo');
-      if (pathname !== '/login') {
-        history.push('/login');
-      }
+      // 注意：这里不直接跳转，让 render 或 onRouteChange 处理
     }
-  } else if (pathname !== '/login') {
-    history.push('/login');
   }
 
   return {
@@ -84,7 +80,8 @@ export function render(oldRender: () => void) {
   // 强制跳转到登录页
   if (!token && (pathname === '/' || pathname === '/home')) {
     history.push('/login');
-    // 不调用 oldRender，直接返回
+    // 必须调用 oldRender，否则页面不会渲染
+    oldRender();
     return;
   }
 
