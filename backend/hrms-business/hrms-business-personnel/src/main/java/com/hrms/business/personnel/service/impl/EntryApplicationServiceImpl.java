@@ -182,7 +182,7 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
             lockedEntity.setActualHireDate(requestDTO.getActualHireDate());
 
             // TODO 跨模块调用已完成：当前调用 EmployeeService#createEmployee(createDTO) 创建员工档案。
-            EmployeeEntity createdEmployee = tempCreateEmployee(lockedEntity, null);
+            EmployeeEntity createdEmployee = createEmployeeFromEntryApplication(lockedEntity);
 
             Long employeeId = createdEmployee.getId();
             String employeeNo = createdEmployee.getEmployeeNo();
@@ -190,6 +190,8 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
             // TODO 跨模块调用已完成：当前调用 UserService#createUser(createDTO) 创建入职账号。
             tempCreateEntryAccount(lockedEntity, employeeNo, employeeId);
 
+            lockedEntity.setEmployeeId(employeeId);
+            lockedEntity.setEmployeeNo(employeeNo);
             lockedEntity.setApprovalStatus(ApplicationStatusEnum.ENTERED.getCode());
             entryApplicationMapper.updateById(lockedEntity);
             // entryConfirmedProducer.send(event); 本接口需要调用通知/MQ模块发送 personnel.entry.confirmed 事件和欢迎通知
@@ -256,7 +258,7 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
      * @return 员工模块创建后的员工实体
      * 本方法使用的工具类: EmployeeService(hrms-business-employee)
      */
-    private EmployeeEntity tempCreateEmployee(EntryApplicationEntity entity, String employeeNo) {
+    private EmployeeEntity createEmployeeFromEntryApplication(EntryApplicationEntity entity) {
         EmployeeCreateDTO createDTO = new EmployeeCreateDTO();
         createDTO.setEmployeeName(entity.getCandidateName());
         createDTO.setGender(entity.getGender());
@@ -270,7 +272,8 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         createDTO.setProbationMonth(entity.getProbationMonth());
         createDTO.setProbationSalaryRatio(entity.getProbationSalaryRatio());
         createDTO.setIdCardNo(entity.getIdCardNo());
-        createDTO.setRemark("由入职申请确认创建，申请ID：" + entity.getId() + "，预生成工号：" + employeeNo);
+        createDTO.setRemark("由入职申请确认创建，申请ID：" + entity.getId());
+        // TODO 跨模块调用已完成：当前调用 EmployeeService#createEmployee(createDTO) 创建员工档案并由员工模块生成工号。
         return employeeService.createEmployee(createDTO);
     }
 
