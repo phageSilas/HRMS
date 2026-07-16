@@ -57,9 +57,8 @@ export interface Employee {
 /** 员工查询参数（字段与后端 EmployeeQueryDTO 对齐） */
 export interface EmployeeQuery {
   keyword?: string;
-  deptId?: number;
-  postId?: number;
-  employmentStatus?: number;
+  deptIds?: number[];
+  employmentStatus?: number[];
   jobLevel?: string;
   hireDateStart?: string;
   hireDateEnd?: string;

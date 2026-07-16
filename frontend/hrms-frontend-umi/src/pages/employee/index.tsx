@@ -86,42 +86,57 @@ const EmployeePage: React.FC = () => {
 
   const columns: ProColumns<EmployeeBrief>[] = [
     {
+      title: '关键词',
+      dataIndex: 'keyword',
+      hideInTable: true,
+      fieldProps: { placeholder: '姓名 / 工号 / 手机号' },
+    },
+    {
       title: '姓名',
       dataIndex: 'employeeName',
       width: 120,
       fixed: 'left',
       ellipsis: true,
+      search: false,
     },
     {
       title: '工号',
       dataIndex: 'employeeNo',
       width: 120,
       ellipsis: true,
+      search: false,
     },
     {
       title: '部门',
       dataIndex: 'deptName',
       width: 140,
       ellipsis: true,
-      hideInSearch: true,
+      search: false,
     },
     {
       title: '职位',
       dataIndex: 'postName',
       width: 120,
       ellipsis: true,
-      hideInSearch: true,
+      search: false,
     },
     {
       title: '职级',
       dataIndex: 'jobLevel',
       width: 80,
-      hideInSearch: true,
+      search: false,
     },
     {
       title: '在职状态',
       dataIndex: 'employmentStatus',
       width: 100,
+      valueType: 'select',
+      valueEnum: {
+        1: { text: '试用期' },
+        2: { text: '正式' },
+        3: { text: '待离职' },
+        4: { text: '已离职' },
+      },
       render: (_, record) => {
         const info = STATUS_MAP[record.employmentStatus];
         return (
@@ -136,7 +151,7 @@ const EmployeePage: React.FC = () => {
       dataIndex: 'hireDate',
       width: 120,
       valueType: 'date',
-      hideInSearch: true,
+      search: false,
     },
     {
       title: '操作',
@@ -200,12 +215,19 @@ const EmployeePage: React.FC = () => {
         }}
         columns={columns}
         request={async (params) => {
-          const { current, pageSize, ...rest } = params;
+          const { current, pageSize, keyword, employmentStatus } = params;
           const query: EmployeeQuery = {
             pageNum: current,
             pageSize,
-            ...rest,
           };
+          // 关键词搜索
+          if (keyword) {
+            query.keyword = keyword;
+          }
+          // 在职状态：后端期望数组格式
+          if (employmentStatus !== undefined && employmentStatus !== null && employmentStatus !== '') {
+            query.employmentStatus = [Number(employmentStatus)];
+          }
           const data = await getEmployeeList(query);
           if (!data) {
             return { data: [], total: 0, success: true };
