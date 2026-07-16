@@ -13,6 +13,8 @@ import com.hrms.business.employee.mapper.EmployeeMapper;
 import com.hrms.business.employee.service.EmployeeService;
 import com.hrms.business.employee.vo.EmployeeDetailVO;
 import com.hrms.business.employee.vo.EmployeeGenNoVO;
+import com.hrms.business.employee.util.AesEncryptUtil;
+import com.hrms.business.employee.util.DesensitizationUtil;
 import com.hrms.business.employee.vo.EmployeeListVO;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
@@ -148,11 +150,11 @@ public class EmployeeServiceImpl implements EmployeeService {
         entity.setContractExpireDate(createDTO.getContractExpireDate());
         entity.setSalaryTemplateId(createDTO.getSalaryTemplateId());
         entity.setBaseSalary(createDTO.getBaseSalary());
-        entity.setIdCardNo(createDTO.getIdCardNo());
+        entity.setIdCardNo(AesEncryptUtil.encrypt(createDTO.getIdCardNo()));
         entity.setBirthday(createDTO.getBirthday());
         entity.setDomicileAddress(createDTO.getDomicileAddress());
         entity.setCurrentAddress(createDTO.getCurrentAddress());
-        entity.setBankAccount(createDTO.getBankAccount());
+        entity.setBankAccount(AesEncryptUtil.encrypt(createDTO.getBankAccount()));
         entity.setBankName(createDTO.getBankName());
         entity.setEmergencyContact(createDTO.getEmergencyContact());
         entity.setEmergencyPhone(createDTO.getEmergencyPhone());
@@ -242,7 +244,7 @@ public class EmployeeServiceImpl implements EmployeeService {
             entity.setBaseSalary(updateDTO.getBaseSalary());
         }
         if (updateDTO.getIdCardNo() != null) {
-            entity.setIdCardNo(updateDTO.getIdCardNo());
+            entity.setIdCardNo(AesEncryptUtil.encrypt(updateDTO.getIdCardNo()));
         }
         if (updateDTO.getBirthday() != null) {
             entity.setBirthday(updateDTO.getBirthday());
@@ -254,7 +256,7 @@ public class EmployeeServiceImpl implements EmployeeService {
             entity.setCurrentAddress(updateDTO.getCurrentAddress());
         }
         if (updateDTO.getBankAccount() != null) {
-            entity.setBankAccount(updateDTO.getBankAccount());
+            entity.setBankAccount(AesEncryptUtil.encrypt(updateDTO.getBankAccount()));
         }
         if (updateDTO.getBankName() != null) {
             entity.setBankName(updateDTO.getBankName());
@@ -361,7 +363,7 @@ public class EmployeeServiceImpl implements EmployeeService {
         vo.setEmployeeNo(entity.getEmployeeNo());
         vo.setEmployeeName(entity.getEmployeeName());
         vo.setGender(entity.getGender());
-        vo.setPhone(entity.getPhone());
+        vo.setPhone(DesensitizationUtil.desensitizePhone(entity.getPhone()));
         vo.setDeptId(entity.getDeptId());
         vo.setJobLevel(entity.getJobLevel());
         vo.setEmploymentStatus(entity.getEmploymentStatus());
@@ -380,9 +382,9 @@ public class EmployeeServiceImpl implements EmployeeService {
         vo.setUserId(entity.getUserId());
         vo.setEmployeeName(entity.getEmployeeName());
         vo.setGender(entity.getGender());
-        vo.setPhone(entity.getPhone());
+        vo.setPhone(DesensitizationUtil.desensitizePhone(entity.getPhone()));
         vo.setEmail(entity.getEmail());
-        vo.setIdCardNo(entity.getIdCardNo());
+        vo.setIdCardNo(DesensitizationUtil.desensitizeIdCardNo(AesEncryptUtil.decrypt(entity.getIdCardNo())));
         vo.setBirthday(entity.getBirthday());
         vo.setDomicileAddress(entity.getDomicileAddress());
         vo.setCurrentAddress(entity.getCurrentAddress());
@@ -400,10 +402,10 @@ public class EmployeeServiceImpl implements EmployeeService {
         vo.setContractExpireDate(entity.getContractExpireDate());
         vo.setSalaryTemplateId(entity.getSalaryTemplateId());
         vo.setBaseSalary(entity.getBaseSalary());
-        vo.setBankAccount(entity.getBankAccount());
+        vo.setBankAccount(DesensitizationUtil.desensitizeBankAccount(AesEncryptUtil.decrypt(entity.getBankAccount())));
         vo.setBankName(entity.getBankName());
         vo.setEmergencyContact(entity.getEmergencyContact());
-        vo.setEmergencyPhone(entity.getEmergencyPhone());
+        vo.setEmergencyPhone(DesensitizationUtil.desensitizePhone(entity.getEmergencyPhone()));
         vo.setCreateTime(entity.getCreateTime());
         return vo;
     }
