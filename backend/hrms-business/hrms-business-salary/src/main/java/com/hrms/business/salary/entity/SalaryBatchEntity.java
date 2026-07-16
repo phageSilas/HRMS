@@ -1,59 +1,41 @@
 package com.hrms.business.salary.entity;
 
+import com.baomidou.mybatisplus.annotation.TableName;
 import com.hrms.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
 
 /**
- * 薪资批次实体
+ * 薪资核算批次实体，对齐 hr_salary_batch 表。
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
+@TableName("hr_salary_batch")
 public class SalaryBatchEntity extends BaseEntity {
 
-    /**
-     * 批次名称
-     */
-    private String batchName;
+    private String batchNo;
 
-    /**
-     * 年份
-     */
-    private Integer year;
+    private String salaryMonth;
 
-    /**
-     * 月份
-     */
-    private Integer month;
+    private String scopeType;
 
-    /**
-     * 员工数量
-     */
-    private Integer employeeCount;
+    private String scopeValue;
 
-    /**
-     * 应发总额
-     */
-    private BigDecimal totalPayable;
+    private String batchStatus;
 
-    /**
-     * 实发总额
-     */
-    private BigDecimal totalActual;
-
-    /**
-     * 状态：0-草稿，1-计算中，2-待确认，3-审批中，4-已通过，5-已发放
-     */
-    private Integer status;
-
-    /**
-     * 审批状态
-     */
-    private Integer approvalStatus;
-
-    /**
-     * 审批实例ID
-     */
     private Long approvalInstanceId;
 
+    private Integer totalCount;
+
+    private BigDecimal totalGrossSalary;
+
+    private BigDecimal totalNetSalary;
+
+    private Integer yellowWarningCount;
+
+    private Integer redWarningCount;
+
+    private Integer blockCount;
 }

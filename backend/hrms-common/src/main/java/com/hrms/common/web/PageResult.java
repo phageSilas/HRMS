@@ -40,6 +40,11 @@ public class PageResult<T> implements Serializable {
      */
     private int pages;
 
+    /**
+     * 待办数量角标（仅审批模块使用）
+     */
+    private Integer badgeCount;
+
     public PageResult() {
     }
 

@@ -3,6 +3,7 @@ package com.hrms.business.approval.controller;
 import com.hrms.business.approval.dto.PendingTaskQuery;
 import com.hrms.business.approval.dto.PendingTaskVO;
 import com.hrms.business.approval.service.ApprovalTaskService;
+import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
 import com.hrms.common.web.Result;
 import io.swagger.v3.oas.annotations.Operation;
@@ -26,15 +27,10 @@ public class ApprovalInstanceController {
 
     private final ApprovalTaskService approvalTaskService;
 
-    private Long getCurrentUserId() {
-        // TODO: 接入安全认证后替换为 SecurityContextHolder.getUserId()
-        return 1L;
-    }
-
     @Operation(summary = "我发起的申请")
     @GetMapping("/my-applications")
     public Result<PageResult<PendingTaskVO>> getMyApplications(PendingTaskQuery query) {
-        Long userId = getCurrentUserId();
+        Long userId = SecurityContextHolder.getUserId();
         return Result.success(approvalTaskService.findMyApplications(userId, query));
     }
 }

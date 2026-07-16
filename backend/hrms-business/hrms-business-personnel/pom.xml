@@ -4,9 +4,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.hrms</groupId>
     <artifactId>hrms-business-personnel</artifactId>
-    <version>1.0.0</version>
 
     <parent>
         <groupId>com.hrms</groupId>
@@ -21,14 +19,24 @@
         <dependency>
             <groupId>com.hrms</groupId>
             <artifactId>hrms-business-employee</artifactId>
-            <version>${project.version}</version>
         </dependency>
 
         <!-- 依赖 hrms-common -->
         <dependency>
             <groupId>com.hrms</groupId>
             <artifactId>hrms-common</artifactId>
-            <version>${project.version}</version>
+        </dependency>
+
+        <!-- 依赖 hrms-business-approval -->
+        <dependency>
+            <groupId>com.hrms</groupId>
+            <artifactId>hrms-business-approval</artifactId>
+        </dependency>
+
+        <!-- 依赖 hrms-system-auth -->
+        <dependency>
+            <groupId>com.hrms</groupId>
+            <artifactId>hrms-system-auth</artifactId>
         </dependency>
 
         <!-- Spring Boot Starter Web -->
@@ -72,6 +80,17 @@
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
         </dependency>
+        <dependency>
+            <groupId>cn.hutool</groupId>
+            <artifactId>hutool-all</artifactId>
+            <version>5.8.40</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
     </dependencies>
 
 </project>

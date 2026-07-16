@@ -1,14 +1,22 @@
 package com.hrms.business.employee.entity;
 
+import com.baomidou.mybatisplus.annotation.TableName;
 import com.hrms.common.entity.BaseEntity;
-import com.hrms.common.enums.EmployeeStatusEnum;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
 
 /**
  * 员工实体
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
+@TableName("hr_employee")
 public class EmployeeEntity extends BaseEntity {
+
+    private static final long serialVersionUID = 1L;
 
     /**
      * 员工工号
@@ -16,24 +24,34 @@ public class EmployeeEntity extends BaseEntity {
     private String employeeNo;
 
     /**
-     * 姓名
+     * 关联系统用户ID
      */
-    private String name;
+    private Long userId;
 
     /**
-     * 性别：1-男，2-女，0-未知
+     * 所属部门ID
+     */
+    private Long deptId;
+
+    /**
+     * 职位ID
+     */
+    private Long postId;
+
+    /**
+     * 直接汇报人员工ID
+     */
+    private Long leaderId;
+
+    /**
+     * 员工姓名
+     */
+    private String employeeName;
+
+    /**
+     * 性别：1-男 2-女
      */
     private Integer gender;
-
-    /**
-     * 出生日期
-     */
-    private String birthday;
-
-    /**
-     * 身份证号（加密）
-     */
-    private String idCardNo;
 
     /**
      * 手机号
@@ -46,24 +64,29 @@ public class EmployeeEntity extends BaseEntity {
     private String email;
 
     /**
-     * 部门ID
+     * 身份证号（AES-256 GCM 加密存储）
      */
-    private Long deptId;
+    private String idCardNo;
 
     /**
-     * 职位ID
+     * 生日
      */
-    private Long postId;
+    private LocalDate birthday;
 
     /**
-     * 入职日期
+     * 户籍地址
      */
-    private String hireDate;
+    private String domicileAddress;
 
     /**
-     * 状态：1-试用期，2-正式，3-离职
+     * 现居住地址
      */
-    private Integer status;
+    private String currentAddress;
+
+    /**
+     * 职级
+     */
+    private String jobLevel;
 
     /**
      * 工作地点
@@ -71,28 +94,73 @@ public class EmployeeEntity extends BaseEntity {
     private String workLocation;
 
     /**
-     * 最高学历
+     * 入职类型：1-全职 2-兼职 3-实习
      */
-    private String education;
+    private Integer hireType;
 
     /**
-     * 专业
+     * 在职状态：1-试用期 2-正式 3-待离职 4-已离职
      */
-    private String major;
+    private Integer employmentStatus;
 
     /**
-     * 毕业院校
+     * 入职日期
      */
-    private String school;
+    private LocalDate hireDate;
 
     /**
-     * 合同开始日期
+     * 试用期（月）
      */
-    private String contractStartDate;
+    private Integer probationMonth;
 
     /**
-     * 合同结束日期
+     * 试用期薪资比例（%）
      */
-    private String contractEndDate;
+    private BigDecimal probationSalaryRatio;
+
+    /**
+     * 合同类型：1-固定期限 2-无固定期限 3-劳务合同
+     */
+    private Integer contractType;
+
+    /**
+     * 合同到期日
+     */
+    private LocalDate contractExpireDate;
+
+    /**
+     * 薪资账套ID
+     */
+    private Long salaryTemplateId;
+
+    /**
+     * 基本工资
+     */
+    private BigDecimal baseSalary;
+
+    /**
+     * 银行账号（AES-256 GCM 加密存储）
+     */
+    private String bankAccount;
+
+    /**
+     * 开户行
+     */
+    private String bankName;
+
+    /**
+     * 紧急联系人
+     */
+    private String emergencyContact;
+
+    /**
+     * 紧急联系人电话
+     */
+    private String emergencyPhone;
+
+    /**
+     * 备注
+     */
+    private String remark;
 
 }

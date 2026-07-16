@@ -1,6 +1,40 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 test.describe('前端地基验收测试', () => {
+  test('12.0 尝试性基础界面支持登录校验和九大模块跳转', async ({ page }) => {
+    await page.goto('/login');
+    await page.waitForLoadState('networkidle');
+
+    await page.locator('input[placeholder*="用户名"]').fill('admin');
+    await page.locator('input[placeholder*="密码"]').fill('admin123');
+    await page.getByTestId('login-submit').click();
+
+    await page.waitForURL(/\/home/, { timeout: 10000 });
+
+    const modules = [
+      '权限体系',
+      '组织架构',
+      '员工档案',
+      '入转调离',
+      '考勤管理',
+      '薪资管理',
+      '审批中心',
+      '个人中心',
+      'AI 智能助手',
+    ];
+
+    for (const moduleName of modules) {
+      await expect(
+        page.getByTestId(`module-entry-${moduleName}`),
+      ).toBeVisible();
+    }
+
+    await page.getByTestId('module-entry-AI 智能助手').click();
+    await page.waitForURL(/\/ai/, { timeout: 10000 });
+    await expect(
+      page.getByRole('heading', { name: 'AI 智能助手' }),
+    ).toBeVisible();
+  });
 
   test('12.1 验证登录流程（Mock 模式）', async ({ page }) => {
     // 访问登录页
@@ -47,7 +81,9 @@ test.describe('前端地基验收测试', () => {
     if (await roleSelector.isVisible()) {
       await roleSelector.click();
       await page.waitForTimeout(500);
-      const adminOption = page.locator('.ant-select-item-option-content').filter({ hasText: '系统管理员' });
+      const adminOption = page
+        .locator('.ant-select-item-option-content')
+        .filter({ hasText: '系统管理员' });
       if (await adminOption.isVisible()) {
         await adminOption.click();
         await page.waitForTimeout(500);
@@ -62,7 +98,9 @@ test.describe('前端地基验收测试', () => {
     await page.waitForTimeout(2000); // 等待菜单渲染
 
     // 检查侧边栏菜单数量（管理员应该能看到多个菜单）
-    const menuItems = page.locator('.ant-pro-sider-menu .ant-menu-item, .ant-pro-sider-menu .ant-menu-submenu');
+    const menuItems = page.locator(
+      '.ant-pro-sider-menu .ant-menu-item, .ant-pro-sider-menu .ant-menu-submenu',
+    );
     const menuCount = await menuItems.count();
 
     // 管理员至少应该看到：首页、系统管理、员工档案、入转调离、考勤管理、薪资管理、审批中心、个人中心
@@ -104,7 +142,9 @@ test.describe('前端地基验收测试', () => {
     await page.waitForURL(/\/home/, { timeout: 10000 });
 
     // 检查首页是否有内容（统计卡片或提示）
-    const homeContent = page.locator('.ant-card, .ant-statistic, h4, .ant-empty');
+    const homeContent = page.locator(
+      '.ant-card, .ant-statistic, h4, .ant-empty',
+    );
     await expect(homeContent.first()).toBeVisible({ timeout: 5000 });
 
     console.log('✓ 首页统计卡片显示验证成功');
@@ -129,7 +169,11 @@ test.describe('前端地基验收测试', () => {
     await page.waitForTimeout(1000);
 
     // 检查是否有待办或提示信息
-    const hasContent = await page.locator('.ant-card, .ant-list, h4, .ant-empty').count() > 0;
+    await expect(page.getByTestId('module-entry-审批中心')).toBeVisible({
+      timeout: 5000,
+    });
+    const hasContent =
+      (await page.locator('[data-testid^="module-entry-"]').count()) > 0;
     expect(hasContent).toBeTruthy();
 
     console.log('✓ 待办列表/申请进度显示验证成功');
@@ -177,14 +221,19 @@ test.describe('前端地基验收测试', () => {
     ];
 
     for (const viewport of viewports) {
-      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await page.setViewportSize({
+        width: viewport.width,
+        height: viewport.height,
+      });
       await page.waitForTimeout(500);
 
       // 检查布局是否正常显示
-      const layout = page.locator('.ant-pro-layout, .ant-layout');
+      const layout = page.locator('.ant-pro-layout, .ant-layout').first();
       await expect(layout).toBeVisible();
 
-      console.log(`✓ ${viewport.name} (${viewport.width}x${viewport.height}) 响应式布局验证成功`);
+      console.log(
+        `✓ ${viewport.name} (${viewport.width}x${viewport.height}) 响应式布局验证成功`,
+      );
     }
   });
 });

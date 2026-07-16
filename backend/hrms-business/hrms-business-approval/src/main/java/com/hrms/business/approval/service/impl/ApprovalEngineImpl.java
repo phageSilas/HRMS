@@ -2,6 +2,7 @@ package com.hrms.business.approval.service.impl;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.hrms.business.approval.config.ApprovalNodeDef;
+import com.hrms.business.approval.dto.OperateResultVO;
 import com.hrms.business.approval.entity.ApprovalInstanceEntity;
 import com.hrms.business.approval.entity.ApprovalTaskEntity;
 import com.hrms.business.approval.enums.ApprovalStatusEnum;
@@ -87,7 +88,7 @@ public class ApprovalEngineImpl implements ApprovalEngine {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void processAction(Long taskId, String action, String comment, Long targetUserId) {
+    public OperateResultVO processAction(Long taskId, String action, String comment, Long targetUserId) {
         // 1. 查询当前任务
         ApprovalTaskEntity task = taskMapper.selectById(taskId);
         if (task == null) {
@@ -139,6 +140,35 @@ public class ApprovalEngineImpl implements ApprovalEngine {
             default:
                 throw new GlobalException(ErrorCode.PARAM_VALIDATION_FAILED, "不支持的操作类型：" + action);
         }
+
+        // 4. 重新查询最新状态，构建操作结果
+        task = taskMapper.selectById(taskId);
+        ApprovalInstanceEntity instance = instanceMapper.selectById(task.getInstanceId());
+        return buildOperateResult(task, instance);
+    }
+
+    /**
+     * 构建审批操作结果
+     */
+    private OperateResultVO buildOperateResult(ApprovalTaskEntity task, ApprovalInstanceEntity instance) {
+        OperateResultVO result = new OperateResultVO();
+        result.setSuccess(true);
+
+        // 任务状态
+        result.setTaskStatus(task.getTaskStatus() == TaskStatusEnum.PROCESSED.getCode() ? "PROCESSED" : "TRANSFERRED");
+
+        // 实例状态
+        ApprovalStatusEnum statusEnum = ApprovalStatusEnum.fromCode(instance.getApprovalStatus());
+        result.setInstanceStatus(statusEnum != null ? statusEnum.name() : "UNKNOWN");
+
+        // 下一节点：如果实例还在审批中，currentNodeName 为下一节点；否则为 null（已结束）
+        if (ApprovalStatusEnum.PENDING.getCode() == instance.getApprovalStatus()) {
+            result.setNextNodeName(instance.getCurrentNodeName());
+        } else {
+            result.setNextNodeName(null);
+        }
+
+        return result;
     }
 
     // ========== 内部方法 ==========

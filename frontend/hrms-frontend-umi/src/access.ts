@@ -15,20 +15,24 @@ export default function access(initialState: { currentUser?: UserInfo }) {
 
   /**
    * 检查是否有指定权限
+   * 支持精确匹配（'approval'）和前缀匹配（'approval:approve' → matches 'approval'）
    */
   const hasPermission = (permission: string): boolean => {
-    return permissions.includes(permission);
+    return permissions.includes(permission)
+      || permissions.some(p => p.startsWith(permission + ':'));
   };
 
   return {
     // 模块权限
     system: hasPermission('system'),
+    organization: hasPermission('system') || hasPermission('organization'),
     employee: hasPermission('employee'),
     process: hasPermission('process'),
     attendance: hasPermission('attendance'),
     salary: hasPermission('salary'),
     approval: hasPermission('approval'),
     mycenter: true, // 个人中心所有人可见
+    ai: true,
 
     // 辅助方法
     hasPermission,
@@ -41,8 +45,14 @@ export default function access(initialState: { currentUser?: UserInfo }) {
     isEmployee: currentUser?.roleCode === 'EMPLOYEE',
 
     // 组合角色判断
-    canViewEmployee: ['ADMIN', 'HR', 'MANAGER'].includes(currentUser?.roleCode || ''),
-    canViewSalary: ['ADMIN', 'HR', 'FINANCE'].includes(currentUser?.roleCode || ''),
-    canApprove: ['ADMIN', 'HR', 'MANAGER', 'FINANCE'].includes(currentUser?.roleCode || ''),
+    canViewEmployee: ['ADMIN', 'HR', 'MANAGER'].includes(
+      currentUser?.roleCode || '',
+    ),
+    canViewSalary: ['ADMIN', 'HR', 'FINANCE'].includes(
+      currentUser?.roleCode || '',
+    ),
+    canApprove: ['ADMIN', 'HR', 'MANAGER', 'FINANCE'].includes(
+      currentUser?.roleCode || '',
+    ),
   };
 }

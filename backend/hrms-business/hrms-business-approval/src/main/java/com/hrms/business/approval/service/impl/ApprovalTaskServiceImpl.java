@@ -65,7 +65,16 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
                 .orderByAsc(ApprovalTaskEntity::getCreateTime)
         );
 
-        return buildTaskPageResult(mpPage);
+        // 3. 查询该用户全局待办总数（用于角标）
+        Integer badgeCount = Math.toIntExact(taskMapper.selectCount(
+                Wrappers.lambdaQuery(ApprovalTaskEntity.class)
+                        .eq(ApprovalTaskEntity::getApproverUserId, userId)
+                        .eq(ApprovalTaskEntity::getTaskStatus, TaskStatusEnum.PENDING.getCode())
+        ));
+
+        PageResult<PendingTaskVO> result = buildTaskPageResult(mpPage);
+        result.setBadgeCount(badgeCount);
+        return result;
     }
 
     @Override
@@ -93,7 +102,7 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
                 .eq(ApprovalInstanceEntity::getApplicantUserId, userId)
                 .orderByDesc(ApprovalInstanceEntity::getApplyTime);
 
-        if (query.getBusinessType() != null) {
+        if (org.springframework.util.StringUtils.hasText(query.getBusinessType())) {
             wrapper.eq(ApprovalInstanceEntity::getApprovalType, query.getBusinessType());
         }
 
@@ -147,6 +156,14 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
                 .anyMatch(t -> t.getTaskStatus() == TaskStatusEnum.PENDING.getCode()
                         && Objects.equals(t.getApproverUserId(), currentUserId));
 
+        // 获取当前待办任务ID（前端操作用）
+        Long currentTaskId = tasks.stream()
+                .filter(t -> t.getTaskStatus() == TaskStatusEnum.PENDING.getCode()
+                        && Objects.equals(t.getApproverUserId(), currentUserId))
+                .findFirst()
+                .map(ApprovalTaskEntity::getId)
+                .orElse(null);
+
         // 解析表单快照
         Object formData = null;
         if (instance.getFormJson() != null) {
@@ -170,6 +187,7 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
         vo.setApprovalNodes(approvalNodes);
         vo.setApprovalHistory(approvalHistory);
         vo.setCurrentOperator(currentOperator);
+        vo.setCurrentTaskId(currentTaskId);
 
         return vo;
     }
@@ -219,11 +237,19 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
      */
     private List<Long> queryFilteredInstanceIds(PendingTaskQuery query) {
         LambdaQueryWrapper<ApprovalInstanceEntity> wrapper = Wrappers.lambdaQuery();
-        if (query.getBusinessType() != null) {
+        if (org.springframework.util.StringUtils.hasText(query.getBusinessType())) {
             wrapper.eq(ApprovalInstanceEntity::getApprovalType, query.getBusinessType());
         }
-        if (query.getKeyword() != null) {
+        if (org.springframework.util.StringUtils.hasText(query.getKeyword())) {
             wrapper.like(ApprovalInstanceEntity::getTitle, query.getKeyword());
+        }
+        if (org.springframework.util.StringUtils.hasText(query.getStartDate())) {
+            wrapper.ge(ApprovalInstanceEntity::getApplyTime,
+                    LocalDateTime.parse(query.getStartDate(), DTF));
+        }
+        if (org.springframework.util.StringUtils.hasText(query.getEndDate())) {
+            wrapper.le(ApprovalInstanceEntity::getApplyTime,
+                    LocalDateTime.parse(query.getEndDate(), DTF));
         }
         return instanceMapper.selectList(wrapper).stream()
                 .map(ApprovalInstanceEntity::getId)

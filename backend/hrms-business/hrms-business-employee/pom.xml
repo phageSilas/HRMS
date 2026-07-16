@@ -24,6 +24,20 @@
             <version>${project.version}</version>
         </dependency>
 
+        <!-- 依赖 hrms-system-organization（获取 DeptService/PostService） -->
+        <dependency>
+            <groupId>com.hrms</groupId>
+            <artifactId>hrms-system-organization</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- 依赖 hrms-system-auth（获取 FieldPermissionService） -->
+        <dependency>
+            <groupId>com.hrms</groupId>
+            <artifactId>hrms-system-auth</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <!-- Spring Boot Starter Web -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -64,7 +78,32 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <!-- Lombok 必须在 MapStruct 之前 -->
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                        <path>
+                            <groupId>org.mapstruct</groupId>
+                            <artifactId>mapstruct-processor</artifactId>
+                            <version>${mapstruct.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 
 </project>

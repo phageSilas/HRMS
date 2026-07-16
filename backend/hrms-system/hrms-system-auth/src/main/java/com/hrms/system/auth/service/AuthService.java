@@ -39,4 +39,12 @@ public interface AuthService {
      */
     CurrentUserVO getCurrentUser();
 
+    /**
+     * 获取用户数据权限范围
+     *
+     * @param userId 用户 ID
+     * @return 数据权限范围（1-仅本人 2-本部门 3-本部门及子部门 4-全部）
+     */
+    Integer getDataScope(Long userId);
+
 }
