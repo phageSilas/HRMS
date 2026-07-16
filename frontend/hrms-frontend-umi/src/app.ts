@@ -109,7 +109,7 @@ export function onRouteChange({ location }: { location: { pathname: string } }) 
 /**
  * Layout 配置
  */
-export const layout: RunTimeLayoutConfig = ({ initialState }) => {
+export const layout: RunTimeLayoutConfig = ({ initialState, setInitialState }) => {
   return {
     logo: 'https://img.alicdn.com/tfs/TB1YHEpwUT1gK0jSZFhXXaAtVXa-28-27.svg',
     title: 'HRMS 人资管理系统',
@@ -124,17 +124,15 @@ export const layout: RunTimeLayoutConfig = ({ initialState }) => {
       initialState?.currentUser?.nickname ||
       initialState?.currentUser?.username ||
       '未登录',
-    // 退出登录
-    onMenuClick: ({ key }) => {
-      if (key === 'logout') {
-        // 调用 logout 服务，同步清除后端 Token 黑名单
-        import('@/services/auth').then(({ logout }) => {
-          logout().then(() => {
-            message.success('已退出登录');
-            history.push('/login');
-          });
-        });
-      }
+    // 退出登录 - Umi ProLayout 标准配置
+    logout: async () => {
+      // 调用 logout 服务，同步清除后端 Token 黑名单
+      const { logout } = await import('@/services/auth');
+      await logout();
+      message.success('已退出登录');
+      // 清除全局状态
+      setInitialState?.({ loading: false });
+      history.push('/login');
     },
   };
 };
