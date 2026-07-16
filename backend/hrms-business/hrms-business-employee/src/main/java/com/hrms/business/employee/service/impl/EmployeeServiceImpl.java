@@ -295,7 +295,23 @@ public class EmployeeServiceImpl implements EmployeeService {
             throw new GlobalException(ErrorCode.EMPLOYEE_CANNOT_DELETE);
         }
 
-        // TODO: 校验是否存在业务记录（合同、考勤、薪资等）
+        // 校验：是否存在合同记录
+        Long contractCount = employeeMapper.countContractsByEmployeeId(id);
+        if (contractCount != null && contractCount > 0) {
+            throw new GlobalException(ErrorCode.EMPLOYEE_CANNOT_DELETE, "该员工存在合同记录，无法删除");
+        }
+
+        // 校验：是否存在考勤记录
+        Long attendanceCount = employeeMapper.countAttendanceByEmployeeId(id);
+        if (attendanceCount != null && attendanceCount > 0) {
+            throw new GlobalException(ErrorCode.EMPLOYEE_CANNOT_DELETE, "该员工存在考勤记录，无法删除");
+        }
+
+        // 校验：是否存在薪资记录
+        Long salaryCount = employeeMapper.countSalaryByEmployeeId(id);
+        if (salaryCount != null && salaryCount > 0) {
+            throw new GlobalException(ErrorCode.EMPLOYEE_CANNOT_DELETE, "该员工存在薪资记录，无法删除");
+        }
 
         // 逻辑删除
         employeeMapper.deleteById(id);
