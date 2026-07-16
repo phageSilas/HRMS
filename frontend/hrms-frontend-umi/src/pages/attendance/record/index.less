@@ -17,8 +17,8 @@
 }
 
 .statusCard,
-.tableCard,
-.nextCard {
+.filterCard,
+.tableCard {
   border: 1px solid #eef2f7;
   border-radius: 8px;
   box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
@@ -48,6 +48,34 @@
   border-radius: 8px;
 }
 
+.filterCard {
+  margin-bottom: 18px;
+
+  :global(.ant-card-body) {
+    padding: 18px 20px 10px;
+  }
+}
+
+.filterForm {
+  row-gap: 12px;
+
+  :global(.ant-form-item) {
+    margin-bottom: 10px;
+  }
+}
+
+.groupSelect {
+  min-width: 180px;
+}
+
+.statusSelect {
+  min-width: 132px;
+}
+
+.filterActions {
+  margin-left: auto;
+}
+
 .tableCard {
   margin-bottom: 18px;
 
@@ -66,42 +94,13 @@
   color: #98a2b3;
 }
 
-.emptyText {
-  max-width: 620px;
-  margin: 0 auto;
-  color: #667085;
-  text-align: center;
-
-  p {
-    margin: 8px 0 0;
-  }
-
-  code {
-    margin: 0 4px;
-    padding: 2px 6px;
-    color: #2563eb;
-    background: #eff6ff;
-    border-radius: 6px;
-  }
-}
-
-.nextCard {
-  background: #f8fafc;
-
-  p {
-    margin: 6px 0 0;
-    color: #667085;
-  }
-}
-
-.nextIcon {
-  margin-top: 3px;
-  color: #1677ff;
-}
-
 @media (max-width: 900px) {
   .statusGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .filterActions {
+    margin-left: 0;
   }
 }
 
@@ -112,5 +111,24 @@
 
   .statusGrid {
     grid-template-columns: 1fr;
+  }
+
+  .filterForm {
+    :global(.ant-form-item) {
+      width: 100%;
+      margin-right: 0;
+    }
+
+    :global(.ant-picker),
+    :global(.ant-input-number),
+    :global(.ant-input),
+    :global(.ant-select) {
+      width: 100%;
+    }
+  }
+
+  .groupSelect,
+  .statusSelect {
+    width: 100%;
   }
 }

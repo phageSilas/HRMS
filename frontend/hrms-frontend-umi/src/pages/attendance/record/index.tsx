@@ -1,93 +1,400 @@
+import type {
+  AttendanceGroup,
+  AttendanceGroupRecord,
+  AttendanceGroupRecordQuery,
+} from '@/services/attendance';
+import {
+  getAttendanceGroupRecords,
+  getAttendanceGroups,
+} from '@/services/attendance';
 import {
   CalendarOutlined,
-  CheckCircleFilled,
   ClockCircleOutlined,
-  ExclamationCircleFilled,
+  ReloadOutlined,
+  SearchOutlined,
 } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
-import { history } from '@umijs/max';
-import { Button, Card, Empty, Space, Table, Tag, Typography } from 'antd';
+import { history, useRequest } from '@umijs/max';
+import {
+  Button,
+  Card,
+  DatePicker,
+  Form,
+  Input,
+  InputNumber,
+  Select,
+  Space,
+  Table,
+  Tag,
+  Typography,
+  message,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import styles from './index.less';
 
+const { RangePicker } = DatePicker;
 const { Text, Title } = Typography;
 
-interface AttendanceRecordRow {
-  id: number;
-  recordDate: string;
-  employeeName: string;
-  departmentName: string;
-  clockInTime?: string;
-  clockOutTime?: string;
-  status: string;
+type AttendanceGroupPageLike =
+  | {
+      records?: AttendanceGroup[];
+      data?: { records?: AttendanceGroup[] } | AttendanceGroup[];
+    }
+  | AttendanceGroup[]
+  | undefined;
+
+interface RecordFilterValues {
+  groupId?: number;
+  yearMonth?: Dayjs;
+  dateRange?: [Dayjs, Dayjs];
+  keyword?: string;
+  departmentId?: number;
+  status?: string;
 }
 
-const statusItems = [
-  { label: '正常', desc: '按时打卡，无异常', color: 'success' },
-  { label: '迟到', desc: '超出规定时间 15 分钟内', color: 'warning' },
-  { label: '早退', desc: '提前 15 分钟内下班', color: 'orange' },
-  { label: '旷工半天', desc: '超出阈值超过 15 分钟', color: 'error' },
-  { label: '上班缺卡', desc: '上班未打卡，下班有记录', color: 'purple' },
-  { label: '下班缺卡', desc: '上班已打卡，下班无记录', color: 'blue' },
-];
+interface RecordQueryState {
+  groupId?: number;
+  yearMonth: string;
+  dateStart?: string;
+  dateEnd?: string;
+  keyword?: string;
+  departmentId?: number;
+  status?: string;
+  pageNum: number;
+  pageSize: number;
+}
 
-const columns: ColumnsType<AttendanceRecordRow> = [
-  { title: '日期', dataIndex: 'recordDate', width: 150 },
-  { title: '姓名', dataIndex: 'employeeName', width: 140 },
-  { title: '部门', dataIndex: 'departmentName', width: 150 },
-  {
-    title: '上班时间',
-    dataIndex: 'clockInTime',
-    width: 150,
-    render: (value?: string) => value || <Text type="danger">--</Text>,
-  },
-  {
-    title: '下班时间',
-    dataIndex: 'clockOutTime',
-    width: 150,
-    render: (value?: string) => value || <Text type="danger">--</Text>,
-  },
-  {
-    title: '状态',
-    dataIndex: 'status',
-    width: 140,
-    render: (value: string) => {
-      const item = statusItems.find((status) => status.label === value);
-      return <Tag color={item?.color || 'default'}>{value}</Tag>;
-    },
-  },
-];
+const GROUP_CACHE_KEY = 'hrms-attendance-groups-cache';
+
+const statusMeta: Record<string, { label: string; color: string; desc: string }> = {
+  NORMAL: { label: '正常', color: 'success', desc: '上下班均正常' },
+  LATE: { label: '迟到', color: 'warning', desc: '上班状态为迟到' },
+  EARLY_LEAVE: { label: '早退', color: 'orange', desc: '下班状态为早退' },
+  ABSENCE: { label: '缺勤', color: 'error', desc: '当天上下班均无记录' },
+  CLOCK_IN_MISSING: { label: '上班缺卡', color: 'purple', desc: '下班有记录，上班无记录' },
+  CLOCK_OUT_MISSING: { label: '下班缺卡', color: 'blue', desc: '上班有记录，下班无记录' },
+  ABNORMAL: { label: '异常', color: 'red', desc: '同时迟到和早退' },
+};
+
+const statusOptions = Object.entries(statusMeta).map(([value, meta]) => ({
+  label: meta.label,
+  value,
+}));
+
+function normalizeGroups(pageData: AttendanceGroupPageLike) {
+  if (Array.isArray(pageData)) return pageData;
+  if (Array.isArray(pageData?.records)) return pageData.records;
+  if (Array.isArray(pageData?.data)) return pageData.data;
+  if (Array.isArray(pageData?.data?.records)) return pageData.data.records;
+  return [];
+}
+
+function readCachedGroups() {
+  try {
+    const cacheText = sessionStorage.getItem(GROUP_CACHE_KEY);
+    if (!cacheText) return [];
+    const cached = JSON.parse(cacheText) as AttendanceGroup[];
+    return Array.isArray(cached) ? cached : [];
+  } catch {
+    return [];
+  }
+}
+
+function mergeGroups(remoteGroups: AttendanceGroup[], localGroups: AttendanceGroup[]) {
+  const groupMap = new Map<number, AttendanceGroup>();
+  remoteGroups.forEach((item) => groupMap.set(item.id, item));
+  localGroups.forEach((item) => groupMap.set(item.id, item));
+  return Array.from(groupMap.values()).sort((a, b) => b.id - a.id);
+}
+
+function parseUrlGroupId() {
+  const groupId = new URLSearchParams(history.location.search).get('groupId');
+  const parsed = Number(groupId);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function formatBackendDate(value?: string | number[]) {
+  if (!value) return '--';
+  if (Array.isArray(value)) {
+    const [year, month, day] = value;
+    if (!year || !month || !day) return '--';
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+  return value;
+}
+
+function formatBackendTime(value?: string | number[]) {
+  if (!value) return '--';
+  if (Array.isArray(value)) {
+    const [hour = 0, minute = 0, second = 0] = value;
+    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
+  }
+  return value;
+}
+
+function renderStatusTag(value?: string, fallbackName?: string) {
+  if (!value && !fallbackName) return <Text type="secondary">--</Text>;
+  const meta = value ? statusMeta[value] : undefined;
+  return <Tag color={meta?.color || 'default'}>{fallbackName || meta?.label || value}</Tag>;
+}
+
+function buildRecordQuery(query: RecordQueryState): AttendanceGroupRecordQuery {
+  const params: AttendanceGroupRecordQuery = {
+    pageNum: query.pageNum,
+    pageSize: query.pageSize,
+    keyword: query.keyword,
+    departmentId: query.departmentId,
+    status: query.status,
+  };
+
+  if (query.dateStart && query.dateEnd) {
+    params.dateStart = query.dateStart;
+    params.dateEnd = query.dateEnd;
+  } else {
+    params.yearMonth = query.yearMonth;
+  }
+
+  return params;
+}
 
 const AttendanceRecordPage: React.FC = () => {
+  const [form] = Form.useForm<RecordFilterValues>();
+  const [cachedGroups] = useState<AttendanceGroup[]>(readCachedGroups);
+  const [query, setQuery] = useState<RecordQueryState>({
+    groupId: parseUrlGroupId(),
+    yearMonth: dayjs().format('YYYY-MM'),
+    pageNum: 1,
+    pageSize: 10,
+  });
+
+  const { data: groupData, loading: groupLoading } = useRequest(
+    () => getAttendanceGroups({ pageNum: 1, pageSize: 100 }),
+    {
+      onError: (error) => {
+        message.error(error.message || '考勤组加载失败');
+      },
+    },
+  );
+
+  const groups = useMemo(() => {
+    const remoteGroups = normalizeGroups(groupData as AttendanceGroupPageLike);
+    return mergeGroups(remoteGroups, cachedGroups);
+  }, [cachedGroups, groupData]);
+
+  useEffect(() => {
+    if (query.groupId || groups.length === 0) return;
+    const firstGroupId = groups[0].id;
+    setQuery((previous) => ({ ...previous, groupId: firstGroupId }));
+    form.setFieldsValue({ groupId: firstGroupId });
+  }, [form, groups, query.groupId]);
+
+  useEffect(() => {
+    if (!query.groupId) return;
+    form.setFieldsValue({
+      groupId: query.groupId,
+      yearMonth: dayjs(query.yearMonth),
+    });
+  }, [form, query.groupId, query.yearMonth]);
+
+  const {
+    data: recordData,
+    loading: recordLoading,
+  } = useRequest(
+    () => {
+      if (!query.groupId) {
+        return Promise.resolve({
+          records: [],
+          total: 0,
+          pageNum: query.pageNum,
+          pageSize: query.pageSize,
+        });
+      }
+      return getAttendanceGroupRecords(query.groupId, buildRecordQuery(query));
+    },
+    {
+      refreshDeps: [query],
+      onError: (error) => {
+        message.error(error.message || '考勤记录加载失败');
+      },
+    },
+  );
+
+  const selectedGroup = groups.find((item) => item.id === query.groupId);
+
+  const columns: ColumnsType<AttendanceGroupRecord> = [
+    {
+      title: '日期',
+      dataIndex: 'recordDate',
+      width: 130,
+      render: (value) => formatBackendDate(value),
+    },
+    {
+      title: '员工',
+      dataIndex: 'employeeName',
+      width: 160,
+      render: (value, record) => (
+        <Space direction="vertical" size={0}>
+          <Text strong>{value || '--'}</Text>
+          <Text type="secondary">{record.employeeNo || '--'}</Text>
+        </Space>
+      ),
+    },
+    { title: '工号', dataIndex: 'employeeNo', width: 120, render: (value) => value || '--' },
+    { title: '部门', dataIndex: 'deptName', width: 150, render: (value) => value || '--' },
+    {
+      title: '上班时间',
+      dataIndex: 'clockInTime',
+      width: 130,
+      render: (value) => formatBackendTime(value),
+    },
+    {
+      title: '下班时间',
+      dataIndex: 'clockOutTime',
+      width: 130,
+      render: (value) => formatBackendTime(value),
+    },
+    {
+      title: '上班状态',
+      dataIndex: 'clockInStatus',
+      width: 120,
+      render: (value) => renderStatusTag(value),
+    },
+    {
+      title: '下班状态',
+      dataIndex: 'clockOutStatus',
+      width: 120,
+      render: (value) => renderStatusTag(value),
+    },
+    {
+      title: '综合状态',
+      dataIndex: 'status',
+      width: 120,
+      fixed: 'right',
+      render: (value, record) => renderStatusTag(value, record.statusName),
+    },
+  ];
+
+  const handleSearch = (values: RecordFilterValues) => {
+    const dateRange = values.dateRange;
+    setQuery((previous) => ({
+      ...previous,
+      groupId: values.groupId,
+      yearMonth: values.yearMonth?.format('YYYY-MM') || dayjs().format('YYYY-MM'),
+      dateStart: dateRange?.[0]?.format('YYYY-MM-DD'),
+      dateEnd: dateRange?.[1]?.format('YYYY-MM-DD'),
+      keyword: values.keyword?.trim() || undefined,
+      departmentId: values.departmentId,
+      status: values.status,
+      pageNum: 1,
+    }));
+  };
+
+  const handleReset = () => {
+    const nextGroupId = query.groupId || groups[0]?.id;
+    form.setFieldsValue({
+      groupId: nextGroupId,
+      yearMonth: dayjs(),
+      dateRange: undefined,
+      keyword: undefined,
+      departmentId: undefined,
+      status: undefined,
+    });
+    setQuery({
+      groupId: nextGroupId,
+      yearMonth: dayjs().format('YYYY-MM'),
+      pageNum: 1,
+      pageSize: query.pageSize,
+    });
+  };
+
   return (
     <PageContainer title={false} className={styles.recordPage}>
       <div className={styles.pageHeader}>
         <div>
           <Title level={3}>考勤记录</Title>
           <Text type="secondary">
-            面向 HR、部门主管和管理员查看权限范围内的员工打卡情况
+            面向 HR、部门主管和管理员，按考勤组查询员工每日打卡明细
           </Text>
         </div>
-        <Button
-          type="primary"
-          onClick={() => history.push('/profile/attendance')}
-        >
-          申请补卡（1/2）
+        <Button type="primary" onClick={() => history.push('/profile/attendance')}>
+          申请补卡
         </Button>
       </div>
 
       <Card bordered={false} className={styles.statusCard}>
         <Title level={5}>打卡状态说明</Title>
         <div className={styles.statusGrid}>
-          {statusItems.map((item) => (
-            <div className={styles.statusItem} key={item.label}>
+          {Object.entries(statusMeta).map(([key, item]) => (
+            <div className={styles.statusItem} key={key}>
               <Tag color={item.color}>{item.label}</Tag>
               <Text type="secondary">{item.desc}</Text>
             </div>
           ))}
         </div>
+      </Card>
+
+      <Card bordered={false} className={styles.filterCard}>
+        <Form
+          form={form}
+          layout="inline"
+          className={styles.filterForm}
+          initialValues={{
+            groupId: query.groupId,
+            yearMonth: dayjs(query.yearMonth),
+          }}
+          onFinish={handleSearch}
+        >
+          <Form.Item
+            label="考勤组"
+            name="groupId"
+            rules={[{ required: true, message: '请选择考勤组' }]}
+          >
+            <Select
+              showSearch
+              loading={groupLoading}
+              placeholder="请选择考勤组"
+              optionFilterProp="label"
+              className={styles.groupSelect}
+              options={groups.map((group) => ({
+                label: group.groupName,
+                value: group.id,
+              }))}
+            />
+          </Form.Item>
+          <Form.Item label="月份" name="yearMonth">
+            <DatePicker picker="month" allowClear={false} />
+          </Form.Item>
+          <Form.Item label="日期范围" name="dateRange">
+            <RangePicker />
+          </Form.Item>
+          <Form.Item label="员工" name="keyword">
+            <Input allowClear placeholder="姓名/工号" />
+          </Form.Item>
+          <Form.Item label="部门ID" name="departmentId">
+            <InputNumber min={1} precision={0} placeholder="部门ID" />
+          </Form.Item>
+          <Form.Item label="综合状态" name="status">
+            <Select
+              allowClear
+              placeholder="全部状态"
+              className={styles.statusSelect}
+              options={statusOptions}
+            />
+          </Form.Item>
+          <Form.Item className={styles.filterActions}>
+            <Space>
+              <Button type="primary" htmlType="submit" icon={<SearchOutlined />}>
+                查询
+              </Button>
+              <Button onClick={handleReset} icon={<ReloadOutlined />}>
+                重置
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
       </Card>
 
       <Card
@@ -96,60 +403,44 @@ const AttendanceRecordPage: React.FC = () => {
         title={
           <Space>
             <CalendarOutlined />
-            <span>{dayjs().format('YYYY-MM')} 打卡记录</span>
+            <span>
+              {selectedGroup?.groupName || '考勤组'} ·{' '}
+              {query.dateStart && query.dateEnd
+                ? `${query.dateStart} 至 ${query.dateEnd}`
+                : `${query.yearMonth} 打卡记录`}
+            </span>
           </Space>
         }
         extra={
           <Space className={styles.tableHint}>
             <ClockCircleOutlined />
-            <Text type="secondary">等待后端管理端分页接口</Text>
+            <Text type="secondary">最多支持 31 天日期范围查询</Text>
           </Space>
         }
       >
-        <Table<AttendanceRecordRow>
-          rowKey="id"
+        <Table<AttendanceGroupRecord>
+          rowKey={(record) =>
+            String(record.recordId || `${record.employeeId}-${formatBackendDate(record.recordDate)}`)
+          }
           columns={columns}
-          dataSource={[]}
-          pagination={false}
-          locale={{
-            emptyText: (
-              <Empty
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description={
-                  <div className={styles.emptyText}>
-                    <Space>
-                      <ExclamationCircleFilled />
-                      <Text strong>暂未接入管理端考勤记录分页接口</Text>
-                    </Space>
-                    <p>
-                      建议后端提供 <code>GET /api/v1/attendance/records</code>
-                      ，支持按日期、员工、部门和状态分页查询。
-                    </p>
-                    <p>
-                      建议参数：
-                      <code>
-                        pageNum、pageSize、startDate、endDate、employeeName、departmentId、status
-                      </code>
-                    </p>
-                  </div>
-                }
-              />
-            ),
+          dataSource={recordData?.records || []}
+          loading={recordLoading || groupLoading}
+          scroll={{ x: 1180 }}
+          pagination={{
+            current: recordData?.pageNum || query.pageNum,
+            pageSize: recordData?.pageSize || query.pageSize,
+            total: recordData?.total || 0,
+            showSizeChanger: true,
+            showTotal: (total) => `共 ${total} 条`,
+            onChange: (pageNum, pageSize) => {
+              setQuery((previous) => ({
+                ...previous,
+                pageNum,
+                pageSize,
+              }));
+            },
           }}
         />
-      </Card>
-
-      <Card bordered={false} className={styles.nextCard}>
-        <Space align="start">
-          <CheckCircleFilled className={styles.nextIcon} />
-          <div>
-            <Text strong>后续接入方式</Text>
-            <p>
-              当前页面已保留表格列、状态 Tag 和筛选扩展位置。后端补齐多人记录分页接口后，
-              前端只需把表格 dataSource 替换为接口返回的 records，并接入分页 total。
-            </p>
-          </div>
-        </Space>
       </Card>
     </PageContainer>
   );

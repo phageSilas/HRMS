@@ -129,6 +129,31 @@ export interface AttendanceGroupRequest {
   status?: number;
 }
 
+export interface AttendanceGroupRecordQuery extends Partial<PageQuery> {
+  yearMonth?: string;
+  dateStart?: string;
+  dateEnd?: string;
+  keyword?: string;
+  departmentId?: number;
+  status?: string;
+}
+
+export interface AttendanceGroupRecord {
+  recordId: number;
+  recordDate: string | number[];
+  employeeId: number;
+  employeeName: string;
+  employeeNo?: string;
+  deptId?: number;
+  deptName?: string;
+  clockInTime?: string | number[];
+  clockOutTime?: string | number[];
+  clockInStatus?: string;
+  clockOutStatus?: string;
+  status?: string;
+  statusName?: string;
+}
+
 // ============ 考勤组接口 ============
 
 /**
@@ -159,6 +184,16 @@ export async function updateAttendanceGroup(id: number, data: AttendanceGroupReq
 /**
  * 获取考勤记录列表
  */
+export async function getAttendanceGroupRecords(
+  groupId: number,
+  params: AttendanceGroupRecordQuery,
+) {
+  return request.get<PageResult<AttendanceGroupRecord>>(
+    `/api/v1/attendance/groups/${groupId}/records`,
+    { params },
+  );
+}
+
 export async function getAttendanceRecordList(params: AttendanceQuery) {
   return request.get<Result<PageResult<AttendanceRecord>>>('/attendance/records', { params });
 }
