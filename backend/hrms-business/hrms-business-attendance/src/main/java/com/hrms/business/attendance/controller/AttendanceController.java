@@ -4,6 +4,7 @@ import com.hrms.business.attendance.dto.AttendanceClockRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceCorrectionCreateRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupQueryDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupCreateOrUpdateRequestDTO;
+import com.hrms.business.attendance.dto.AttendanceGroupRecordQueryDTO;
 import com.hrms.business.attendance.dto.MonthlyStatGenerateRequestDTO;
 import com.hrms.business.attendance.service.AttendanceService;
 import com.hrms.business.attendance.vo.AttendanceClockVO;
@@ -12,6 +13,7 @@ import com.hrms.business.attendance.vo.AttendanceCorrectionCreateVO;
 import com.hrms.business.attendance.vo.MonthlyStatGenerateVO;
 import com.hrms.business.attendance.vo.AttendancePayrollSourceVO;
 import com.hrms.business.attendance.vo.AttendanceGroupPageVO;
+import com.hrms.business.attendance.vo.AttendanceGroupRecordPageVO;
 import com.hrms.common.web.PageResult;
 import com.hrms.common.web.Result;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -79,6 +81,21 @@ public class AttendanceController {
             @PathVariable Long id,
             @Valid @RequestBody AttendanceGroupCreateOrUpdateRequestDTO requestDTO) {
         return Result.success(attendanceService.updateAttendanceGroup(id, requestDTO));
+    }
+
+    /**
+     * 分页查询考勤组打卡记录。
+     *
+     * @param groupId  考勤组ID
+     * @param queryDTO 查询参数
+     * @return 考勤组打卡记录分页结果
+     * 本方法使用的工具类: Result(hrms-common),PageResult(hrms-common)
+     */
+    @GetMapping("/groups/{groupId}/records")
+    public Result<PageResult<AttendanceGroupRecordPageVO>> pageGroupAttendanceRecords(
+            @PathVariable Long groupId,
+            @Valid AttendanceGroupRecordQueryDTO queryDTO) {
+        return Result.success(attendanceService.pageGroupAttendanceRecords(groupId, queryDTO));
     }
 
     /**

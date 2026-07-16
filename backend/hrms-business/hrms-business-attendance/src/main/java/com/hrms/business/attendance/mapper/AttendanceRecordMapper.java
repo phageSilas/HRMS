@@ -139,6 +139,37 @@ public interface AttendanceRecordMapper extends BaseMapper<AttendanceRecordEntit
                                                               @Param("endDate") LocalDate endDate);
 
     /**
+     * 查询考勤组日期范围内指定员工的打卡记录。
+     *
+     * @param groupId     考勤组ID
+     * @param employeeIds 员工ID列表
+     * @param startDate   开始日期
+     * @param endDate     结束日期
+     * @return 打卡记录列表
+     * 本方法使用的工具类: 无
+     */
+    @Select("""
+            <script>
+            SELECT id, employee_id, group_id, record_date, clock_in_time, clock_out_time,
+                   clock_in_status, clock_out_status, clock_in_ip, clock_out_ip,
+                   clock_in_gps, clock_out_gps, device_info, correction_status,
+                   create_time, update_time
+            FROM hr_attendance_record
+            WHERE group_id = #{groupId}
+              AND record_date BETWEEN #{startDate} AND #{endDate}
+              AND employee_id IN
+              <foreach collection="employeeIds" item="employeeId" open="(" separator="," close=")">
+                  #{employeeId}
+              </foreach>
+            ORDER BY record_date DESC, employee_id ASC
+            </script>
+            """)
+    List<AttendanceRecordEntity> selectByGroupAndEmployeesAndDateRange(@Param("groupId") Long groupId,
+                                                                       @Param("employeeIds") List<Long> employeeIds,
+                                                                       @Param("startDate") LocalDate startDate,
+                                                                       @Param("endDate") LocalDate endDate);
+
+    /**
      * 更新补卡状态。
      *
      * @param id               打卡记录ID

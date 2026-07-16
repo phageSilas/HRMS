@@ -5,8 +5,10 @@ import com.hrms.business.attendance.dto.AttendanceGroupCreateOrUpdateRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceClockRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceCorrectionCreateRequestDTO;
 import com.hrms.business.attendance.dto.LeaveCreateRequestDTO;
+import com.hrms.business.attendance.dto.AttendanceGroupRecordQueryDTO;
 import com.hrms.business.attendance.dto.MonthlyStatGenerateRequestDTO;
 import com.hrms.business.attendance.vo.AttendanceGroupPageVO;
+import com.hrms.business.attendance.vo.AttendanceGroupRecordPageVO;
 import com.hrms.business.attendance.vo.AttendanceClockVO;
 import com.hrms.business.attendance.vo.AttendanceCalendarVO;
 import com.hrms.business.attendance.vo.AttendanceCorrectionCreateVO;
@@ -51,6 +53,17 @@ public interface AttendanceService {
      * 本方法使用的工具类: 无
      */
     AttendanceGroupPageVO updateAttendanceGroup(Long id, AttendanceGroupCreateOrUpdateRequestDTO requestDTO);
+
+    /**
+     * 分页查询考勤组打卡记录。
+     *
+     * @param groupId  考勤组ID
+     * @param queryDTO 查询参数
+     * @return 考勤组打卡记录分页结果
+     * 本方法使用的工具类: PageResult(hrms-common)
+     */
+    PageResult<AttendanceGroupRecordPageVO> pageGroupAttendanceRecords(Long groupId,
+                                                                       AttendanceGroupRecordQueryDTO queryDTO);
 
     /**
      * 当前登录员工打卡。
