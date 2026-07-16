@@ -136,9 +136,9 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
      * @return 审批实例ID
      * 本方法使用的工具类: IdUtil(hutool)
      */
-    private Long tempStartRegularApproval(EmployeeSnapshotEntity employeeSnapshot) {
-        return IdUtil.getSnowflakeNextId();
-    }
+    //private Long tempStartRegularApproval(EmployeeSnapshotEntity employeeSnapshot) {
+    //    return IdUtil.getSnowflakeNextId();
+    //}
 
     /**
      * 查询必须存在的员工快照。
