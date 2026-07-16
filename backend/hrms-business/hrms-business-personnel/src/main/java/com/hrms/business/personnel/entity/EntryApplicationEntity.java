@@ -89,4 +89,14 @@ public class EntryApplicationEntity extends BaseEntity {
      */
     private LocalDate actualHireDate;
 
+    /**
+     * 确认入职后关联的员工ID
+     */
+    private Long employeeId;
+
+    /**
+     * 确认入职后关联的员工工号
+     */
+    private String employeeNo;
+
 }

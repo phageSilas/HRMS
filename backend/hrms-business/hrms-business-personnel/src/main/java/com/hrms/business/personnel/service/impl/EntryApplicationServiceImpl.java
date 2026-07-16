@@ -179,14 +179,13 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
             }
             assertApproved(lockedEntity);
             // employeeService.generateEmployeeNo(lockedEntity); 本接口需要调用 hrms-business-employee 模块的生成员工工号接口
-            String employeeNo = tempGenerateEmployeeNo(lockedEntity);
             lockedEntity.setActualHireDate(requestDTO.getActualHireDate());
 
             // TODO 跨模块调用已完成：当前调用 EmployeeService#createEmployee(createDTO) 创建员工档案。
-            EmployeeEntity createdEmployee = tempCreateEmployee(lockedEntity, employeeNo);
+            EmployeeEntity createdEmployee = tempCreateEmployee(lockedEntity, null);
 
             Long employeeId = createdEmployee.getId();
-            employeeNo = StrUtil.blankToDefault(createdEmployee.getEmployeeNo(), employeeNo);
+            String employeeNo = createdEmployee.getEmployeeNo();
 
             // TODO 跨模块调用已完成：当前调用 UserService#createUser(createDTO) 创建入职账号。
             tempCreateEntryAccount(lockedEntity, employeeNo, employeeId);
