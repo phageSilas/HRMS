@@ -45,6 +45,7 @@ const STATUS_LABEL_MAP: Record<string, string> = {
   ABSENT: '旷工',
   LEAVE: '请假',
   HOLIDAY: '休息',
+  NONE: '未打卡',
 };
 
 const STATUS_COLOR_MAP: Record<string, string> = {
@@ -55,6 +56,7 @@ const STATUS_COLOR_MAP: Record<string, string> = {
   ABSENT: 'error',
   LEAVE: 'processing',
   HOLIDAY: 'default',
+  NONE: 'default',
 };
 
 interface LocationState {
@@ -64,15 +66,9 @@ interface LocationState {
   location?: AmapLocationResult;
 }
 
-type MergedTodayRecord = AttendanceCalendarDayVO & {
-  clockInIp?: string;
-  clockOutIp?: string;
-};
-
+type MergedTodayRecord = AttendanceCalendarDayVO;
 type ClockPeriod = 'CLOCK_IN' | 'CLOCK_OUT';
-
 type BackendDateValue = string | number[] | Date | undefined | null;
-
 type ClockResponsePayload =
   | AttendanceClockVO
   | {
@@ -89,8 +85,6 @@ const LOCATION_STATUS_COLOR: Record<AmapLocationStatus, string> = {
   success: 'success',
   failed: 'warning',
 };
-
-const TODAY_CLOCK_CACHE_PREFIX = 'hrms-attendance-today-record';
 
 function parseBackendDate(value?: BackendDateValue) {
   if (!value) return undefined;
@@ -141,47 +135,6 @@ function getClockIp(result?: AttendanceClockVO) {
   return result?.networkIp || result?.clientIp;
 }
 
-function getTodayClockCacheKey(date: string) {
-  let userKey = 'anonymous';
-
-  try {
-    const userText = localStorage.getItem('userInfo');
-    const userInfo = userText
-      ? (JSON.parse(userText) as { userId?: number; username?: string })
-      : undefined;
-    userKey = String(userInfo?.userId || userInfo?.username || userKey);
-  } catch {
-    userKey = 'anonymous';
-  }
-
-  return `${TODAY_CLOCK_CACHE_PREFIX}:${userKey}:${date}`;
-}
-
-function readCachedTodayRecord(date: string): MergedTodayRecord | undefined {
-  try {
-    const cacheText = sessionStorage.getItem(getTodayClockCacheKey(date));
-    if (!cacheText) return undefined;
-
-    const record = JSON.parse(cacheText) as MergedTodayRecord;
-    return normalizeDate(record.date as BackendDateValue) === date
-      ? record
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function writeCachedTodayRecord(date: string, record: MergedTodayRecord) {
-  try {
-    sessionStorage.setItem(
-      getTodayClockCacheKey(date),
-      JSON.stringify(record),
-    );
-  } catch {
-    // 浏览器禁用存储时不影响真实打卡流程，页面仍依赖后端月历回显。
-  }
-}
-
 function unwrapClockResponse(payload: ClockResponsePayload) {
   if (!payload) return undefined;
   if ('data' in payload && payload.data) {
@@ -216,9 +169,7 @@ function normalizeClockResult(
 
 function formatLocationText(location?: AmapLocationResult) {
   if (!location) return '未获取定位，以后端校验结果为准';
-  return `经度 ${location.longitude.toFixed(
-    6,
-  )}，纬度 ${location.latitude.toFixed(6)}`;
+  return `经度 ${location.longitude.toFixed(6)}，纬度 ${location.latitude.toFixed(6)}`;
 }
 
 function formatLocationDetail(location?: AmapLocationResult) {
@@ -247,16 +198,15 @@ function getDeviceInfo(location?: AmapLocationResult) {
 const AttendancePunchPage: React.FC = () => {
   const [now, setNow] = useState(dayjs());
   const currentDate = now.format('YYYY-MM-DD');
-  const [localTodayRecord, setLocalTodayRecord] =
-    useState<MergedTodayRecord>(() =>
-      readCachedTodayRecord(dayjs().format('YYYY-MM-DD')),
-    );
+  const currentMonth = now.format('YYYY-MM');
+  const [localTodayRecord, setLocalTodayRecord] = useState<
+    MergedTodayRecord | undefined
+  >();
   const [clocking, setClocking] = useState(false);
   const [locationState, setLocationState] = useState<LocationState>({
     status: 'idle',
     text: '点击打卡时获取高德定位',
   });
-  const currentMonth = now.format('YYYY-MM');
 
   const {
     data: calendar,
@@ -265,6 +215,39 @@ const AttendancePunchPage: React.FC = () => {
   } = useRequest(() => getMyAttendanceCalendar(currentMonth), {
     refreshDeps: [currentMonth],
   });
+
+  const todayRecord = useMemo<AttendanceCalendarDayVO | undefined>(() => {
+    return calendar?.days?.find(
+      (item) => normalizeDate(item.date as BackendDateValue) === currentDate,
+    );
+  }, [calendar?.days, currentDate]);
+
+  const mergedTodayRecord = useMemo<MergedTodayRecord | undefined>(() => {
+    const baseRecord: MergedTodayRecord = todayRecord
+      ? { ...todayRecord }
+      : { date: currentDate };
+
+    if (
+      !localTodayRecord ||
+      normalizeDate(localTodayRecord.date as BackendDateValue) !== currentDate
+    ) {
+      return todayRecord ? baseRecord : undefined;
+    }
+
+    return {
+      ...baseRecord,
+      ...localTodayRecord,
+      clockInTime: localTodayRecord.clockInTime ?? baseRecord.clockInTime,
+      clockInStatus:
+        localTodayRecord.clockInStatus ?? baseRecord.clockInStatus,
+      clockInIp: localTodayRecord.clockInIp ?? baseRecord.clockInIp,
+      clockOutTime: localTodayRecord.clockOutTime ?? baseRecord.clockOutTime,
+      clockOutStatus:
+        localTodayRecord.clockOutStatus ?? baseRecord.clockOutStatus,
+      clockOutIp: localTodayRecord.clockOutIp ?? baseRecord.clockOutIp,
+      dayStatus: localTodayRecord.dayStatus ?? baseRecord.dayStatus,
+    };
+  }, [currentDate, localTodayRecord, todayRecord]);
 
   const handleSubmitClock = async (type: ClockPeriod) => {
     if (clocking) return;
@@ -324,27 +307,24 @@ const AttendancePunchPage: React.FC = () => {
         };
 
         if (result.period === 'CLOCK_OUT') {
-          const nextRecord = {
+          return {
             ...baseRecord,
             clockOutTime: result.clockTime,
             clockOutStatus: result.status,
             clockOutIp: networkIp,
             dayStatus: result.status || baseRecord.dayStatus,
           };
-          writeCachedTodayRecord(currentDate, nextRecord);
-          return nextRecord;
         }
 
-        const nextRecord = {
+        return {
           ...baseRecord,
           clockInTime: result.clockTime,
           clockInStatus: result.status,
           clockInIp: networkIp,
           dayStatus: result.status || baseRecord.dayStatus,
         };
-        writeCachedTodayRecord(currentDate, nextRecord);
-        return nextRecord;
       });
+
       Modal.success({
         title: `${label}成功`,
         content: (
@@ -379,47 +359,11 @@ const AttendancePunchPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    setLocalTodayRecord(readCachedTodayRecord(currentDate));
+    setLocalTodayRecord(undefined);
   }, [currentDate]);
 
-  const todayRecord = useMemo<AttendanceCalendarDayVO | undefined>(() => {
-    return calendar?.days?.find(
-      (item) => normalizeDate(item.date as BackendDateValue) === currentDate,
-    );
-  }, [calendar?.days, currentDate]);
-
-  const mergedTodayRecord = useMemo<MergedTodayRecord | undefined>(() => {
-    const baseRecord: MergedTodayRecord = todayRecord
-      ? { ...todayRecord }
-      : { date: currentDate };
-
-    if (!localTodayRecord) {
-      return todayRecord ? baseRecord : undefined;
-    }
-
-    if (
-      normalizeDate(localTodayRecord.date as BackendDateValue) !== currentDate
-    ) {
-      return todayRecord ? baseRecord : undefined;
-    }
-
-    return {
-      ...baseRecord,
-      ...localTodayRecord,
-      clockInTime: localTodayRecord.clockInTime ?? baseRecord.clockInTime,
-      clockInStatus:
-        localTodayRecord.clockInStatus ?? baseRecord.clockInStatus,
-      clockInIp: localTodayRecord.clockInIp ?? baseRecord.clockInIp,
-      clockOutTime: localTodayRecord.clockOutTime ?? baseRecord.clockOutTime,
-      clockOutStatus:
-        localTodayRecord.clockOutStatus ?? baseRecord.clockOutStatus,
-      clockOutIp: localTodayRecord.clockOutIp ?? baseRecord.clockOutIp,
-      dayStatus: localTodayRecord.dayStatus ?? baseRecord.dayStatus,
-    };
-  }, [currentDate, localTodayRecord, todayRecord]);
-
   const latestNetworkIp =
-    localTodayRecord?.clockOutIp || localTodayRecord?.clockInIp;
+    mergedTodayRecord?.clockOutIp || mergedTodayRecord?.clockInIp;
   const clockInDone = Boolean(mergedTodayRecord?.clockInTime);
   const clockOutDone = Boolean(mergedTodayRecord?.clockOutTime);
   const nextClockType: ClockPeriod = clockInDone ? 'CLOCK_OUT' : 'CLOCK_IN';
@@ -549,7 +493,7 @@ const AttendancePunchPage: React.FC = () => {
               </Button>
 
               <div className={styles.ruleLine}>
-                今日上班时间：9:00 | 规定上班时间：9:00
+                今日上班时间：09:00 | 规定下班时间：18:00
               </div>
 
               <div className={styles.footerStatus}>

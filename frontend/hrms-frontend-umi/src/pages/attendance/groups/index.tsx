@@ -73,8 +73,6 @@ type AttendanceGroupPageLike =
   | AttendanceGroup[]
   | undefined;
 
-const GROUP_CACHE_KEY = 'hrms-attendance-groups-cache';
-
 const shiftTypeMap: Record<string, { label: string; color: string }> = {
   FIXED: { label: '固定班', color: 'blue' },
   FLEXIBLE: { label: '弹性班', color: 'purple' },
@@ -116,42 +114,11 @@ function normalizeGroups(pageData: AttendanceGroupPageLike) {
   return [];
 }
 
-function readCachedGroups() {
-  try {
-    const cacheText = sessionStorage.getItem(GROUP_CACHE_KEY);
-    if (!cacheText) return [];
-    const cached = JSON.parse(cacheText) as AttendanceGroup[];
-    return Array.isArray(cached) ? cached : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeCachedGroups(groups: AttendanceGroup[]) {
-  try {
-    sessionStorage.setItem(GROUP_CACHE_KEY, JSON.stringify(groups));
-  } catch {
-    // 浏览器禁用会话存储时不影响考勤组真实创建，页面仍依赖后端列表接口。
-  }
-}
-
-function mergeGroups(
-  remoteGroups: AttendanceGroup[],
-  localGroups: AttendanceGroup[],
-) {
-  const groupMap = new Map<number, AttendanceGroup>();
-  remoteGroups.forEach((item) => groupMap.set(item.id, item));
-  localGroups.forEach((item) => groupMap.set(item.id, item));
-  return Array.from(groupMap.values()).sort((a, b) => b.id - a.id);
-}
-
 const AttendanceGroupsPage: React.FC = () => {
   const [form] = Form.useForm<GroupFormValues>();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<AttendanceGroup>();
-  const [query, setQuery] = useState({ pageNum: 1, pageSize: 20 });
-  const [localGroups, setLocalGroups] =
-    useState<AttendanceGroup[]>(readCachedGroups);
+  const [query] = useState({ pageNum: 1, pageSize: 20 });
 
   const { data, loading, refresh } = useRequest(
     () => getAttendanceGroups(query),
@@ -159,15 +126,8 @@ const AttendanceGroupsPage: React.FC = () => {
   );
 
   const groups = useMemo(() => {
-    const remoteGroups = normalizeGroups(data as AttendanceGroupPageLike);
-    return mergeGroups(remoteGroups, localGroups);
-  }, [data, localGroups]);
-
-  useEffect(() => {
-    if (groups.length > 0) {
-      writeCachedGroups(groups);
-    }
-  }, [groups]);
+    return normalizeGroups(data as AttendanceGroupPageLike);
+  }, [data]);
 
   const activeCount = useMemo(
     () => groups.filter((item) => item.status !== 0).length,
@@ -239,24 +199,10 @@ const AttendanceGroupsPage: React.FC = () => {
     };
 
     if (editingGroup) {
-      const updatedGroup = await updateAttendanceGroup(editingGroup.id, payload);
-      setLocalGroups((previous) => {
-        const nextGroups = previous.some((item) => item.id === updatedGroup.id)
-          ? previous.map((item) =>
-              item.id === updatedGroup.id ? updatedGroup : item,
-            )
-          : [updatedGroup, ...previous];
-        writeCachedGroups(mergeGroups([], nextGroups));
-        return nextGroups;
-      });
+      await updateAttendanceGroup(editingGroup.id, payload);
       message.success('考勤组已更新');
     } else {
-      const createdGroup = await createAttendanceGroup(payload);
-      setLocalGroups((previous) => {
-        const nextGroups = mergeGroups([], [createdGroup, ...previous]);
-        writeCachedGroups(nextGroups);
-        return nextGroups;
-      });
+      await createAttendanceGroup(payload);
       message.success('考勤组已新增');
     }
 
@@ -265,10 +211,7 @@ const AttendanceGroupsPage: React.FC = () => {
   };
 
   return (
-    <PageContainer
-      title={false}
-      className={styles.groupsPage}
-    >
+    <PageContainer title={false} className={styles.groupsPage}>
       <div className={styles.pageHeader}>
         <div>
           <Title level={3}>考勤规则配置</Title>
@@ -379,11 +322,11 @@ const AttendanceGroupsPage: React.FC = () => {
             <div className={styles.ruleList}>
               <span>上班打卡时间 &lt; 规定时间</span>
               <Tag color="success">正常</Tag>
-              <span>规定时间 &lt; 打卡时间 ≤ 规定时间+阈值</span>
+              <span>规定时间 &lt; 打卡时间 &lt;= 规定时间+阈值</span>
               <Tag color="warning">迟到</Tag>
               <span>上班打卡时间 &gt; 规定时间+阈值</span>
               <Tag color="error">旷工</Tag>
-              <span>下班打卡时间 ≥ 规定时间</span>
+              <span>下班打卡时间 &gt;= 规定时间</span>
               <Tag color="success">正常</Tag>
               <span>下班打卡时间 &lt; 规定时间</span>
               <Tag color="warning">早退</Tag>

@@ -67,8 +67,6 @@ interface RecordQueryState {
   pageSize: number;
 }
 
-const GROUP_CACHE_KEY = 'hrms-attendance-groups-cache';
-
 const statusMeta: Record<string, { label: string; color: string; desc: string }> = {
   NORMAL: { label: '正常', color: 'success', desc: '上下班均正常' },
   LATE: { label: '迟到', color: 'warning', desc: '上班状态为迟到' },
@@ -90,24 +88,6 @@ function normalizeGroups(pageData: AttendanceGroupPageLike) {
   if (Array.isArray(pageData?.data)) return pageData.data;
   if (Array.isArray(pageData?.data?.records)) return pageData.data.records;
   return [];
-}
-
-function readCachedGroups() {
-  try {
-    const cacheText = sessionStorage.getItem(GROUP_CACHE_KEY);
-    if (!cacheText) return [];
-    const cached = JSON.parse(cacheText) as AttendanceGroup[];
-    return Array.isArray(cached) ? cached : [];
-  } catch {
-    return [];
-  }
-}
-
-function mergeGroups(remoteGroups: AttendanceGroup[], localGroups: AttendanceGroup[]) {
-  const groupMap = new Map<number, AttendanceGroup>();
-  remoteGroups.forEach((item) => groupMap.set(item.id, item));
-  localGroups.forEach((item) => groupMap.set(item.id, item));
-  return Array.from(groupMap.values()).sort((a, b) => b.id - a.id);
 }
 
 function parseUrlGroupId() {
@@ -162,7 +142,6 @@ function buildRecordQuery(query: RecordQueryState): AttendanceGroupRecordQuery {
 
 const AttendanceRecordPage: React.FC = () => {
   const [form] = Form.useForm<RecordFilterValues>();
-  const [cachedGroups] = useState<AttendanceGroup[]>(readCachedGroups);
   const [query, setQuery] = useState<RecordQueryState>({
     groupId: parseUrlGroupId(),
     yearMonth: dayjs().format('YYYY-MM'),
@@ -180,9 +159,8 @@ const AttendanceRecordPage: React.FC = () => {
   );
 
   const groups = useMemo(() => {
-    const remoteGroups = normalizeGroups(groupData as AttendanceGroupPageLike);
-    return mergeGroups(remoteGroups, cachedGroups);
-  }, [cachedGroups, groupData]);
+    return normalizeGroups(groupData as AttendanceGroupPageLike);
+  }, [groupData]);
 
   useEffect(() => {
     if (query.groupId || groups.length === 0) return;
@@ -199,10 +177,7 @@ const AttendanceRecordPage: React.FC = () => {
     });
   }, [form, query.groupId, query.yearMonth]);
 
-  const {
-    data: recordData,
-    loading: recordLoading,
-  } = useRequest(
+  const { data: recordData, loading: recordLoading } = useRequest(
     () => {
       if (!query.groupId) {
         return Promise.resolve({

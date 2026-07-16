@@ -78,6 +78,8 @@ export interface AttendanceCalendarDayVO {
   clockOutTime?: string | number[];
   clockInStatus?: string;
   clockOutStatus?: string;
+  clockInIp?: string;
+  clockOutIp?: string;
   dayStatus?: string;
   leave?: boolean;
 }
