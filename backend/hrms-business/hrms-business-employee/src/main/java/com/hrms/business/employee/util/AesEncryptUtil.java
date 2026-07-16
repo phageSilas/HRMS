@@ -36,7 +36,39 @@ public class AesEncryptUtil {
 
     @PostConstruct
     public void init() {
-        staticSecretKey = secretKey;
+        // 确保密钥长度符合AES要求（16、24或32字节）
+        staticSecretKey = normalizeAesKey(secretKey);
+    }
+
+    /**
+     * 规范化AES密钥长度，确保其符合AES要求（16、24或32字节）
+     * 
+     * @param originalKey 原始密钥
+     * @return 符合AES长度要求的密钥
+     */
+    private static String normalizeAesKey(String originalKey) {
+        if (originalKey == null) {
+            throw new IllegalArgumentException("AES密钥不能为空");
+        }
+
+        // AES支持的密钥长度：128位(16字节)、192位(24字节)、256位(32字节)
+        // 这里我们使用256位(32字节)，这是最常用的安全级别
+        int targetLength = 32;
+        
+        if (originalKey.length() >= targetLength) {
+            // 如果原始密钥长度大于等于目标长度，截取前32个字符
+            return originalKey.substring(0, targetLength);
+        } else {
+            // 如果原始密钥长度小于目标长度，进行填充
+            StringBuilder sb = new StringBuilder(originalKey);
+            while (sb.length() < targetLength) {
+                // 使用原始密钥循环填充直到达到目标长度
+                for (int i = 0; i < originalKey.length() && sb.length() < targetLength; i++) {
+                    sb.append(originalKey.charAt(i));
+                }
+            }
+            return sb.toString();
+        }
     }
 
     /**
