@@ -11,6 +11,7 @@ import com.hrms.business.mycenter.entity.AttendanceCorrectionEntity;
 import com.hrms.business.mycenter.entity.MyAttendanceRecordEntity;
 import com.hrms.business.mycenter.mapper.MyCenterAttendanceCorrectionMapper;
 import com.hrms.business.mycenter.mapper.MyAttendanceRecordMapper;
+import com.hrms.business.approval.service.ApprovalService;
 import com.hrms.business.mycenter.service.AttendanceService;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
@@ -44,6 +45,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     private final MyAttendanceRecordMapper attendanceRecordMapper;
     private final MyCenterAttendanceCorrectionMapper correctionMapper;
+    private final ApprovalService approvalService;
 
     /**
      * 加班记录内存存储（TODO: 后续对接数据库表 hr_attendance_overtime）
@@ -207,6 +209,48 @@ public class AttendanceServiceImpl implements AttendanceService {
             entity.setRecordId(attendanceRecord.getId());
         }
         correctionMapper.insert(entity);
+
+        // 2. 构建表单快照
+        String formDataJson = buildCorrectionFormData(request);
+
+        // 3. 发起审批
+        try {
+            Long instanceId = approvalService.startApproval("CORRECTION", entity.getId(), formDataJson);
+
+            // 4. 回填审批实例ID
+            entity.setApprovalInstanceId(instanceId);
+            correctionMapper.updateById(entity);
+
+            log.info("补卡提交并发起审批成功: correctionId={}, instanceId={}", entity.getId(), instanceId);
+        } catch (Exception e) {
+            log.error("补卡发起审批失败: correctionId={}, error={}", entity.getId(), e.getMessage(), e);
+            throw new GlobalException(ErrorCode.BUSINESS_ERROR, "发起审批失败：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 构建补卡表单快照 JSON
+     */
+    private String buildCorrectionFormData(MakeupRequest request) {
+        StringBuilder json = new StringBuilder();
+        json.append("{");
+        json.append("\"correctionDate\":\"").append(request.getCorrectionDate()).append("\",");
+        json.append("\"correctionType\":\"").append(escapeJson(request.getCorrectionType())).append("\",");
+        json.append("\"correctionReason\":\"").append(escapeJson(request.getCorrectionReason())).append("\"");
+        json.append("}");
+        return json.toString();
+    }
+
+    /**
+     * 简单的 JSON 字符串转义
+     */
+    private String escapeJson(String value) {
+        if (value == null) return "";
+        return value.replace("\\", "\\\\")
+                    .replace("\"", "\\\"")
+                    .replace("\n", "\\n")
+                    .replace("\r", "\\r")
+                    .replace("\t", "\\t");
     }
 
     @Override

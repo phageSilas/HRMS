@@ -571,7 +571,7 @@ CREATE TABLE `hr_leave_request` (
 CREATE TABLE `hr_attendance_correction` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `employee_id` BIGINT UNSIGNED NOT NULL COMMENT '员工ID',
-  `record_id` BIGINT UNSIGNED NOT NULL COMMENT '打卡记录ID',
+  `record_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '打卡记录ID（补卡时可先无打卡记录）',
   `correction_date` DATE NOT NULL COMMENT '补卡日期',
   `correction_type` VARCHAR(32) NOT NULL COMMENT '补卡类型：CLOCK_IN-上班补卡 CLOCK_OUT-下班补卡',
   `correction_reason` VARCHAR(500) NOT NULL COMMENT '补卡原因',

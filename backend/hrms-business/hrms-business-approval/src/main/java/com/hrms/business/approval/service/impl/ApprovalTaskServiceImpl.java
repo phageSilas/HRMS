@@ -22,6 +22,8 @@ import com.hrms.business.approval.service.ApprovalTemplateLoader;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
 import com.hrms.common.web.PageResult;
+import com.hrms.system.auth.entity.UserEntity;
+import com.hrms.system.auth.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -47,6 +49,7 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
     private final ApprovalTaskMapper taskMapper;
     private final ApprovalTemplateLoader templateLoader;
     private final ApprovalEngine approvalEngine;
+    private final UserMapper userMapper;
 
     @Override
     public PageResult<PendingTaskVO> findPendingTasks(Long userId, PendingTaskQuery query) {
@@ -181,7 +184,7 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
         vo.setBusinessTypeName(getApprovalTypeName(instance.getApprovalType()));
         vo.setStatus(getStatusStr(instance.getApprovalStatus()));
         vo.setStatusName(getStatusName(instance.getApprovalStatus()));
-        vo.setApplicantName(String.valueOf(instance.getApplicantUserId())); // TODO: 对接用户模块后改为真实姓名
+        vo.setApplicantName(getUserName(instance.getApplicantUserId()));
         vo.setCreatedAt(formatTime(instance.getApplyTime()));
         vo.setFormData(formData);
         vo.setApprovalNodes(approvalNodes);
@@ -295,13 +298,12 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
         vo.setBusinessType(instance.getApprovalType());
         vo.setBusinessTypeName(getApprovalTypeName(instance.getApprovalType()));
         vo.setTitle(instance.getTitle());
-        vo.setApplicantName(String.valueOf(instance.getApplicantUserId())); // TODO: 对接用户模块
+        vo.setApplicantName(getUserName(instance.getApplicantUserId()));
         vo.setNodeName(task.getNodeName());
         vo.setDelegateFlag(task.getDelegateFlag() == 1);
         if (task.getDelegateFlag() == 1) {
-            // TODO: 对接用户模块后替换为真实姓名
-            vo.setDelegateMark(String.valueOf(task.getApproverUserId()) + " 代 "
-                    + String.valueOf(task.getOriginalApproverId()) + " 审批");
+            vo.setDelegateMark(getUserName(task.getApproverUserId()) + " 代 "
+                    + getUserName(task.getOriginalApproverId()) + " 审批");
         } else {
             vo.setDelegateMark("");
         }
@@ -324,7 +326,7 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
         vo.setBusinessType(instance.getApprovalType());
         vo.setBusinessTypeName(getApprovalTypeName(instance.getApprovalType()));
         vo.setTitle(instance.getTitle());
-        vo.setApplicantName(String.valueOf(instance.getApplicantUserId())); // TODO: 对接用户模块
+        vo.setApplicantName(getUserName(instance.getApplicantUserId()));
         vo.setNodeName(instance.getCurrentNodeName());
         vo.setDelegateFlag(false);
         vo.setDelegateMark("");
@@ -353,13 +355,12 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
                 // 有任务记录
                 if (task.getTaskStatus() == TaskStatusEnum.PROCESSED.getCode()) {
                     vo.setStatus("completed");
-                    // TODO: 对接用户模块后替换为真实姓名
-                    vo.setOperatorName(String.valueOf(task.getApproverUserId()));
+                    vo.setOperatorName(getUserName(task.getApproverUserId()));
                 } else if (task.getTaskStatus() == TaskStatusEnum.PENDING.getCode()) {
                     vo.setStatus("current");
                 } else {
                     vo.setStatus("completed"); // transferred is also completed
-                    vo.setOperatorName(String.valueOf(task.getApproverUserId()));
+                    vo.setOperatorName(getUserName(task.getApproverUserId()));
                 }
                 result.add(vo);
             } else if (!node.isOptional()) {
@@ -381,8 +382,7 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
                 .sorted(Comparator.comparing(ApprovalTaskEntity::getSortNo))
                 .map(task -> {
                     ApprovalDetailVO.ApprovalHistoryVO vo = new ApprovalDetailVO.ApprovalHistoryVO();
-                    // TODO: 对接用户模块后替换为真实姓名
-                    vo.setOperatorName(String.valueOf(task.getApproverUserId()));
+                    vo.setOperatorName(getUserName(task.getApproverUserId()));
                     vo.setNodeName(task.getNodeName());
                     vo.setAction(getActionStr(task));
                     vo.setActionName(getActionName(task));
@@ -394,6 +394,15 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
     }
 
     // ========== 工具方法 ==========
+
+    /**
+     * 根据用户ID查询真实姓名
+     */
+    private String getUserName(Long userId) {
+        if (userId == null) return "";
+        UserEntity user = userMapper.selectById(userId);
+        return user != null ? user.getRealName() : String.valueOf(userId);
+    }
 
     private String getApprovalTypeName(String type) {
         ApprovalTypeEnum e = ApprovalTypeEnum.fromCode(type);

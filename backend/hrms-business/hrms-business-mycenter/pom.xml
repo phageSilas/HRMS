@@ -31,6 +31,13 @@
             <version>${project.version}</version>
         </dependency>
 
+        <!-- 依赖 hrms-business-salary（工资条查询） -->
+        <dependency>
+            <groupId>com.hrms</groupId>
+            <artifactId>hrms-business-salary</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <!-- 依赖 hrms-system-auth（用户、密码、登录日志） -->
         <dependency>
             <groupId>com.hrms</groupId>
