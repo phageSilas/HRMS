@@ -64,18 +64,18 @@ export interface AttendanceClockVO {
   recordId: number;
   employeeId: number;
   groupId?: number;
-  recordDate: string;
+  recordDate: string | number[];
   period: 'CLOCK_IN' | 'CLOCK_OUT' | string;
   status: string;
-  clockTime: string;
+  clockTime: string | number[];
   networkIp?: string;
   clientIp?: string;
 }
 
 export interface AttendanceCalendarDayVO {
-  date: string;
-  clockInTime?: string;
-  clockOutTime?: string;
+  date: string | number[];
+  clockInTime?: string | number[];
+  clockOutTime?: string | number[];
   clockInStatus?: string;
   clockOutStatus?: string;
   dayStatus?: string;

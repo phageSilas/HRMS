@@ -76,6 +76,8 @@ interface LatestClockState {
 
 type ClockPeriod = 'CLOCK_IN' | 'CLOCK_OUT';
 
+type BackendDateValue = string | number[] | Date | undefined | null;
+
 type ClockResponsePayload =
   | AttendanceClockVO
   | {
@@ -93,12 +95,40 @@ const LOCATION_STATUS_COLOR: Record<AmapLocationStatus, string> = {
   failed: 'warning',
 };
 
-function formatTime(value?: string) {
-  if (!value) return '--:--';
+function parseBackendDate(value?: BackendDateValue) {
+  if (!value) return undefined;
+
+  if (Array.isArray(value)) {
+    const [year, month, day, hour = 0, minute = 0, second = 0, nano = 0] =
+      value;
+    if (!year || !month || !day) return undefined;
+    return dayjs(
+      new Date(
+        year,
+        month - 1,
+        day,
+        hour,
+        minute,
+        second,
+        Math.floor(nano / 1_000_000),
+      ),
+    );
+  }
+
   const parsed = dayjs(value);
-  return parsed.isValid()
-    ? parsed.format('HH:mm')
-    : value.slice(11, 16) || value;
+  return parsed.isValid() ? parsed : undefined;
+}
+
+function normalizeDate(value?: BackendDateValue) {
+  return parseBackendDate(value)?.format('YYYY-MM-DD');
+}
+
+function normalizeDateTime(value?: BackendDateValue) {
+  return parseBackendDate(value)?.format('YYYY-MM-DDTHH:mm:ss');
+}
+
+function formatTime(value?: BackendDateValue) {
+  return parseBackendDate(value)?.format('HH:mm') || '--:--';
 }
 
 function getStatusLabel(status?: string) {
@@ -108,12 +138,6 @@ function getStatusLabel(status?: string) {
 
 function getClockLabel(period?: string) {
   return period === 'CLOCK_OUT' ? '下班打卡' : '上班打卡';
-}
-
-function getClockRecordDate(recordDate?: string) {
-  if (!recordDate) return undefined;
-  const parsed = dayjs(recordDate);
-  return parsed.isValid() ? parsed.format('YYYY-MM-DD') : undefined;
 }
 
 function getClockIp(result?: AttendanceClockVO) {
@@ -128,17 +152,25 @@ function unwrapClockResponse(payload: ClockResponsePayload) {
   return payload as AttendanceClockVO;
 }
 
-function normalizeClockResult(payload: ClockResponsePayload, fallbackPeriod: ClockPeriod) {
+function normalizeClockResult(
+  payload: ClockResponsePayload,
+  fallbackPeriod: ClockPeriod,
+) {
   const data = unwrapClockResponse(payload);
   const fallbackNow = dayjs();
+
   return {
     recordId: data?.recordId || 0,
     employeeId: data?.employeeId || 0,
     groupId: data?.groupId,
-    recordDate: getClockRecordDate(data?.recordDate) || fallbackNow.format('YYYY-MM-DD'),
+    recordDate:
+      normalizeDate(data?.recordDate as BackendDateValue) ||
+      fallbackNow.format('YYYY-MM-DD'),
     period: data?.period || fallbackPeriod,
     status: data?.status || 'NORMAL',
-    clockTime: data?.clockTime || fallbackNow.format('YYYY-MM-DDTHH:mm:ss'),
+    clockTime:
+      normalizeDateTime(data?.clockTime as BackendDateValue) ||
+      fallbackNow.format('YYYY-MM-DDTHH:mm:ss'),
     networkIp: data?.networkIp,
     clientIp: data?.clientIp,
   } satisfies AttendanceClockVO;
@@ -177,6 +209,7 @@ function getDeviceInfo(location?: AmapLocationResult) {
 const AttendancePunchPage: React.FC = () => {
   const [now, setNow] = useState(dayjs());
   const [latestClock, setLatestClock] = useState<LatestClockState>();
+  const [clocking, setClocking] = useState(false);
   const [locationState, setLocationState] = useState<LocationState>({
     status: 'idle',
     text: '点击打卡时获取高德定位',
@@ -191,9 +224,13 @@ const AttendancePunchPage: React.FC = () => {
     refreshDeps: [currentMonth],
   });
 
-  const { run: submitClock, loading: clocking } = useRequest(
-    async (type: ClockPeriod) => {
-      let location: AmapLocationResult | undefined;
+  const handleSubmitClock = async (type: ClockPeriod) => {
+    if (clocking) return;
+
+    setClocking(true);
+    let location: AmapLocationResult | undefined;
+
+    try {
       setLocationState({
         status: 'locating',
         text: '正在通过高德定位...',
@@ -225,8 +262,10 @@ const AttendancePunchPage: React.FC = () => {
         deviceInfo: getDeviceInfo(location),
       });
 
-      const result = normalizeClockResult(response as ClockResponsePayload, type);
-
+      const result = normalizeClockResult(
+        response as ClockResponsePayload,
+        type,
+      );
       const label = getClockLabel(result.period);
       const networkIp = getClockIp(result);
       const locationDetail = formatLocationDetail(location);
@@ -236,7 +275,7 @@ const AttendancePunchPage: React.FC = () => {
         title: `${label}成功`,
         content: (
           <div className={styles.successModalContent}>
-            <p>打卡时间：{formatTime(result.clockTime)}</p>
+            <p>打卡时间：{formatTime(result.clockTime as BackendDateValue)}</p>
             <p>打卡状态：{getStatusLabel(result.status)}</p>
             <p>打卡位置：{formatLocationText(location)}</p>
             {locationDetail && <p>{locationDetail}</p>}
@@ -246,22 +285,19 @@ const AttendancePunchPage: React.FC = () => {
         okText: '我知道了',
       });
       refresh();
-
-      return result;
-    },
-    {
-      manual: true,
-      onError: (error) => {
-        const errorMessage = error instanceof Error ? error.message : '打卡提交失败';
-        Modal.error({
-          title: '打卡提交失败',
-          content: errorMessage,
-          okText: '我知道了',
-        });
-        refresh();
-      },
-    },
-  );
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : '打卡提交失败';
+      Modal.error({
+        title: '打卡提交失败',
+        content: errorMessage,
+        okText: '我知道了',
+      });
+      refresh();
+    } finally {
+      setClocking(false);
+    }
+  };
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(dayjs()), 1000);
@@ -271,7 +307,7 @@ const AttendancePunchPage: React.FC = () => {
   const todayRecord = useMemo<AttendanceCalendarDayVO | undefined>(() => {
     const today = now.format('YYYY-MM-DD');
     return calendar?.days?.find(
-      (item) => dayjs(item.date).format('YYYY-MM-DD') === today,
+      (item) => normalizeDate(item.date as BackendDateValue) === today,
     );
   }, [calendar?.days, now]);
 
@@ -282,11 +318,6 @@ const AttendancePunchPage: React.FC = () => {
       : { date: today };
 
     if (!latestClock?.result) {
-      return todayRecord ? baseRecord : undefined;
-    }
-
-    const recordDate = getClockRecordDate(latestClock.result.recordDate);
-    if (recordDate && recordDate !== today) {
       return todayRecord ? baseRecord : undefined;
     }
 
@@ -315,9 +346,7 @@ const AttendancePunchPage: React.FC = () => {
     : undefined;
   const clockInDone = Boolean(mergedTodayRecord?.clockInTime);
   const clockOutDone = Boolean(mergedTodayRecord?.clockOutTime);
-  const nextClockType: 'CLOCK_IN' | 'CLOCK_OUT' = clockInDone
-    ? 'CLOCK_OUT'
-    : 'CLOCK_IN';
+  const nextClockType: ClockPeriod = clockInDone ? 'CLOCK_OUT' : 'CLOCK_IN';
   const nextClockText = clockInDone ? '下班打卡' : '上班打卡';
   const dayStatus =
     mergedTodayRecord?.dayStatus ||
@@ -365,7 +394,9 @@ const AttendancePunchPage: React.FC = () => {
                           clockInDone ? styles.shiftTime : styles.shiftPending
                         }
                       >
-                        {formatTime(mergedTodayRecord?.clockInTime)}
+                        {formatTime(
+                          mergedTodayRecord?.clockInTime as BackendDateValue,
+                        )}
                       </div>
                       <Tag
                         color={
@@ -405,7 +436,9 @@ const AttendancePunchPage: React.FC = () => {
                           clockOutDone ? styles.shiftTime : styles.shiftPending
                         }
                       >
-                        {formatTime(mergedTodayRecord?.clockOutTime)}
+                        {formatTime(
+                          mergedTodayRecord?.clockOutTime as BackendDateValue,
+                        )}
                       </div>
                       <Tag
                         color={
@@ -434,7 +467,7 @@ const AttendancePunchPage: React.FC = () => {
                 icon={<EnvironmentOutlined />}
                 loading={clocking}
                 disabled={clockInDone && clockOutDone}
-                onClick={() => submitClock(nextClockType)}
+                onClick={() => handleSubmitClock(nextClockType)}
               >
                 {clockInDone && clockOutDone ? '今日已完成打卡' : nextClockText}
               </Button>
@@ -502,7 +535,9 @@ const AttendancePunchPage: React.FC = () => {
                 </span>
                 <div>
                   <div className={styles.recordTime}>
-                    {formatTime(mergedTodayRecord?.clockInTime)}
+                    {formatTime(
+                      mergedTodayRecord?.clockInTime as BackendDateValue,
+                    )}
                   </div>
                   <div className={styles.recordMeta}>
                     上班打卡{' '}
@@ -538,7 +573,9 @@ const AttendancePunchPage: React.FC = () => {
                 </span>
                 <div>
                   <div className={styles.recordTime}>
-                    {formatTime(mergedTodayRecord?.clockOutTime)}
+                    {formatTime(
+                      mergedTodayRecord?.clockOutTime as BackendDateValue,
+                    )}
                   </div>
                   <div className={styles.recordMeta}>
                     下班打卡{' '}
