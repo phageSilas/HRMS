@@ -30,8 +30,10 @@ import com.hrms.system.organization.service.DeptService;
 import com.hrms.system.organization.service.PostService;
 import com.hrms.system.organization.vo.DeptDetailVO;
 import com.hrms.system.organization.vo.PostVO;
+import com.hrms.business.employee.event.EmployeeChangeEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,6 +54,7 @@ public class EmployeeServiceImpl implements EmployeeService {
     private final DeptService deptService;
     private final PostService postService;
     private final UserService userService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     public PageResult<EmployeeListVO> listEmployees(EmployeeQueryDTO queryDTO) {
@@ -161,6 +164,9 @@ public class EmployeeServiceImpl implements EmployeeService {
         // 创建系统账号
         createUserAccount(entity);
 
+        // 发布员工创建事件，更新部门人数
+        eventPublisher.publishEvent(new EmployeeChangeEvent(this, EmployeeChangeEvent.ChangeType.CREATE, entity.getId(), entity.getDeptId(), entity.getDeptId()));
+
         return entity;
     }
 
@@ -186,6 +192,9 @@ public class EmployeeServiceImpl implements EmployeeService {
         if (updateDTO.getPostId() != null && !updateDTO.getPostId().equals(entity.getPostId())) {
             validatePostExists(updateDTO.getPostId());
         }
+
+        // 记录原部门ID（用于事件通知）——必须在更新entity.deptId之前记录
+        Long oldDeptId = entity.getDeptId();
 
         // 更新字段
         if (updateDTO.getEmployeeName() != null) {
@@ -271,6 +280,12 @@ public class EmployeeServiceImpl implements EmployeeService {
         }
 
         employeeMapper.updateById(entity);
+
+        // 发布员工更新事件，更新部门人数
+        if (updateDTO.getDeptId() != null && !updateDTO.getDeptId().equals(oldDeptId)) {
+            eventPublisher.publishEvent(new EmployeeChangeEvent(this, EmployeeChangeEvent.ChangeType.UPDATE, id, oldDeptId, updateDTO.getDeptId()));
+        }
+
         return entity;
     }
 
@@ -343,6 +358,9 @@ public class EmployeeServiceImpl implements EmployeeService {
 
         // 逻辑删除
         employeeMapper.deleteById(id);
+
+        // 发布员工删除事件，更新部门人数
+        eventPublisher.publishEvent(new EmployeeChangeEvent(this, EmployeeChangeEvent.ChangeType.DELETE, id, entity.getDeptId(), null));
     }
 
     @Override
@@ -394,6 +412,29 @@ public class EmployeeServiceImpl implements EmployeeService {
                 EmploymentStatusEnum.PROBATION.getCode(),
                 EmploymentStatusEnum.FORMAL.getCode());
         return employeeMapper.selectList(wrapper);
+    }
+
+    @Override
+    public List<EmployeeEntity> getEmployeesByPostId(Long postId) {
+        LambdaQueryWrapper<EmployeeEntity> wrapper = Wrappers.lambdaQuery();
+        wrapper.eq(EmployeeEntity::getPostId, postId);
+        // 只查询在职员工（试用期和正式）
+        wrapper.in(EmployeeEntity::getEmploymentStatus,
+                EmploymentStatusEnum.PROBATION.getCode(),
+                EmploymentStatusEnum.FORMAL.getCode());
+        return employeeMapper.selectList(wrapper);
+    }
+
+    @Override
+    public boolean hasEmployeesInDept(Long deptId) {
+        List<EmployeeEntity> employees = getEmployeesByDept(deptId);
+        return !employees.isEmpty();
+    }
+
+    @Override
+    public boolean hasEmployeesInPost(Long postId) {
+        List<EmployeeEntity> employees = getEmployeesByPostId(postId);
+        return !employees.isEmpty();
     }
 
     // ==================== 私有方法 ====================

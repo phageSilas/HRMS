@@ -100,4 +100,26 @@ public class EmployeeController {
         return Result.success(genNoVO);
     }
 
+    /**
+     * API-EMP-08：检查部门下是否有在职员工
+     */
+    @GetMapping("/check-dept")
+    @Operation(summary = "检查部门是否有在职员工", description = "删除部门前调用此接口校验")
+    @Parameter(name = "deptId", description = "部门ID", required = true)
+    public Result<Boolean> hasEmployeesInDept(@RequestParam Long deptId) {
+        boolean hasEmployees = employeeService.hasEmployeesInDept(deptId);
+        return Result.success(hasEmployees);
+    }
+
+    /**
+     * API-EMP-09：检查职位下是否有在职员工
+     */
+    @GetMapping("/check-post")
+    @Operation(summary = "检查职位是否有在职员工", description = "删除职位前调用此接口校验")
+    @Parameter(name = "postId", description = "职位ID", required = true)
+    public Result<Boolean> hasEmployeesInPost(@RequestParam Long postId) {
+        boolean hasEmployees = employeeService.hasEmployeesInPost(postId);
+        return Result.success(hasEmployees);
+    }
+
 }

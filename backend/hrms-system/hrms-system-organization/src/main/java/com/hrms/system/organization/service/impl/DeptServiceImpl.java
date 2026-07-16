@@ -230,8 +230,12 @@ public class DeptServiceImpl implements DeptService {
             throw new GlobalException(ErrorCode.DEPT_HAS_CHILDREN);
         }
 
-        // TODO: 检查是否有在职员工（后续通过 EmployeeService 检查）
-        // 暂时简化处理，假设没有员工
+        // 注意：部门下是否有在职员工的校验由调用方（前端/客户端）负责
+        // 原因：
+        // 1. organization模块不能反向依赖employee模块（避免循环依赖）
+        // 2. 前端应在删除部门前先调用 /api/v1/employees/check-dept?deptId={id} 接口校验
+        // 3. 如果该校验接口返回 true（有在职员工），前端应阻止删除操作并提示用户
+        // 4. 后端此处仅校验子部门，不重复校验员工（避免跨模块耦合）
 
         deptMapper.deleteById(id);
     }
