@@ -255,7 +255,6 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
      * 临时创建员工档案。
      *
      * @param entity 入职申请实体
-     * @param employeeNo 员工工号
      * @return 员工模块创建后的员工实体
      * 本方法使用的工具类: EmployeeService(hrms-business-employee)
      */
