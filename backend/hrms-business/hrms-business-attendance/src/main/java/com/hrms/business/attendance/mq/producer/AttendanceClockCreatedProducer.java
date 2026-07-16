@@ -1,5 +1,7 @@
-package com.hrms.business.attendance.mq;
+package com.hrms.business.attendance.mq.producer;
 
+import com.hrms.business.attendance.mq.constants.AttendanceMqConstants;
+import com.hrms.business.attendance.mq.event.AttendanceClockCreatedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;

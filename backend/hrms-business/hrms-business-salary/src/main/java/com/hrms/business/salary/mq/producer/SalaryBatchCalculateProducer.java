@@ -1,5 +1,7 @@
-package com.hrms.business.salary.mq;
+package com.hrms.business.salary.mq.producer;
 
+import com.hrms.business.salary.mq.constants.SalaryMqConstants;
+import com.hrms.business.salary.mq.event.SalaryBatchCalculateMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;

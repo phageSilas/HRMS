@@ -1,5 +1,6 @@
-package com.hrms.business.attendance.mq;
+package com.hrms.business.attendance.mq.config;
 
+import com.hrms.business.attendance.mq.constants.AttendanceMqConstants;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.DirectExchange;

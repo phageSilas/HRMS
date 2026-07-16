@@ -1,4 +1,4 @@
-package com.hrms.business.attendance.mq;
+package com.hrms.business.attendance.mq.constants;
 
 /**
  * 考勤模块 RabbitMQ 常量。

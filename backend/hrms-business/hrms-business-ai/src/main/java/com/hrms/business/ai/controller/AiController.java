@@ -1,6 +1,7 @@
 package com.hrms.business.ai.controller;
 
 import com.hrms.business.ai.dto.ChatRequestDTO;
+import com.hrms.business.ai.dto.UpdateTitleRequestDTO;
 import com.hrms.business.ai.service.AiChatService;
 import com.hrms.business.ai.service.ConversationService;
 import com.hrms.business.ai.vo.ConversationDetailVO;
@@ -72,6 +73,33 @@ public class AiController {
         Long userId = SecurityContextHolder.getUserId();
         ConversationDetailVO detail = conversationService.getConversationDetail(userId, id);
         return Result.success(detail);
+    }
+
+    // ==================== API-AI-04：删除会话 ====================
+
+    /**
+     * 删除会话（逻辑删除）
+     */
+    @DeleteMapping("/conversations/{id}")
+    @Operation(summary = "删除会话", description = "逻辑删除指定会话")
+    public Result<Void> deleteConversation(@PathVariable Long id) {
+        Long userId = SecurityContextHolder.getUserId();
+        conversationService.deleteConversation(userId, id);
+        return Result.success();
+    }
+
+    // ==================== API-AI-05：修改标题 ====================
+
+    /**
+     * 修改会话标题
+     */
+    @PutMapping("/conversations/{id}/title")
+    @Operation(summary = "修改标题", description = "修改指定会话的标题")
+    public Result<Void> updateTitle(@PathVariable Long id,
+                                    @Valid @RequestBody UpdateTitleRequestDTO request) {
+        Long userId = SecurityContextHolder.getUserId();
+        conversationService.updateTitle(userId, id, request.getTitle());
+        return Result.success();
     }
 
 }
