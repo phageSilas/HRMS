@@ -3,12 +3,13 @@
  * 支持用户名密码登录和开发阶段角色选择
  */
 
-import React, { useState } from 'react';
-import { Form, Input, Button, Select, Card, message } from 'antd';
-import { UserOutlined, LockOutlined } from '@ant-design/icons';
-import { history, useModel } from '@umijs/max';
+import { login } from '@/services/auth';
 import type { LoginRequest } from '@/types/user';
 import { ROLE_LIST, RoleCode } from '@/types/user';
+import { LockOutlined, UserOutlined } from '@ant-design/icons';
+import { history, useModel } from '@umijs/max';
+import { Button, Card, Form, Input, Select, message } from 'antd';
+import React, { useState } from 'react';
 import styles from './index.less';
 
 const { Option } = Select;
@@ -27,38 +28,10 @@ const LoginPage: React.FC = () => {
   const handleLogin = async (values: LoginRequest) => {
     setLoading(true);
     try {
-      // 调用登录接口
-      const response = await fetch('/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(values),
-      });
-
-      const result = await response.json();
-
-      if (result.code === 0) {
-        // 存储 Token
-        localStorage.setItem('token', result.data.token);
-        localStorage.setItem('userInfo', JSON.stringify({
-          userId: result.data.userId,
-          username: result.data.username,
-          nickname: result.data.nickname,
-          roleCode: result.data.roleCode,
-          permissions: result.data.permissions,
-        }));
-
-        message.success('登录成功');
-
-        // 刷新全局状态
-        await refresh();
-
-        // 跳转首页
-        history.push('/home');
-      } else {
-        message.error(result.message || '登录失败');
-      }
+      await login(values);
+      message.success('登录成功');
+      await refresh();
+      history.push('/home');
     } catch (error) {
       message.error('登录失败，请稍后重试');
     } finally {
@@ -128,6 +101,7 @@ const LoginPage: React.FC = () => {
                 type="primary"
                 htmlType="submit"
                 loading={loading}
+                data-testid="login-submit"
                 block
               >
                 登录

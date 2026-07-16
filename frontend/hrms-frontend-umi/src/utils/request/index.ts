@@ -7,8 +7,9 @@ import { message } from 'antd';
  */
 
 // 创建 axios 实例
+// 走 Umi 代理（开发环境 proxy 配置见 .umirc.ts），不设 baseURL 直连后端
 const request: AxiosInstance = axios.create({
-  baseURL: process.env.API_BASE_URL || 'http://localhost:8080',
+  baseURL: process.env.API_BASE_URL || '',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
@@ -34,17 +35,15 @@ request.interceptors.response.use(
   (response: AxiosResponse) => {
     const { code, message: msg, data } = response.data;
 
-    // 成功
-    if (code === 0) {
+    // 成功：后端统一成功码为 20000，兼容早期前端 mock 的 0。
+    if (code === 20000 || code === 0) {
       return data;
     }
 
     // 认证失败：40100-40199
     if (code >= 40100 && code <= 40199) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('userInfo');
-      message.error(msg || '认证失败，请重新登录');
-      window.location.href = '/login';
+      // 不清除 token 也不硬跳转：让业务组件自行处理未登录状态
+      // 防止后端未就绪时与 getInitialState 形成死循环
       return Promise.reject(new Error(msg || '认证失败，请重新登录'));
     }
 
@@ -84,10 +83,8 @@ request.interceptors.response.use(
     if (error.response) {
       const status = error.response.status;
       if (status === 401) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('userInfo');
-        message.error('登录已过期，请重新登录');
-        window.location.href = '/login';
+        // 不清除 token 不跳转：开发环境下后端可能未就绪或token不匹配
+        // 登录页面的鉴权状态由 getInitialState 管理
         return Promise.reject(new Error('登录已过期，请重新登录'));
       }
       if (status === 403) {

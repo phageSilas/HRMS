@@ -1,5 +1,6 @@
 package com.hrms.system.auth.filter;
 
+import com.hrms.common.service.RedisService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
@@ -8,7 +9,6 @@ import com.hrms.common.security.UserContext;
 import com.hrms.common.web.Result;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -26,7 +26,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * JWT 认证过滤器
@@ -38,10 +37,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtUtils jwtUtils;
     private final ObjectMapper objectMapper;
+    private final RedisService redisService;
 
-    // 内存黑名单（开发环境替代 Redis）
-    private static final ConcurrentHashMap<String, Boolean> tokenBlacklist = new ConcurrentHashMap<>();
-    private static final String TOKEN_BLACKLIST_KEY = "token:blacklist:";
     private static final String TOKEN_PREFIX = "Bearer ";
 
     @Override
@@ -56,8 +53,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         try {
-            // 检查 Token 是否在黑名单中
-            if (isTokenBlacklisted(token)) {
+            // 检查 Token 是否在黑名单中（Redis）
+            if (redisService.isTokenBlacklisted(token)) {
                 throw new GlobalException(ErrorCode.TOKEN_INVALID);
             }
 
@@ -120,14 +117,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return bearerToken.substring(TOKEN_PREFIX.length());
         }
         return null;
-    }
-
-    /**
-     * 检查 Token 是否在黑名单中（内存实现，开发环境）
-     */
-    private boolean isTokenBlacklisted(String token) {
-        String key = TOKEN_BLACKLIST_KEY + token;
-        return tokenBlacklist.containsKey(key);
     }
 
     /**

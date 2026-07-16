@@ -3,6 +3,8 @@ package com.hrms.system.auth.vo;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
+import java.util.List;
+
 /**
  * 用户信息 VO
  */
@@ -30,6 +32,9 @@ public class UserVO {
 
     @Schema(description = "状态：1-正常，0-禁用")
     private Integer status;
+
+    @Schema(description = "角色列表")
+    private List<String> roles;
 
     // 手动添加 getter 和 setter 方法
     public Long getId() {
@@ -86,6 +91,14 @@ public class UserVO {
 
     public void setStatus(Integer status) {
         this.status = status;
+    }
+
+    public List<String> getRoles() {
+        return roles;
+    }
+
+    public void setRoles(List<String> roles) {
+        this.roles = roles;
     }
 
 }

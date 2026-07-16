@@ -1,103 +1,149 @@
 /**
- * 审批中心相关接口
- * 负责人：成员 D
+ * 审批中心 API 服务
  */
 
 import request from '@/utils/request';
-import type { Result, PageResult, PageQuery } from '@/types/api';
+import type { PageResult } from '@/types/api';
 
-// ============ 类型定义 ============
+// ============ 查询参数 ============
+
+export interface PendingQuery {
+  businessType?: string;
+  keyword?: string;
+  startDate?: string;
+  endDate?: string;
+  pageNum?: number;
+  pageSize?: number;
+}
+
+export interface MyApplicationQuery {
+  status?: string;
+  pageNum?: number;
+  pageSize?: number;
+}
+
+// ============ 审批任务（列表通用） ============
 
 export interface ApprovalTask {
   id: number;
-  instanceId: number;
-  bizType: string;
-  bizId: number;
   title: string;
-  applicantId: number;
   applicantName: string;
-  currentNode: string;
-  status: number;
-  createTime: string;
+  businessType: string;
+  businessTypeName: string;
+  createdAt: string;
+  deadline: string;
+  nodeName: string;
+  status: string;
+  statusName: string;
 }
 
-export interface ApprovalInstance {
+// ============ 审批详情 ============
+
+export interface ApprovalNode {
+  nodeName: string;
+  status: 'completed' | 'current' | 'pending';
+  operatorName: string;
+}
+
+export interface ApprovalHistory {
+  operatorName: string;
+  nodeName: string;
+  action: 'approve' | 'reject' | 'transfer';
+  actionName: string;
+  comment: string;
+  operatedAt: string;
+}
+
+export interface ApprovalDetail {
   id: number;
-  bizType: string;
-  bizId: number;
   title: string;
-  applicantId: number;
+  businessType: string;
+  businessTypeName: string;
+  status: string;
+  statusName: string;
   applicantName: string;
-  currentNode: string;
-  status: number;
-  createTime: string;
-  finishTime: string | null;
-  tasks: ApprovalTask[];
+  createdAt: string;
+  formData: Record<string, any>;
+  approvalNodes: ApprovalNode[];
+  approvalHistory: ApprovalHistory[];
+  currentOperator: boolean;
+  currentTaskId?: number;
 }
 
-export interface ApprovalPendingCount {
-  count: number;
-  details: {
-    bizType: string;
-    count: number;
-  }[];
+// ============ 审批操作 ============
+
+export interface OperateData {
+  action: 'approve' | 'reject' | 'transfer';
+  comment?: string;
+  targetUserId?: number;
 }
 
-export interface ApprovalQuery extends PageQuery {
-  bizType?: string;
+// ============ 委托 ============
+
+export interface Delegation {
+  id: number;
+  delegateeName: string;
+  startTime: string;
+  endTime: string;
+  reason: string;
+  status: 'active' | 'expired' | 'cancelled';
 }
 
-// ============ 待办任务接口 ============
-
-/**
- * 获取待办任务列表
- */
-export async function getPendingTaskList(params: ApprovalQuery) {
-  return request.get<Result<PageResult<ApprovalTask>>>('/approval/pending', { params });
+export interface DelegationCreateData {
+  delegateeId: number;
+  startTime: string;
+  endTime: string;
+  reason?: string;
 }
 
-/**
- * 获取待审批数量（跨模块接口）
- */
+// ============ API 方法 ============
+
+/** 待审批列表 */
+export async function getPendingTasks(params?: PendingQuery) {
+  return request.get<PageResult<ApprovalTask>>('/api/v1/approval/tasks/pending', { params });
+}
+
+/** 待审批数量（用于角标） */
 export async function getPendingCount() {
-  return request.get<Result<ApprovalPendingCount>>('/approval/pending-count');
+  return request.get<{ count: number; details: Array<{ bizType: string; count: number }> }>('/api/v1/approval/pending-count');
 }
 
-// ============ 已办任务接口 ============
-
-/**
- * 获取已办任务列表
- */
-export async function getDoneTaskList(params: ApprovalQuery) {
-  return request.get<Result<PageResult<ApprovalTask>>>('/approval/done', { params });
+/** 已审批列表 */
+export async function getHistoryTasks(params?: PendingQuery) {
+  return request.get<PageResult<ApprovalTask>>('/api/v1/approval/tasks/history', { params });
 }
 
-// ============ 审批处理接口 ============
-
-/**
- * 获取审批详情
- */
-export async function getApprovalDetail(instanceId: number) {
-  return request.get<Result<ApprovalInstance>>(`/approval/instances/${instanceId}`);
+/** 我发起的申请 */
+export async function getMyApplications(params?: MyApplicationQuery) {
+  return request.get<PageResult<ApprovalTask>>('/api/v1/approval/my-applications', { params });
 }
 
-/**
- * 审批处理
- */
-export async function approveTask(taskId: number, data: { result: number; remark: string }) {
-  return request.post<Result<void>>(`/approval/tasks/${taskId}/approve`, data);
+/** 审批详情 */
+export async function getApprovalDetail(id: number) {
+  return request.get<ApprovalDetail>(`/api/v1/approval/${id}`);
 }
 
-/**
- * 发起审批任务（跨模块接口）
- */
-export async function startApproval(data: { bizType: string; bizId: number; applicantId: number }) {
-  return request.post<Result<{ taskId: number }>>('/approval/start', data);
+/** 审批操作 */
+export async function operateApproval(id: number, data: OperateData) {
+  return request.post<void>(`/api/v1/approval/${id}/operate`, data);
 }
 
-/**
- * 撤回审批
- */
-export async function withdrawApproval(instanceId: number) {
-  return request.post<Result<void>>(`/approval/instances/${instanceId}/withdraw`);
+/** 撤回申请 */
+export async function withdrawApproval(id: number) {
+  return request.post<void>(`/api/v1/approval/${id}/withdraw`);
+}
+
+/** 新建委托 */
+export async function createDelegation(data: DelegationCreateData) {
+  return request.post<{ id: number }>('/api/v1/approval/delegation', data);
+}
+
+/** 取消委托 */
+export async function cancelDelegation(id: number) {
+  return request.put<void>(`/api/v1/approval/delegation/${id}/cancel`);
+}
+
+/** 我的委托 */
+export async function getMyDelegations() {
+  return request.get<{ activeDelegation: Delegation | null; records: Delegation[] }>('/api/v1/approval/delegation/my');
 }

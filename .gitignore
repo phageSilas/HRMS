@@ -1,3 +1,9 @@
+# ==================== 王璐飞的个人文档 ====================
+awlf
+
+# ==================== 王璐飞的.claude文件 ====================
+.claude
+
 # ==================== Java ====================
 # Compiled class file
 *.class
@@ -227,6 +233,10 @@ application-secret.properties
 .env.local
 .env.*.local
 
+# Dev profile (environment-specific config)
+application-dev.yml
+application-dev.properties
+
 # SSL certificates
 ssl/
 *.p12
@@ -263,3 +273,8 @@ openspec/
 !pom.xml
 !package.json
 !pnpm-lock.yaml
+
+docs/
+AGENTS.md
+CodeMap.md
+backend/hrms-server/src/main/resources/application-dev.yml

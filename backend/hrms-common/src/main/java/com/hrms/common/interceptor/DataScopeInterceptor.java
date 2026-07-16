@@ -22,6 +22,7 @@ import org.apache.ibatis.session.ResultHandler;
 import org.apache.ibatis.session.RowBounds;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import java.sql.SQLException;
@@ -49,6 +50,7 @@ public class DataScopeInterceptor implements InnerInterceptor {
 
     private SqlSessionFactory sqlSessionFactory;
 
+    @Lazy
     @Autowired
     public void setSqlSessionFactory(SqlSessionFactory sqlSessionFactory) {
         this.sqlSessionFactory = sqlSessionFactory;

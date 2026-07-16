@@ -1,0 +1,76 @@
+package com.hrms.business.mycenter.service.impl;
+
+import com.hrms.business.mycenter.dto.ProfileUpdateRequest;
+import com.hrms.business.mycenter.dto.ProfileVO;
+import com.hrms.business.mycenter.mapper.ProfileMapper;
+import com.hrms.business.mycenter.service.ProfileService;
+import com.hrms.common.exception.ErrorCode;
+import com.hrms.common.exception.GlobalException;
+import com.hrms.system.auth.entity.UserEntity;
+import com.hrms.system.auth.mapper.UserMapper;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Arrays;
+
+/**
+ * 个人档案服务实现
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class ProfileServiceImpl implements ProfileService {
+
+    private final ProfileMapper profileMapper;
+    private final UserMapper userMapper;
+
+    @Override
+    public ProfileVO getProfile(Long userId) {
+        ProfileVO profile = profileMapper.selectProfileByUserId(userId);
+        if (profile == null) {
+            throw new GlobalException(ErrorCode.NOT_FOUND, "员工信息不存在");
+        }
+
+        // 性别描述
+        if (profile.getGender() != null) {
+            switch (profile.getGender()) {
+                case 1 -> profile.setGenderDesc("男");
+                case 2 -> profile.setGenderDesc("女");
+                default -> profile.setGenderDesc("未知");
+            }
+        }
+
+        // 字段权限（静态配置，后续可对接 FieldPermissionService）
+        ProfileVO.FieldPermissions fp = new ProfileVO.FieldPermissions();
+        fp.setEditableFields(Arrays.asList("email", "currentAddress", "emergencyContact"));
+        fp.setFlowRequiredFields(Arrays.asList("phone", "deptName", "postName"));
+        fp.setLockedFields(Arrays.asList("idCard", "bankAccount"));
+        profile.setFieldPermissions(fp);
+
+        return profile;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateProfile(Long userId, ProfileUpdateRequest request) {
+        // 通过 userId 找到 employeeId
+        UserEntity user = userMapper.selectById(userId);
+        if (user == null || user.getEmployeeId() == null) {
+            throw new GlobalException(ErrorCode.NOT_FOUND, "用户关联的员工信息不存在");
+        }
+
+        int affected = profileMapper.updateProfile(
+                user.getEmployeeId(),
+                request.getEmail(),
+                request.getPhone(),
+                request.getCurrentAddress(),
+                request.getEmergencyContact(),
+                request.getEmergencyPhone()
+        );
+        if (affected <= 0) {
+            throw new GlobalException(ErrorCode.NOT_FOUND, "员工信息不存在");
+        }
+    }
+}

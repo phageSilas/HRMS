@@ -92,8 +92,29 @@ public class ErrorCode implements Serializable {
     public static final ErrorCode FILE_DOWNLOAD_ERROR = new ErrorCode(50005, "文件下载失败");
 
     /**
-     * 业务错误系列 (50100-50199)
+     * 组织架构错误系列 (40020-40029)
      */
+    public static final ErrorCode DEPT_CODE_EXISTS = new ErrorCode(40021, "部门编码已存在");
+    public static final ErrorCode DEPT_PARENT_NOT_FOUND = new ErrorCode(40022, "上级部门不存在");
+    public static final ErrorCode DEPT_LEVEL_EXCEED = new ErrorCode(40023, "部门层级超过最大限制（5级）");
+    public static final ErrorCode DEPT_HAS_CHILDREN = new ErrorCode(40024, "存在子部门，无法删除");
+    public static final ErrorCode DEPT_HAS_EMPLOYEES = new ErrorCode(40025, "存在在职员工，无法删除");
+
+    /**
+     * 字典错误系列 (40030-40039)
+     */
+    public static final ErrorCode DICT_TYPE_NOT_FOUND = new ErrorCode(40030, "字典类型编码不存在");
+
+    /**
+     * 员工模块错误系列 (40031-40039)
+     */
+    public static final ErrorCode EMPLOYEE_PHONE_EXISTS = new ErrorCode(40031, "手机号已被占用");
+    public static final ErrorCode EMPLOYEE_DEPT_NOT_FOUND = new ErrorCode(40032, "所属部门不存在");
+    public static final ErrorCode EMPLOYEE_POST_NOT_FOUND = new ErrorCode(40033, "职位不存在");
+    public static final ErrorCode EMPLOYEE_NOT_FOUND = new ErrorCode(40034, "员工不存在");
+    public static final ErrorCode EMPLOYEE_CANNOT_DELETE = new ErrorCode(40035, "该员工已转正，无法删除");
+    public static final ErrorCode EMPLOYEE_HAS_BUSINESS = new ErrorCode(40036, "该员工存在业务记录，无法删除");
+
     public static final ErrorCode BUSINESS_ERROR = new ErrorCode(50100, "业务处理失败");
 
 }

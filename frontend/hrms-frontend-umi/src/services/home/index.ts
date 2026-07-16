@@ -66,7 +66,7 @@ export async function getMonthEntryCount(): Promise<{ count: number }> {
  * 获取待审批数量
  */
 export async function getPendingCount(): Promise<PendingCount> {
-  return request.get('/approval/pending-count');
+  return request.get('/api/v1/approval/pending-count');
 }
 
 /**
@@ -101,5 +101,5 @@ export async function getMyApplications(): Promise<{ records: Application[]; tot
  * 获取待办任务列表
  */
 export async function getPendingList(): Promise<{ records: PendingTask[]; total: number }> {
-  return request.get('/approval/pending-list');
+  return request.get('/api/v1/approval/pending-list');
 }

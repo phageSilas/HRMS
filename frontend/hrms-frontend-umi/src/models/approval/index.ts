@@ -1,5 +1,10 @@
 /**
  * 审批域状态管理
+ *
+ * @deprecated 审批中心前端已改用 Hooks + Services 模式（pages/approval/workspace 等），
+ *             不再依赖 Dva model。保留此文件仅用于兼容其他模块（如首页）的历史引用。
+ *             新代码请直接调用 @/services/approval 中的 API 方法。
+ *
  * 负责人：成员 D
  */
 

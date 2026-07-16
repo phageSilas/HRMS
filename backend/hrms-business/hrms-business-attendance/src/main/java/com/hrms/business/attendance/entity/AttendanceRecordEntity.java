@@ -1,50 +1,98 @@
 package com.hrms.business.attendance.entity;
 
-import com.hrms.common.entity.BaseEntity;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * 考勤记录实体
+ * 考勤打卡记录实体，对应 hr_attendance_record。
  */
 @Data
-public class AttendanceRecordEntity extends BaseEntity {
+@TableName("hr_attendance_record")
+public class AttendanceRecordEntity {
 
     /**
-     * 员工ID
+     * 主键ID。
+     */
+    @TableId(type = IdType.AUTO)
+    private Long id;
+
+    /**
+     * 员工ID。
      */
     private Long employeeId;
 
     /**
-     * 考勤日期
+     * 考勤组ID。
      */
-    private LocalDate attendanceDate;
+    private Long groupId;
 
     /**
-     * 上班时间
+     * 打卡日期。
      */
-    private LocalDateTime checkInTime;
+    private LocalDate recordDate;
 
     /**
-     * 下班时间
+     * 上班打卡时间。
      */
-    private LocalDateTime checkOutTime;
+    private LocalDateTime clockInTime;
 
     /**
-     * 考勤状态：1-正常，2-迟到，3-早退，4-缺勤，5-请假
+     * 下班打卡时间。
      */
-    private Integer status;
+    private LocalDateTime clockOutTime;
 
     /**
-     * 工作时长（分钟）
+     * 上班状态：NORMAL/LATE/MISSING/ABSENCE。
      */
-    private Integer workMinutes;
+    private String clockInStatus;
 
     /**
-     * 备注
+     * 下班状态：NORMAL/EARLY_LEAVE/MISSING/ABSENCE。
      */
-    private String remark;
+    private String clockOutStatus;
 
+    /**
+     * 上班打卡 IP。
+     */
+    private String clockInIp;
+
+    /**
+     * 下班打卡 IP。
+     */
+    private String clockOutIp;
+
+    /**
+     * 上班打卡 GPS。
+     */
+    private String clockInGps;
+
+    /**
+     * 下班打卡 GPS。
+     */
+    private String clockOutGps;
+
+    /**
+     * 设备信息。
+     */
+    private String deviceInfo;
+
+    /**
+     * 补卡状态：NONE/PENDING/APPROVED。
+     */
+    private String correctionStatus;
+
+    /**
+     * 创建时间。
+     */
+    private LocalDateTime createTime;
+
+    /**
+     * 更新时间。
+     */
+    private LocalDateTime updateTime;
 }

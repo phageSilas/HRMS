@@ -24,6 +24,12 @@
             <version>${project.version}</version>
         </dependency>
 
+        <!-- 依赖 hrms-system-auth（用户、密码、登录日志） -->
+        <dependency>
+            <groupId>com.hrms</groupId>
+            <artifactId>hrms-system-auth</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
         <!-- Spring Boot Starter Web -->
         <dependency>
@@ -34,7 +40,7 @@
         <!-- MyBatis-Plus -->
         <dependency>
             <groupId>com.baomidou</groupId>
-            <artifactId>mybatis-plus-boot-starter</artifactId>
+            <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
         </dependency>
 
         <!-- MySQL -->

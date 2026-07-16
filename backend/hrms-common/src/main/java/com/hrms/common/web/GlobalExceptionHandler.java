@@ -3,6 +3,7 @@ package com.hrms.common.web;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -54,6 +55,19 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Result<Void> handleMissingPathVariableException(MissingPathVariableException e) {
         return Result.failure(40001, "缺少必需路径变量: " + e.getVariableName());
+    }
+
+    /**
+     * 处理请求体缺失或格式错误异常
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<Void> handleHttpMessageNotReadableException(HttpMessageNotReadableException e) {
+        String detail = e.getMessage();
+        if (detail != null && detail.contains("Required request body is missing")) {
+            return Result.failure(40002, "请求体不能为空，请检查是否传递了正确的 JSON 数据");
+        }
+        return Result.failure(40002, "请求体格式错误，请确认 Content-Type 为 application/json 且数据格式正确");
     }
 
     /**

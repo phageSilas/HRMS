@@ -7,7 +7,7 @@
 -- ============================================================
 -- 表清单（共 32 张）
 -- ============================================================
--- M5 权限体系 (5张): sys_user, sys_role, sys_menu, sys_user_role, sys_role_menu
+-- M5 权限体系 (6张): sys_user, sys_role, sys_menu, sys_user_role, sys_role_menu, sys_field_permission
 -- M6 组织架构 (4张): sys_dept, sys_post, sys_dict_type, sys_dict_data
 -- M1 员工档案 (2张): hr_employee, hr_employee_contract
 -- M2 入转调离 (4张): hr_entry_application, hr_transfer_application, hr_regular_application, hr_leave_application
@@ -15,7 +15,7 @@
 -- M4 薪资管理 (5张): hr_salary_template, hr_salary_template_item, hr_employee_salary_profile, hr_salary_batch, hr_salary_batch_item
 -- M7 审批中心 (3张): hr_approval_instance, hr_approval_task, hr_approval_delegation
 -- M9 AI 助手  (1张): hr_ai_conversation
--- 公共模块   (4张): sys_file, sys_operate_log, sys_login_log
+-- 公共模块   (3张): sys_file, sys_operate_log, sys_login_log
 -- ============================================================
 
 -- 创建数据库
@@ -147,6 +147,24 @@ CREATE TABLE `sys_role_menu` (
   UNIQUE KEY `uk_sys_role_menu_role_menu` (`role_id`, `menu_id`),
   KEY `idx_sys_role_menu_menu_id` (`menu_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='角色菜单关联表';
+
+-- ----------------------------------------
+-- sys_field_permission（字段权限配置表）
+-- ----------------------------------------
+CREATE TABLE `sys_field_permission` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `biz_type` VARCHAR(64) NOT NULL COMMENT '业务类型：employee、sawmlary、attendance 等',
+  `field_name` VARCHAR(64) NOT NULL COMMENT '字段名',
+  `field_desc` VARCHAR(128) DEFAULT NULL COMMENT '字段描述',
+  `role_id` BIGINT UNSIGNED NOT NULL COMMENT '角色ID',
+  `viewable` TINYINT NOT NULL DEFAULT 1 COMMENT '是否可见：1-是 0-否',
+  `editable` TINYINT NOT NULL DEFAULT 0 COMMENT '是否可编辑：1-是 0-否',
+  `flow_required` TINYINT NOT NULL DEFAULT 0 COMMENT '是否需审批：1-是 0-否',
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_sys_field_perm_biz_role_field` (`biz_type`, `role_id`, `field_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='字段权限配置表';
 
 -- ============================================================
 -- M6 组织架构模块
@@ -881,14 +899,64 @@ CREATE TABLE `sys_login_log` (
 -- ============================================================
 -- 初始化完成
 -- ============================================================
--- 共计 32 张表
--- M5 权限体系: 5张
+-- 共计 32+1+1 张表
+-- M5 权限体系: 6张
 -- M6 组织架构: 4张
 -- M1 员工档案: 2张
 -- M2 入转调离: 4张
--- M3 考勤管理: 4张
+-- M3 考勤管理: 4张+1 + 1 共6张
 -- M4 薪资管理: 5张
 -- M7 审批中心: 3张
 -- M9 AI 助手:  1张
--- 公共模块:   4张
+-- 公共模块:   3张
 -- ============================================================
+
+# 新增 hr_leave_balance，属于考勤管理模块, 专门存员工每年每类假期余额。
+CREATE TABLE `hr_leave_balance` (
+                                    `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+                                    `employee_id` bigint NOT NULL COMMENT '员工ID',
+                                    `leave_type` varchar(32) NOT NULL COMMENT '假期类型：ANNUAL-年假 SICK-病假 PERSONAL-事假 COMPASSIONATE-调休 MARRIAGE-婚假 MATERNITY-产假 FUNERAL-丧假',
+                                    `balance_year` int NOT NULL COMMENT '余额所属年份',
+                                    `total_days` decimal(5,1) NOT NULL DEFAULT '0.0' COMMENT '本年度应得天数',
+                                    `used_days` decimal(5,1) NOT NULL DEFAULT '0.0' COMMENT '已使用天数',
+                                    `frozen_days` decimal(5,1) NOT NULL DEFAULT '0.0' COMMENT '审批中冻结天数',
+                                    `remaining_days` decimal(5,1) NOT NULL DEFAULT '0.0' COMMENT '剩余可用天数',
+                                    `carryover_days` decimal(5,1) NOT NULL DEFAULT '0.0' COMMENT '上年结转天数',
+                                    `adjust_days` decimal(5,1) NOT NULL DEFAULT '0.0' COMMENT '人工调整天数，可正可负',
+                                    `expire_date` date DEFAULT NULL COMMENT '余额过期日期',
+                                    `status` tinyint NOT NULL DEFAULT '1' COMMENT '状态：0-停用 1-启用',
+                                    `remark` varchar(500) DEFAULT NULL COMMENT '备注',
+                                    `create_by` bigint DEFAULT NULL COMMENT '创建人',
+                                    `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                                    `update_by` bigint DEFAULT NULL COMMENT '更新人',
+                                    `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+                                    `is_deleted` tinyint NOT NULL DEFAULT '0' COMMENT '是否删除：0-否 1-是',
+                                    `version` int NOT NULL DEFAULT '0' COMMENT '乐观锁版本号',
+                                    PRIMARY KEY (`id`),
+                                    UNIQUE KEY `uk_employee_leave_year` (`employee_id`, `leave_type`, `balance_year`, `is_deleted`),
+                                    KEY `idx_employee_year` (`employee_id`, `balance_year`),
+                                    KEY `idx_leave_type_year` (`leave_type`, `balance_year`),
+                                    KEY `idx_expire_date` (`expire_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='员工假期余额表';
+
+# 新增员工-考勤组生效关系表 hr_attendance_group_member，属于考勤管理模块, 支持后续调岗、换组、历史追溯。
+CREATE TABLE `hr_attendance_group_member` (
+                                              `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+                                              `group_id` bigint NOT NULL COMMENT '考勤组ID',
+                                              `employee_id` bigint NOT NULL COMMENT '员工ID',
+                                              `effective_start_date` date NOT NULL COMMENT '生效开始日期',
+                                              `effective_end_date` date DEFAULT NULL COMMENT '生效结束日期，空表示长期有效',
+                                              `status` tinyint NOT NULL DEFAULT '1' COMMENT '状态：0-停用 1-启用',
+                                              `remark` varchar(500) DEFAULT NULL COMMENT '备注',
+                                              `create_by` bigint DEFAULT NULL COMMENT '创建人',
+                                              `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                                              `update_by` bigint DEFAULT NULL COMMENT '更新人',
+                                              `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+                                              `is_deleted` tinyint NOT NULL DEFAULT '0' COMMENT '是否删除：0-否 1-是',
+                                              `version` int NOT NULL DEFAULT '0' COMMENT '乐观锁版本号',
+                                              PRIMARY KEY (`id`),
+                                              UNIQUE KEY `uk_employee_group_effective` (`employee_id`, `group_id`, `effective_start_date`, `is_deleted`),
+                                              KEY `idx_employee_effective` (`employee_id`, `status`, `effective_start_date`, `effective_end_date`),
+                                              KEY `idx_group_id` (`group_id`),
+                                              KEY `idx_effective_date` (`effective_start_date`, `effective_end_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='考勤组成员关系表';
