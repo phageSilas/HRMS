@@ -140,11 +140,6 @@ const LoginPage: React.FC = () => {
             <Form
               form={form}
               onFinish={handleLogin}
-              initialValues={{
-                username: 'admin',
-                password: '123456',
-                remember: true,
-              }}
               size="large"
               layout="vertical"
               className={styles.loginForm}

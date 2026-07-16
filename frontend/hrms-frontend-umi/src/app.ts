@@ -56,8 +56,12 @@ export async function getInitialState(): Promise<InitialState> {
       };
     } catch {
       // 获取用户信息失败（后端未就绪或 token 不合法）
-      // 不清除 token 也不跳转：让请求拦截器在具体 API 调用时处理
-      // 页面组件内的鉴权逻辑会自行处理未登录状态
+      // 清除 token 并跳转登录页
+      localStorage.removeItem('token');
+      localStorage.removeItem('userInfo');
+      if (pathname !== '/login') {
+        history.push('/login');
+      }
     }
   } else if (pathname !== '/login') {
     history.push('/login');
@@ -89,10 +93,13 @@ export const layout: RunTimeLayoutConfig = ({ initialState }) => {
     // 退出登录
     onMenuClick: ({ key }) => {
       if (key === 'logout') {
-        localStorage.removeItem('token');
-        localStorage.removeItem('userInfo');
-        message.success('已退出登录');
-        history.push('/login');
+        // 调用 logout 服务，同步清除后端 Token 黑名单
+        import('@/services/auth').then(({ logout }) => {
+          logout().then(() => {
+            message.success('已退出登录');
+            history.push('/login');
+          });
+        });
       }
     },
   };
