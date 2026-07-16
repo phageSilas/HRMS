@@ -73,6 +73,19 @@ export async function getInitialState(): Promise<InitialState> {
 }
 
 /**
+ * 路由变化监听 - 未登录时强制跳转登录页
+ */
+export function onRouteChange({ location }: { location: { pathname: string } }) {
+  const token = localStorage.getItem('token');
+  const isLoginPage = location.pathname === '/login';
+
+  // 未登录且不在登录页，强制跳转登录页
+  if (!token && !isLoginPage) {
+    history.push('/login');
+  }
+}
+
+/**
  * Layout 配置
  */
 export const layout: RunTimeLayoutConfig = ({ initialState }) => {
