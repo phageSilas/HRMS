@@ -31,6 +31,13 @@
             <version>${project.version}</version>
         </dependency>
 
+        <!-- 依赖 hrms-system-auth（获取 FieldPermissionService） -->
+        <dependency>
+            <groupId>com.hrms</groupId>
+            <artifactId>hrms-system-auth</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <!-- Spring Boot Starter Web -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

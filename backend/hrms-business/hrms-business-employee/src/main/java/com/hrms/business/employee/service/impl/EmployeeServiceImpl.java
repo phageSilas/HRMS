@@ -16,7 +16,10 @@ import com.hrms.business.employee.vo.EmployeeGenNoVO;
 import com.hrms.business.employee.vo.EmployeeListVO;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
+import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
+import com.hrms.system.auth.service.FieldPermissionService;
+import com.hrms.system.auth.vo.FieldPermissionVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,6 +38,7 @@ import java.util.stream.Collectors;
 public class EmployeeServiceImpl implements EmployeeService {
 
     private final EmployeeMapper employeeMapper;
+    private final FieldPermissionService fieldPermissionService;
 
     @Override
     public PageResult<EmployeeListVO> listEmployees(EmployeeQueryDTO queryDTO) {
@@ -100,7 +104,10 @@ public class EmployeeServiceImpl implements EmployeeService {
         if (entity == null) {
             throw new GlobalException(ErrorCode.EMPLOYEE_NOT_FOUND);
         }
-        return convertToDetailVO(entity);
+        EmployeeDetailVO vo = convertToDetailVO(entity);
+        // 填充字段权限
+        vo.setFieldPermissions(buildFieldPermissions());
+        return vo;
     }
 
     @Override
@@ -383,6 +390,35 @@ public class EmployeeServiceImpl implements EmployeeService {
         vo.setEmergencyPhone(entity.getEmergencyPhone());
         vo.setCreateTime(entity.getCreateTime());
         return vo;
+    }
+
+    /**
+     * 构建字段权限配置
+     * <p>
+     * 调用 auth 模块的 FieldPermissionService 获取当前用户对员工档案的字段权限
+     * </p>
+     *
+     * @return 字段权限配置
+     */
+    private java.util.Map<String, java.util.List<String>> buildFieldPermissions() {
+        try {
+            java.util.List<Long> roleIds = SecurityContextHolder.getRoleIds();
+            FieldPermissionVO fp = fieldPermissionService.getFieldPermissions("employee", roleIds);
+
+            java.util.Map<String, java.util.List<String>> result = new java.util.HashMap<>();
+            result.put("viewableFields", fp.getViewableFields());
+            result.put("editableFields", fp.getEditableFields());
+            result.put("flowRequiredFields", fp.getFlowRequiredFields());
+            return result;
+        } catch (Exception e) {
+            log.warn("获取字段权限失败，返回默认权限", e);
+            // 默认返回全部可见可编辑
+            return java.util.Map.of(
+                    "viewableFields", java.util.List.of("*"),
+                    "editableFields", java.util.List.of("*"),
+                    "flowRequiredFields", java.util.List.of()
+            );
+        }
     }
 
 }
