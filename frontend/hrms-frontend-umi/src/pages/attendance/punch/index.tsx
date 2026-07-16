@@ -1,3 +1,16 @@
+import type {
+  AttendanceCalendarDayVO,
+  AttendanceClockVO,
+} from '@/services/attendance';
+import {
+  clockAttendance,
+  getMyAttendanceCalendar,
+} from '@/services/attendance';
+import type {
+  AmapLocationResult,
+  AmapLocationStatus,
+} from '@/utils/amapLocation';
+import { resolveAmapLocation } from '@/utils/amapLocation';
 import {
   CheckCircleFilled,
   ClockCircleOutlined,
@@ -7,16 +20,19 @@ import {
   SafetyCertificateFilled,
 } from '@ant-design/icons';
 import { history, useRequest } from '@umijs/max';
-import { Button, Card, Col, Row, Space, Tag, Typography, message } from 'antd';
+import {
+  Button,
+  Card,
+  Col,
+  Modal,
+  Row,
+  Space,
+  Tag,
+  Typography,
+  message,
+} from 'antd';
 import dayjs from 'dayjs';
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  clockAttendance,
-  getMyAttendanceCalendar,
-} from '@/services/attendance';
-import type { AttendanceCalendarDayVO } from '@/services/attendance';
-import { resolveAmapLocation } from '@/utils/amapLocation';
-import type { AmapLocationResult, AmapLocationStatus } from '@/utils/amapLocation';
 import styles from './index.less';
 
 const { Text, Title } = Typography;
@@ -41,21 +57,21 @@ const STATUS_COLOR_MAP: Record<string, string> = {
   HOLIDAY: 'default',
 };
 
-function formatTime(value?: string) {
-  if (!value) return '--:--';
-  const parsed = dayjs(value);
-  return parsed.isValid() ? parsed.format('HH:mm') : value.slice(11, 16) || value;
-}
-
-function getStatusLabel(status?: string) {
-  if (!status) return '未打卡';
-  return STATUS_LABEL_MAP[status] || status;
-}
-
 interface LocationState {
   status: AmapLocationStatus;
   text: string;
   detail?: string;
+  location?: AmapLocationResult;
+}
+
+type MergedTodayRecord = AttendanceCalendarDayVO & {
+  clockInIp?: string;
+  clockOutIp?: string;
+};
+
+interface LatestClockState {
+  result: AttendanceClockVO;
+  location?: AmapLocationResult;
 }
 
 const LOCATION_STATUS_COLOR: Record<AmapLocationStatus, string> = {
@@ -65,22 +81,60 @@ const LOCATION_STATUS_COLOR: Record<AmapLocationStatus, string> = {
   failed: 'warning',
 };
 
+function formatTime(value?: string) {
+  if (!value) return '--:--';
+  const parsed = dayjs(value);
+  return parsed.isValid()
+    ? parsed.format('HH:mm')
+    : value.slice(11, 16) || value;
+}
+
+function getStatusLabel(status?: string) {
+  if (!status) return '未打卡';
+  return STATUS_LABEL_MAP[status] || status;
+}
+
+function getClockLabel(period?: string) {
+  return period === 'CLOCK_OUT' ? '下班打卡' : '上班打卡';
+}
+
+function getClockIp(result?: AttendanceClockVO) {
+  return result?.networkIp || result?.clientIp;
+}
+
+function formatLocationText(location?: AmapLocationResult) {
+  if (!location) return '未获取定位，以后端校验结果为准';
+  return `经度 ${location.longitude.toFixed(
+    6,
+  )}，纬度 ${location.latitude.toFixed(6)}`;
+}
+
+function formatLocationDetail(location?: AmapLocationResult) {
+  if (!location) return undefined;
+  const accuracy =
+    location.accuracy == null ? '未知' : `${location.accuracy} 米`;
+  return `精度 ${accuracy}，类型 ${location.locationType || '未知'}`;
+}
+
 function getDeviceInfo(location?: AmapLocationResult) {
   const platform = navigator.platform || 'unknown';
   const language = navigator.language || 'unknown';
   const browser = navigator.userAgent.includes('Edg')
     ? 'Edge'
     : navigator.userAgent.includes('Chrome')
-      ? 'Chrome'
-      : 'Browser';
+    ? 'Chrome'
+    : 'Browser';
   const locationInfo = location
-    ? `;amap=${location.locationType || 'unknown'};accuracy=${location.accuracy ?? 'unknown'}m`
+    ? `;amap=${location.locationType || 'unknown'};accuracy=${
+        location.accuracy ?? 'unknown'
+      }m`
     : ';amap=unavailable';
   return `web:${browser}-${platform};lang:${language}${locationInfo}`;
 }
 
 const AttendancePunchPage: React.FC = () => {
   const [now, setNow] = useState(dayjs());
+  const [latestClock, setLatestClock] = useState<LatestClockState>();
   const [locationState, setLocationState] = useState<LocationState>({
     status: 'idle',
     text: '点击打卡时获取高德定位',
@@ -108,10 +162,12 @@ const AttendancePunchPage: React.FC = () => {
         setLocationState({
           status: 'success',
           text: '高德定位成功',
-          detail: `精度 ${location.accuracy ?? '--'} 米，类型 ${location.locationType || '--'}`,
+          detail: formatLocationDetail(location),
+          location,
         });
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : '高德定位失败';
+        const errorMessage =
+          error instanceof Error ? error.message : '高德定位失败';
         setLocationState({
           status: 'failed',
           text: errorMessage,
@@ -120,18 +176,36 @@ const AttendancePunchPage: React.FC = () => {
         message.warning(`${errorMessage}，将继续尝试打卡`);
       }
 
-      return clockAttendance({
+      const result = await clockAttendance({
         type,
         latitude: location?.latitude,
         longitude: location?.longitude,
         deviceInfo: getDeviceInfo(location),
       });
+
+      return { result, location };
     },
     {
       manual: true,
-      onSuccess: (result) => {
-        const label = result.period === 'CLOCK_OUT' ? '下班打卡' : '上班打卡';
-        message.success(`${label}成功`);
+      onSuccess: ({ result, location }) => {
+        const label = getClockLabel(result.period);
+        const networkIp = getClockIp(result);
+        const locationDetail = formatLocationDetail(location);
+
+        setLatestClock({ result, location });
+        Modal.success({
+          title: `${label}成功`,
+          content: (
+            <div className={styles.successModalContent}>
+              <p>打卡时间：{formatTime(result.clockTime)}</p>
+              <p>打卡状态：{getStatusLabel(result.status)}</p>
+              <p>打卡位置：{formatLocationText(location)}</p>
+              {locationDetail && <p>{locationDetail}</p>}
+              <p>网络 IP：{networkIp || '后端暂未返回'}</p>
+            </div>
+          ),
+          okText: '我知道了',
+        });
         refresh();
       },
     },
@@ -144,14 +218,60 @@ const AttendancePunchPage: React.FC = () => {
 
   const todayRecord = useMemo<AttendanceCalendarDayVO | undefined>(() => {
     const today = now.format('YYYY-MM-DD');
-    return calendar?.days?.find((item) => dayjs(item.date).format('YYYY-MM-DD') === today);
+    return calendar?.days?.find(
+      (item) => dayjs(item.date).format('YYYY-MM-DD') === today,
+    );
   }, [calendar?.days, now]);
 
-  const clockInDone = Boolean(todayRecord?.clockInTime);
-  const clockOutDone = Boolean(todayRecord?.clockOutTime);
-  const nextClockType: 'CLOCK_IN' | 'CLOCK_OUT' = clockInDone ? 'CLOCK_OUT' : 'CLOCK_IN';
+  const mergedTodayRecord = useMemo<MergedTodayRecord | undefined>(() => {
+    const today = now.format('YYYY-MM-DD');
+    const baseRecord: MergedTodayRecord = todayRecord
+      ? { ...todayRecord }
+      : { date: today };
+
+    if (!latestClock?.result) {
+      return todayRecord ? baseRecord : undefined;
+    }
+
+    const recordDate = dayjs(latestClock.result.recordDate).format(
+      'YYYY-MM-DD',
+    );
+    if (recordDate !== today) {
+      return todayRecord ? baseRecord : undefined;
+    }
+
+    const clockIp = getClockIp(latestClock.result);
+    if (latestClock.result.period === 'CLOCK_OUT') {
+      return {
+        ...baseRecord,
+        clockOutTime: latestClock.result.clockTime,
+        clockOutStatus: latestClock.result.status,
+        clockOutIp: clockIp,
+        dayStatus: latestClock.result.status || baseRecord.dayStatus,
+      };
+    }
+
+    return {
+      ...baseRecord,
+      clockInTime: latestClock.result.clockTime,
+      clockInStatus: latestClock.result.status,
+      clockInIp: clockIp,
+      dayStatus: latestClock.result.status || baseRecord.dayStatus,
+    };
+  }, [latestClock, now, todayRecord]);
+
+  const latestNetworkIp = latestClock?.result
+    ? getClockIp(latestClock.result)
+    : undefined;
+  const clockInDone = Boolean(mergedTodayRecord?.clockInTime);
+  const clockOutDone = Boolean(mergedTodayRecord?.clockOutTime);
+  const nextClockType: 'CLOCK_IN' | 'CLOCK_OUT' = clockInDone
+    ? 'CLOCK_OUT'
+    : 'CLOCK_IN';
   const nextClockText = clockInDone ? '下班打卡' : '上班打卡';
-  const dayStatus = todayRecord?.dayStatus || (clockInDone || clockOutDone ? 'NORMAL' : undefined);
+  const dayStatus =
+    mergedTodayRecord?.dayStatus ||
+    (clockInDone || clockOutDone ? 'NORMAL' : undefined);
 
   return (
     <div className={styles.punchPage}>
@@ -167,7 +287,7 @@ const AttendancePunchPage: React.FC = () => {
           <Card className={styles.clockCard} bordered={false} loading={loading}>
             <div className={styles.clockHero}>
               <div className={styles.dateLine}>
-                {now.format('YYYY-MM-DD')}　{now.format('dddd')}
+                {now.format('YYYY-MM-DD')} {now.format('dddd')}
               </div>
               <div className={styles.timeText}>{now.format('HH:mm')}</div>
               <div className={styles.groupLine}>
@@ -176,33 +296,81 @@ const AttendancePunchPage: React.FC = () => {
 
               <Row gutter={[24, 24]} className={styles.shiftCards}>
                 <Col xs={24} md={12}>
-                  <div className={`${styles.shiftCard} ${clockInDone ? styles.shiftDone : ''}`}>
-                    <span className={`${styles.shiftIcon} ${clockInDone ? styles.shiftIconDone : ''}`}>
+                  <div
+                    className={`${styles.shiftCard} ${
+                      clockInDone ? styles.shiftDone : ''
+                    }`}
+                  >
+                    <span
+                      className={`${styles.shiftIcon} ${
+                        clockInDone ? styles.shiftIconDone : ''
+                      }`}
+                    >
                       <ClockCircleOutlined />
                     </span>
                     <div>
                       <div className={styles.shiftLabel}>上班打卡</div>
-                      <div className={clockInDone ? styles.shiftTime : styles.shiftPending}>
-                        {formatTime(todayRecord?.clockInTime)}
+                      <div
+                        className={
+                          clockInDone ? styles.shiftTime : styles.shiftPending
+                        }
+                      >
+                        {formatTime(mergedTodayRecord?.clockInTime)}
                       </div>
-                      <Tag color={clockInDone ? STATUS_COLOR_MAP[todayRecord?.clockInStatus || 'NORMAL'] : 'default'}>
-                        {clockInDone ? getStatusLabel(todayRecord?.clockInStatus || 'NORMAL') : '待打卡'}
+                      <Tag
+                        color={
+                          clockInDone
+                            ? STATUS_COLOR_MAP[
+                                mergedTodayRecord?.clockInStatus || 'NORMAL'
+                              ]
+                            : 'default'
+                        }
+                      >
+                        {clockInDone
+                          ? getStatusLabel(
+                              mergedTodayRecord?.clockInStatus || 'NORMAL',
+                            )
+                          : '待打卡'}
                       </Tag>
                     </div>
                   </div>
                 </Col>
                 <Col xs={24} md={12}>
-                  <div className={`${styles.shiftCard} ${clockOutDone ? styles.shiftDone : ''}`}>
-                    <span className={`${styles.shiftIcon} ${clockOutDone ? styles.shiftIconDone : ''}`}>
+                  <div
+                    className={`${styles.shiftCard} ${
+                      clockOutDone ? styles.shiftDone : ''
+                    }`}
+                  >
+                    <span
+                      className={`${styles.shiftIcon} ${
+                        clockOutDone ? styles.shiftIconDone : ''
+                      }`}
+                    >
                       <ClockCircleOutlined />
                     </span>
                     <div>
                       <div className={styles.shiftLabel}>下班打卡</div>
-                      <div className={clockOutDone ? styles.shiftTime : styles.shiftPending}>
-                        {formatTime(todayRecord?.clockOutTime)}
+                      <div
+                        className={
+                          clockOutDone ? styles.shiftTime : styles.shiftPending
+                        }
+                      >
+                        {formatTime(mergedTodayRecord?.clockOutTime)}
                       </div>
-                      <Tag color={clockOutDone ? STATUS_COLOR_MAP[todayRecord?.clockOutStatus || 'NORMAL'] : 'default'}>
-                        {clockOutDone ? getStatusLabel(todayRecord?.clockOutStatus || 'NORMAL') : '待打卡'}
+                      <Tag
+                        color={
+                          clockOutDone
+                            ? STATUS_COLOR_MAP[
+                                mergedTodayRecord?.clockOutStatus || 'NORMAL'
+                              ]
+                            : 'default'
+                        }
+                      >
+                        {clockOutDone
+                          ? getStatusLabel(
+                              mergedTodayRecord?.clockOutStatus || 'NORMAL',
+                            )
+                          : '待打卡'}
                       </Tag>
                     </div>
                   </div>
@@ -222,23 +390,37 @@ const AttendancePunchPage: React.FC = () => {
               </Button>
 
               <div className={styles.ruleLine}>
-                今日上班时间：09:00　|　规定上班时间：09:00
+                今日上班时间：9:00 | 规定上班时间：9:00
               </div>
 
               <div className={styles.footerStatus}>
                 <Space>
-                  <EnvironmentOutlined style={{ color: '#1fbf63', fontSize: 22 }} />
+                  <EnvironmentOutlined
+                    style={{ color: '#1fbf63', fontSize: 22 }}
+                  />
                   <span>
-                    定位状态：
-                    <Tag color={LOCATION_STATUS_COLOR[locationState.status]} style={{ marginLeft: 8 }}>
+                    打卡位置：
+                    <Tag
+                      color={LOCATION_STATUS_COLOR[locationState.status]}
+                      style={{ marginLeft: 8 }}
+                    >
                       {locationState.text}
                     </Tag>
-                    {locationState.detail && <Text type="secondary">{locationState.detail}</Text>}
+                    {locationState.location && (
+                      <Text type="secondary">
+                        {formatLocationText(locationState.location)}
+                      </Text>
+                    )}
+                    {locationState.detail && (
+                      <Text type="secondary">，{locationState.detail}</Text>
+                    )}
                   </span>
                 </Space>
                 <Space>
-                  <SafetyCertificateFilled style={{ color: '#1fbf63', fontSize: 22 }} />
-                  IP 校验：由后端自动校验
+                  <SafetyCertificateFilled
+                    style={{ color: '#1fbf63', fontSize: 22 }}
+                  />
+                  网络 IP：{latestNetworkIp || '打卡成功后显示'}
                 </Space>
               </div>
             </div>
@@ -251,42 +433,85 @@ const AttendancePunchPage: React.FC = () => {
               <Title level={4} style={{ margin: 0 }}>
                 今日考勤记录
               </Title>
-              <Button type="link" onClick={() => history.push('/profile/attendance')}>
+              <Button
+                type="link"
+                onClick={() => history.push('/profile/attendance')}
+              >
                 查看月度记录 <RightOutlined />
               </Button>
             </div>
 
             <div className={styles.timeline}>
               <div className={styles.timelineItem}>
-                <span className={`${styles.timelineDot} ${clockInDone ? styles.timelineDotDone : ''}`}>
+                <span
+                  className={`${styles.timelineDot} ${
+                    clockInDone ? styles.timelineDotDone : ''
+                  }`}
+                >
                   {clockInDone && <CheckCircleFilled />}
                 </span>
                 <div>
-                  <div className={styles.recordTime}>{formatTime(todayRecord?.clockInTime)}</div>
+                  <div className={styles.recordTime}>
+                    {formatTime(mergedTodayRecord?.clockInTime)}
+                  </div>
                   <div className={styles.recordMeta}>
-                    上班打卡　
-                    <Tag color={clockInDone ? STATUS_COLOR_MAP[todayRecord?.clockInStatus || 'NORMAL'] : 'default'}>
-                      {clockInDone ? getStatusLabel(todayRecord?.clockInStatus || 'NORMAL') : '未打卡'}
+                    上班打卡{' '}
+                    <Tag
+                      color={
+                        clockInDone
+                          ? STATUS_COLOR_MAP[
+                              mergedTodayRecord?.clockInStatus || 'NORMAL'
+                            ]
+                          : 'default'
+                      }
+                    >
+                      {clockInDone
+                        ? getStatusLabel(
+                            mergedTodayRecord?.clockInStatus || 'NORMAL',
+                          )
+                        : '未打卡'}
                     </Tag>
                   </div>
                 </div>
-                <Text type="secondary">公司网络</Text>
+                <Text type="secondary">
+                  {mergedTodayRecord?.clockInIp || '--'}
+                </Text>
               </div>
 
               <div className={styles.timelineItem}>
-                <span className={`${styles.timelineDot} ${clockOutDone ? styles.timelineDotDone : ''}`}>
+                <span
+                  className={`${styles.timelineDot} ${
+                    clockOutDone ? styles.timelineDotDone : ''
+                  }`}
+                >
                   {clockOutDone && <CheckCircleFilled />}
                 </span>
                 <div>
-                  <div className={styles.recordTime}>{formatTime(todayRecord?.clockOutTime)}</div>
+                  <div className={styles.recordTime}>
+                    {formatTime(mergedTodayRecord?.clockOutTime)}
+                  </div>
                   <div className={styles.recordMeta}>
-                    下班打卡　
-                    <Tag color={clockOutDone ? STATUS_COLOR_MAP[todayRecord?.clockOutStatus || 'NORMAL'] : 'default'}>
-                      {clockOutDone ? getStatusLabel(todayRecord?.clockOutStatus || 'NORMAL') : '未打卡'}
+                    下班打卡{' '}
+                    <Tag
+                      color={
+                        clockOutDone
+                          ? STATUS_COLOR_MAP[
+                              mergedTodayRecord?.clockOutStatus || 'NORMAL'
+                            ]
+                          : 'default'
+                      }
+                    >
+                      {clockOutDone
+                        ? getStatusLabel(
+                            mergedTodayRecord?.clockOutStatus || 'NORMAL',
+                          )
+                        : '未打卡'}
                     </Tag>
                   </div>
                 </div>
-                <Text type="secondary">--</Text>
+                <Text type="secondary">
+                  {mergedTodayRecord?.clockOutIp || '--'}
+                </Text>
               </div>
             </div>
 

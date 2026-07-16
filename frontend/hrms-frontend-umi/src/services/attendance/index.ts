@@ -68,6 +68,8 @@ export interface AttendanceClockVO {
   period: 'CLOCK_IN' | 'CLOCK_OUT' | string;
   status: string;
   clockTime: string;
+  networkIp?: string;
+  clientIp?: string;
 }
 
 export interface AttendanceCalendarDayVO {
