@@ -137,9 +137,9 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
      * @return 审批实例ID
      * 本方法使用的工具类: IdUtil(hutool)
      */
-    private Long tempStartLeaveApproval(EmployeeSnapshotEntity employeeSnapshot) {
-        return IdUtil.getSnowflakeNextId();
-    }
+    //private Long tempStartLeaveApproval(EmployeeSnapshotEntity employeeSnapshot) {
+    //    return IdUtil.getSnowflakeNextId();
+    //}
 
     /**
      * 查询必须存在的员工快照。

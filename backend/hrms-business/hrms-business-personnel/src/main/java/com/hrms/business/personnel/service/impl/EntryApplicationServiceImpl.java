@@ -190,8 +190,8 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
             lockedEntity.setEmployeeNo(employeeNo);
             lockedEntity.setApprovalStatus(ApplicationStatusEnum.ENTERED.getCode());
             entryApplicationMapper.updateById(lockedEntity);
-            // entryConfirmedProducer.send(event); 本接口需要调用通知/MQ模块发送 personnel.entry.confirmed 事件和欢迎通知
-            tempSendEntryConfirmedNotice(lockedEntity, employeeId, employeeNo);
+            // entryConfirmedProducer.send(event); 本接口需要调用通知/MQ模块发送 personnel.entry.confirmed 事件和欢迎通知,本次项目暂不实现
+            //tempSendEntryConfirmedNotice(lockedEntity, employeeId, employeeNo);
             return buildConfirmVO(employeeId, employeeNo);
         }
     }
@@ -284,9 +284,9 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
      * @param employeeId 员工ID
      * @param employeeNo 员工工号
      */
-    private void tempSendEntryConfirmedNotice(EntryApplicationEntity entity, Long employeeId, String employeeNo) {
-        // 临时空实现，等待通知模块或 RabbitMQ 事件生产者提供后替换。
-    }
+    //private void tempSendEntryConfirmedNotice(EntryApplicationEntity entity, Long employeeId, String employeeNo) {
+    //    // 临时空实现，等待通知模块或 RabbitMQ 事件生产者提供后替换。
+    //}
 
     /**
      * 构造入职确认结果。
