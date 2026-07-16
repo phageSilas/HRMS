@@ -88,6 +88,72 @@ export interface AttendanceCalendarVO {
   days: AttendanceCalendarDayVO[];
 }
 
+export interface AttendanceGroupQuery extends Partial<PageQuery> {
+  groupName?: string;
+  status?: number;
+}
+
+export interface AttendanceGroup {
+  id: number;
+  groupName: string;
+  shiftType: 'FIXED' | 'FLEXIBLE' | 'SCHEDULED' | string;
+  workStartTime?: string | number[];
+  workEndTime?: string | number[];
+  lateThresholdMinutes?: number;
+  earlyLeaveThresholdMinutes?: number;
+  monthlyCorrectionLimit?: number;
+  status?: number;
+  statusText?: string;
+  createTime?: string | number[];
+}
+
+export interface AttendanceGroupRequest {
+  groupName: string;
+  shiftType: 'FIXED' | 'FLEXIBLE' | 'SCHEDULED' | string;
+  clockInTime: string;
+  clockOutTime: string;
+  restStartTime?: string;
+  restEndTime?: string;
+  flexibleStartTime?: string;
+  flexibleEndTime?: string;
+  lateThreshold?: number;
+  earlyLeaveThreshold?: number;
+  maxCorrectionCount?: number;
+  ipWhitelist?: string;
+  locationRange?: {
+    latitude?: number;
+    longitude?: number;
+    radius?: number;
+    address?: string;
+  };
+  status?: number;
+}
+
+// ============ 考勤组接口 ============
+
+/**
+ * 分页查询考勤组
+ */
+export async function getAttendanceGroups(params: AttendanceGroupQuery) {
+  return request.get<PageResult<AttendanceGroup>>('/api/v1/attendance/groups', {
+    params,
+  });
+}
+
+/**
+ * 创建考勤组
+ */
+export async function createAttendanceGroup(data: AttendanceGroupRequest) {
+  return request.post<AttendanceGroup>('/api/v1/attendance/groups', data);
+}
+
+/**
+ * 更新考勤组
+ */
+export async function updateAttendanceGroup(id: number, data: AttendanceGroupRequest) {
+  return request.put<AttendanceGroup>(`/api/v1/attendance/groups/${id}`, data);
+}
+
 // ============ 考勤记录接口 ============
 
 /**
