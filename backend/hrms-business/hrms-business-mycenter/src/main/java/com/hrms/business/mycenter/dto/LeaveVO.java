@@ -43,6 +43,9 @@ public class LeaveVO {
     @Schema(description = "审批状态描述")
     private String approvalStatusDesc;
 
+    @Schema(description = "审批实例ID（用于查看审批进度）")
+    private Long approvalInstanceId;
+
     @Schema(description = "创建时间")
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;

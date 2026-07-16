@@ -214,6 +214,7 @@ public class LeaveServiceImpl implements LeaveService {
         vo.setLeaveReason(entity.getLeaveReason());
         vo.setApprovalStatus(entity.getApprovalStatus());
         vo.setApprovalStatusDesc(getApprovalStatusDesc(entity.getApprovalStatus()));
+        vo.setApprovalInstanceId(entity.getApprovalInstanceId());
         vo.setCreateTime(entity.getCreateTime());
         return vo;
     }
