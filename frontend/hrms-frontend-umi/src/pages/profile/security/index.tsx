@@ -1,6 +1,6 @@
 /**
  * 账号安全页面
- * 修改密码 + 绑定手机 + 登录日志
+ * 修改密码 + 绑定/解绑手机 + 登录日志
  */
 
 import {
@@ -25,7 +25,7 @@ import {
   Spin,
 } from 'antd';
 import React, { useState } from 'react';
-import { changePassword, bindPhone, getLoginLogs } from '@/services/profile';
+import { changePassword, bindPhone, getLoginLogs, unbindPhone } from '@/services/profile';
 import type { PasswordChangeRequest, PhoneBindRequest } from '@/services/profile';
 
 const { Text, Title } = Typography;
@@ -80,6 +80,23 @@ const ProfileSecurityPage: React.FC = () => {
 
   // ============ 绑定手机 ============
 
+  const handleUnbind = () => {
+    Modal.confirm({
+      title: '确认解绑手机',
+      content: '解绑手机号后，将无法使用手机号登录和找回密码。确定要解绑吗？',
+      okText: '确认解绑',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await unbindPhone();
+          message.success('手机号已解绑');
+        } catch {
+          // 静默处理
+        }
+      },
+    });
+  };
+
   const handlePhoneSubmit = async () => {
     try {
       const values = await phoneForm.validateFields();
@@ -129,9 +146,12 @@ const ProfileSecurityPage: React.FC = () => {
           <Descriptions.Item label="绑定手机">
             <Space>
               <PhoneOutlined style={{ color: '#52c41a' }} />
-              <Text>待绑定</Text>
+              <Text>已绑定</Text>
               <Button type="link" onClick={() => setPhoneModalOpen(true)}>
-                绑定手机
+                更换手机
+              </Button>
+              <Button type="link" danger onClick={handleUnbind}>
+                解绑
               </Button>
             </Space>
           </Descriptions.Item>

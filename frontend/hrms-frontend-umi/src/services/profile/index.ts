@@ -12,26 +12,36 @@ import type { Result } from '@/types/api';
 
 /** 我的档案 VO（GET /api/v1/profile） */
 export interface ProfileVO {
+  employeeId?: number;
   employeeName: string;
   employeeNo: string;
-  gender: string;
-  birthDate: string;
+  gender: number;
+  genderDesc?: string;
+  birthday: string;
   phone: string;
   email: string;
   idCard: string;
   emergencyContact: string;
   emergencyPhone: string;
-  departmentName: string;
-  positionName: string;
+  deptId?: number;
+  deptName: string;
+  postName: string;
+  jobLevel?: string;
+  leaderId?: number;
   hireDate: string;
-  editableFields: string[];
-  flowFields: string[];
+  currentAddress?: string;
+  fieldPermissions?: {
+    editableFields: string[];
+    flowRequiredFields: string[];
+    lockedFields: string[];
+  };
 }
 
 /** 档案更新请求（只提交 editableFields 中的字段） */
 export interface ProfileUpdateRequest {
   phone?: string;
   email?: string;
+  currentAddress?: string;
   emergencyContact?: string;
   emergencyPhone?: string;
 }
@@ -192,6 +202,55 @@ export async function getLeaveBalance() {
 }
 
 // ======================================================================
+// 加班模块 API
+// ======================================================================
+
+/** 加班申请请求 */
+export interface OvertimeRequest {
+  overtimeDate: string;
+  duration: number;
+  reason: string;
+}
+
+/** 加班记录 VO */
+export interface OvertimeRecordVO {
+  id: number;
+  overtimeDate: string;
+  duration: number;
+  reason: string;
+  approvalStatus: number;
+  approvalStatusDesc: string;
+  createTime: string;
+}
+
+/** 考勤统计 VO */
+export interface AttendanceStatisticsVO {
+  expectedDays: number;
+  actualDays: number;
+  lateCount: number;
+  earlyLeaveCount: number;
+  missCount: number;
+  leaveCount: number;
+}
+
+/** 提交加班申请 */
+export async function createOvertime(data: OvertimeRequest) {
+  return request.post<Result<void>>('/api/v1/attendance/overtime', data);
+}
+
+/** 加班记录列表 */
+export async function getOvertimeRecords() {
+  return request.get<Result<OvertimeRecordVO[]>>('/api/v1/attendance/overtime');
+}
+
+/** 获取考勤统计 */
+export async function getAttendanceStatistics(yearMonth: string) {
+  return request.get<Result<AttendanceStatisticsVO>>('/api/v1/attendance/statistics', {
+    params: { yearMonth },
+  });
+}
+
+// ======================================================================
 // 账号安全 API
 // ======================================================================
 
@@ -203,6 +262,11 @@ export async function changePassword(data: PasswordChangeRequest) {
 /** 绑定手机 */
 export async function bindPhone(data: PhoneBindRequest) {
   return request.post<Result<void>>('/api/v1/account/phone/bind', data);
+}
+
+/** 解绑手机 */
+export async function unbindPhone() {
+  return request.post<Result<void>>('/api/v1/account/phone/unbind');
 }
 
 /** 获取登录日志 */

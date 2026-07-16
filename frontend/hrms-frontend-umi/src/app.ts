@@ -22,7 +22,19 @@ export interface InitialState {
 export async function getInitialState(): Promise<InitialState> {
   const { pathname } = window.location;
   const token = localStorage.getItem('token');
+  const localUserText = localStorage.getItem('userInfo');
 
+  // 优先从本地缓存恢复用户信息，避免每次导航都调后端 API
+  if (token && localUserText) {
+    try {
+      const parsed = JSON.parse(localUserText) as UserInfo;
+      return { currentUser: parsed, loading: false };
+    } catch {
+      // 缓存数据损坏，走下方逻辑重新获取
+    }
+  }
+
+  // 有 token 但无本地缓存时，再调后端接口获取
   if (token) {
     try {
       const result = await getCurrentUser();
@@ -36,20 +48,18 @@ export async function getInitialState(): Promise<InitialState> {
         roleName: result.roleName,
         permissions: result.permissions,
       };
+      // 同步缓存到 localStorage
+      localStorage.setItem('userInfo', JSON.stringify(userInfo));
       return {
         currentUser: userInfo,
         loading: false,
       };
-    } catch (error) {
-      // 获取用户信息失败，跳转登录页
-      localStorage.removeItem('token');
-      localStorage.removeItem('userInfo');
-      if (pathname !== '/login') {
-        history.push('/login');
-      }
+    } catch {
+      // 获取用户信息失败（后端未就绪或 token 不合法）
+      // 不清除 token 也不跳转：让请求拦截器在具体 API 调用时处理
+      // 页面组件内的鉴权逻辑会自行处理未登录状态
     }
   } else if (pathname !== '/login') {
-    // 非登录页没有 token，跳转登录页
     history.push('/login');
   }
 

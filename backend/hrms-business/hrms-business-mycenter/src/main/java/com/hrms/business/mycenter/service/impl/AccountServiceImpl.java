@@ -21,6 +21,8 @@ import java.util.List;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import org.apache.commons.lang3.StringUtils;
+
 /**
  * 账号安全服务实现
  */
@@ -84,6 +86,25 @@ public class AccountServiceImpl implements AccountService {
         user.setPhone(request.getPhone());
         userMapper.updateById(user);
         log.info("用户 {} 绑定手机号成功", userId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void unbindPhone(Long userId) {
+        UserEntity user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new GlobalException(ErrorCode.NOT_FOUND, "用户不存在");
+        }
+        if (StringUtils.isBlank(user.getPhone())) {
+            throw new GlobalException(ErrorCode.PARAM_VALIDATION_FAILED, "未绑定手机号，无需解绑");
+        }
+
+        // TODO: 校验短信验证码（短信服务未对接）
+        // 当前简化：直接清空手机号
+
+        user.setPhone(null);
+        userMapper.updateById(user);
+        log.info("用户 {} 解绑手机号成功", userId);
     }
 
     @Override

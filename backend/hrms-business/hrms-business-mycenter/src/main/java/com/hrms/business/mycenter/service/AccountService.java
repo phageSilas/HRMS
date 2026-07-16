@@ -28,6 +28,13 @@ public interface AccountService {
     void bindPhone(Long userId, PhoneBindRequest request);
 
     /**
+     * 解绑手机号
+     *
+     * @param userId 用户ID
+     */
+    void unbindPhone(Long userId);
+
+    /**
      * 查询登录日志
      *
      * @param userId 用户ID

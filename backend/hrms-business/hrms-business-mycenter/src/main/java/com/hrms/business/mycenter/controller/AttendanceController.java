@@ -1,9 +1,12 @@
 package com.hrms.business.mycenter.controller;
 
 import com.hrms.business.mycenter.dto.AttendanceCalendarVO;
+import com.hrms.business.mycenter.dto.AttendanceStatisticsVO;
 import com.hrms.business.mycenter.dto.ClockInRequest;
 import com.hrms.business.mycenter.dto.MakeupRecordVO;
 import com.hrms.business.mycenter.dto.MakeupRequest;
+import com.hrms.business.mycenter.dto.OvertimeRecordVO;
+import com.hrms.business.mycenter.dto.OvertimeRequest;
 import com.hrms.business.mycenter.service.AttendanceService;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
@@ -26,7 +29,7 @@ import java.util.List;
 
 /**
  * 个人考勤控制器
- * API-MYC-03 ~ 06
+ * API-MYC-03 ~ 06, 考勤统计, 加班申请
  */
 @RestController("myCenterAttendanceController")
 @RequestMapping("/api/v1/attendance")
@@ -65,6 +68,28 @@ public class AttendanceController {
     public Result<List<MakeupRecordVO>> listMakeupRecords() {
         Long employeeId = getEmployeeId();
         return Result.success(attendanceService.listMakeupRecords(employeeId));
+    }
+
+    @PostMapping("/overtime")
+    @Operation(summary = "提交加班申请", description = "提交加班申请")
+    public Result<Void> createOvertime(@Valid @RequestBody OvertimeRequest request) {
+        Long employeeId = getEmployeeId();
+        attendanceService.createOvertime(employeeId, request);
+        return Result.success();
+    }
+
+    @GetMapping("/overtime")
+    @Operation(summary = "加班记录列表", description = "查询本人加班申请记录")
+    public Result<List<OvertimeRecordVO>> listOvertimeRecords() {
+        Long employeeId = getEmployeeId();
+        return Result.success(attendanceService.listOvertimeRecords(employeeId));
+    }
+
+    @GetMapping("/statistics")
+    @Operation(summary = "考勤统计", description = "个人月度考勤统计数据")
+    public Result<AttendanceStatisticsVO> getStatistics(@RequestParam("yearMonth") String yearMonth) {
+        Long employeeId = getEmployeeId();
+        return Result.success(attendanceService.getStatistics(employeeId, yearMonth));
     }
 
     /**

@@ -1,6 +1,6 @@
 /**
  * 我的考勤页面
- * 考勤日历月视图 + 打卡 + 补卡申请
+ * 考勤日历月视图 + 打卡 + 补卡申请 + 加班申请
  */
 
 import {
@@ -8,6 +8,7 @@ import {
   ClockCircleOutlined,
   CloseCircleOutlined,
   ExclamationCircleOutlined,
+  FieldTimeOutlined,
 } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
 import { useRequest } from '@umijs/max';
@@ -19,6 +20,7 @@ import {
   Descriptions,
   Form,
   Input,
+  InputNumber,
   message,
   Modal,
   Row,
@@ -35,10 +37,12 @@ import React, { useMemo, useState } from 'react';
 import {
   clockIn,
   createMakeup,
+  createOvertime,
   getAttendanceCalendar,
   getMakeupRecords,
+  getOvertimeRecords,
 } from '@/services/profile';
-import type { MakeupRequest } from '@/services/profile';
+import type { MakeupRequest, OvertimeRequest } from '@/services/profile';
 
 const { Text, Title } = Typography;
 
@@ -81,6 +85,14 @@ const ProfileAttendancePage: React.FC = () => {
     getMakeupRecords,
   );
 
+  // 加班记录
+  const [overtimeModalOpen, setOvertimeModalOpen] = useState(false);
+  const [overtimeForm] = Form.useForm();
+
+  const { data: overtimeData, loading: overtimeLoading, refresh: refreshOvertime } = useRequest(
+    getOvertimeRecords,
+  );
+
   const calendar = calendarData;
   const makeupRecords = makeupData || [];
 
@@ -112,6 +124,26 @@ const ProfileAttendancePage: React.FC = () => {
       makeupForm.resetFields();
       refreshMakeup();
       refreshCalendar();
+    } catch {
+      // 静默处理
+    }
+  };
+
+  // ============ 加班申请 ============
+
+  const handleOvertimeSubmit = async () => {
+    try {
+      const values = await overtimeForm.validateFields();
+      const payload: OvertimeRequest = {
+        overtimeDate: values.overtimeDate.format('YYYY-MM-DDTHH:mm:ss'),
+        duration: values.duration,
+        reason: values.reason,
+      };
+      await createOvertime(payload);
+      message.success('加班申请已提交');
+      setOvertimeModalOpen(false);
+      overtimeForm.resetFields();
+      refreshOvertime();
     } catch {
       // 静默处理
     }
@@ -372,6 +404,74 @@ const ProfileAttendancePage: React.FC = () => {
             rules={[{ required: true, message: '请输入补卡原因' }]}
           >
             <Input.TextArea rows={3} placeholder="请输入补卡原因" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 加班记录 */}
+      <Card
+        bordered={false}
+        title={
+          <Space>
+            <FieldTimeOutlined />
+            <span>加班记录</span>
+          </Space>
+        }
+        extra={
+          <Button type="primary" icon={<FieldTimeOutlined />} onClick={() => setOvertimeModalOpen(true)}>
+            申请加班
+          </Button>
+        }
+        style={{ marginTop: 16 }}
+      >
+        <Table
+          dataSource={overtimeData || []}
+          columns={[
+            { title: '加班日期', dataIndex: 'overtimeDate', key: 'overtimeDate', width: 170, render: (t: string) => t || '-' },
+            { title: '时长(小时)', dataIndex: 'duration', key: 'duration', width: 100 },
+            { title: '事由', dataIndex: 'reason', key: 'reason', ellipsis: true },
+            { title: '状态', dataIndex: 'approvalStatusDesc', key: 'approvalStatusDesc', width: 100 },
+            { title: '申请时间', dataIndex: 'createTime', key: 'createTime', width: 170, render: (t: string) => t || '-' },
+          ]}
+          rowKey="id"
+          loading={overtimeLoading}
+          pagination={false}
+          locale={{ emptyText: '暂无加班记录' }}
+        />
+      </Card>
+
+      {/* 加班申请弹窗 */}
+      <Modal
+        title="申请加班"
+        open={overtimeModalOpen}
+        onOk={handleOvertimeSubmit}
+        onCancel={() => {
+          setOvertimeModalOpen(false);
+          overtimeForm.resetFields();
+        }}
+        destroyOnClose
+      >
+        <Form form={overtimeForm} layout="vertical">
+          <Form.Item
+            name="overtimeDate"
+            label="加班日期"
+            rules={[{ required: true, message: '请选择加班日期' }]}
+          >
+            <DatePicker showTime style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item
+            name="duration"
+            label="加班时长(小时)"
+            rules={[{ required: true, message: '请输入加班时长' }]}
+          >
+            <InputNumber min={0.5} max={24} step={0.5} style={{ width: '100%' }} placeholder="请输入加班时长" />
+          </Form.Item>
+          <Form.Item
+            name="reason"
+            label="加班事由"
+            rules={[{ required: true, message: '请输入加班事由' }]}
+          >
+            <Input.TextArea rows={3} placeholder="请输入加班事由" />
           </Form.Item>
         </Form>
       </Modal>

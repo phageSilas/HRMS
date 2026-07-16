@@ -2,8 +2,11 @@ package com.hrms.business.mycenter.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.hrms.business.mycenter.dto.AttendanceCalendarVO;
+import com.hrms.business.mycenter.dto.AttendanceStatisticsVO;
 import com.hrms.business.mycenter.dto.MakeupRecordVO;
 import com.hrms.business.mycenter.dto.MakeupRequest;
+import com.hrms.business.mycenter.dto.OvertimeRecordVO;
+import com.hrms.business.mycenter.dto.OvertimeRequest;
 import com.hrms.business.mycenter.entity.AttendanceCorrectionEntity;
 import com.hrms.business.mycenter.entity.MyAttendanceRecordEntity;
 import com.hrms.business.mycenter.mapper.MyCenterAttendanceCorrectionMapper;
@@ -22,9 +25,14 @@ import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * 个人考勤服务实现
@@ -36,6 +44,28 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     private final MyAttendanceRecordMapper attendanceRecordMapper;
     private final MyCenterAttendanceCorrectionMapper correctionMapper;
+
+    /**
+     * 加班记录内存存储（TODO: 后续对接数据库表 hr_attendance_overtime）
+     */
+    private final Map<Long, List<SimpleOvertimeRecord>> overtimeStore = new ConcurrentHashMap<>();
+    private final AtomicLong overtimeIdSeq = new AtomicLong(1);
+
+    /**
+     * 简单的加班记录内部类（替代数据库实体）
+     */
+    @lombok.Data
+    @lombok.AllArgsConstructor
+    @lombok.NoArgsConstructor
+    private static class SimpleOvertimeRecord {
+        private Long id;
+        private Long employeeId;
+        private LocalDateTime overtimeDate;
+        private java.math.BigDecimal duration;
+        private String reason;
+        private Integer approvalStatus;
+        private LocalDateTime createTime;
+    }
 
     @Override
     public AttendanceCalendarVO getCalendar(Long employeeId, String yearMonth) {
@@ -197,6 +227,94 @@ public class AttendanceServiceImpl implements AttendanceService {
             vo.setCreateTime(e.getCreateTime());
             return vo;
         }).collect(Collectors.toList());
+    }
+
+    // ==================== 加班申请 ====================
+
+    @Override
+    public void createOvertime(Long employeeId, OvertimeRequest request) {
+        SimpleOvertimeRecord record = new SimpleOvertimeRecord();
+        record.setId(overtimeIdSeq.incrementAndGet());
+        record.setEmployeeId(employeeId);
+        record.setOvertimeDate(request.getOvertimeDate());
+        record.setDuration(request.getDuration());
+        record.setReason(request.getReason());
+        record.setApprovalStatus(1); // 审批中
+        record.setCreateTime(LocalDateTime.now());
+
+        overtimeStore.computeIfAbsent(employeeId, k -> new ArrayList<>()).add(record);
+        log.info("员工 {} 提交加班申请，时长 {} 小时", employeeId, request.getDuration());
+    }
+
+    @Override
+    public List<OvertimeRecordVO> listOvertimeRecords(Long employeeId) {
+        List<SimpleOvertimeRecord> records = overtimeStore.getOrDefault(employeeId, Collections.emptyList());
+        return records.stream().map(e -> {
+            String statusDesc;
+            switch (e.getApprovalStatus()) {
+                case 0: statusDesc = "草稿"; break;
+                case 1: statusDesc = "审批中"; break;
+                case 2: statusDesc = "已通过"; break;
+                case 3: statusDesc = "已驳回"; break;
+                default: statusDesc = "未知";
+            }
+            return OvertimeRecordVO.builder()
+                    .id(e.getId())
+                    .overtimeDate(e.getOvertimeDate())
+                    .duration(e.getDuration())
+                    .reason(e.getReason())
+                    .approvalStatus(e.getApprovalStatus())
+                    .approvalStatusDesc(statusDesc)
+                    .createTime(e.getCreateTime())
+                    .build();
+        }).sorted(Comparator.comparing(OvertimeRecordVO::getCreateTime).reversed())
+          .collect(Collectors.toList());
+    }
+
+    // ==================== 考勤统计 ====================
+
+    @Override
+    public AttendanceStatisticsVO getStatistics(Long employeeId, String yearMonth) {
+        YearMonth ym = YearMonth.parse(yearMonth, DateTimeFormatter.ofPattern("yyyy-MM"));
+        LocalDate firstDay = ym.atDay(1);
+        LocalDate lastDay = ym.atEndOfMonth();
+
+        // 查询该月所有考勤记录
+        List<MyAttendanceRecordEntity> records = attendanceRecordMapper.selectList(
+                new LambdaQueryWrapper<MyAttendanceRecordEntity>()
+                        .eq(MyAttendanceRecordEntity::getEmployeeId, employeeId)
+                        .between(MyAttendanceRecordEntity::getRecordDate, firstDay, lastDay)
+        );
+
+        // 计算应出勤天数（周一到周五）
+        long expectedDays = IntStream.rangeClosed(1, ym.lengthOfMonth())
+                .mapToObj(day -> LocalDate.of(ym.getYear(), ym.getMonth(), day))
+                .filter(date -> date.getDayOfWeek().getValue() <= 5)
+                .count();
+
+        // 按日期聚合考勤状态
+        int actualDays = 0, lateCount = 0, earlyLeaveCount = 0, missCount = 0, leaveCount = 0;
+
+        for (MyAttendanceRecordEntity r : records) {
+            String status = determineStatus(r);
+            switch (status) {
+                case "NORMAL": actualDays++; break;
+                case "LATE": lateCount++; break;
+                case "EARLY_LEAVE": earlyLeaveCount++; break;
+                case "LEAVE": leaveCount++; break;
+                case "MISSED": missCount++; break;
+                case "ABSENT": missCount++; break;
+            }
+        }
+
+        return AttendanceStatisticsVO.builder()
+                .expectedDays((int) expectedDays)
+                .actualDays(actualDays + lateCount + earlyLeaveCount)
+                .lateCount(lateCount)
+                .earlyLeaveCount(earlyLeaveCount)
+                .missCount(missCount)
+                .leaveCount(leaveCount)
+                .build();
     }
 
     /**

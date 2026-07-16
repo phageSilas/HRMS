@@ -80,7 +80,7 @@ const moduleEntries: ModuleEntry[] = [
   },
   {
     name: '审批中心',
-    path: '/approval/pending',
+    path: '/approval/workspace',
     description: '待办、已办、审批详情和流程处理。',
     owner: '流程中台',
     icon: <CheckCircleOutlined />,
