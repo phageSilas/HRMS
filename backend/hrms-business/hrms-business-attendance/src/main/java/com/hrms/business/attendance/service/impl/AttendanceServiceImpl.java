@@ -520,9 +520,9 @@ public class AttendanceServiceImpl implements AttendanceService {
      * @param requestDTO 生成请求
      * 本方法使用的工具类: JSONUtil(hutool)
      */
-    private void tempPublishMonthlyStatGenerateMessage(MonthlyStatGenerateRequestDTO requestDTO) {
-        log.info("temp publish attendance.stat.generate: {}", JSONUtil.toJsonStr(requestDTO));
-    }
+    //private void tempPublishMonthlyStatGenerateMessage(MonthlyStatGenerateRequestDTO requestDTO) {
+    //    log.info("temp publish attendance.stat.generate: {}", JSONUtil.toJsonStr(requestDTO));
+    //}
 
     /**
      * 获取薪资考勤数据。
@@ -720,9 +720,9 @@ public class AttendanceServiceImpl implements AttendanceService {
      * @return 审批实例ID
      * 本方法使用的工具类: IdUtil(hutool)
      */
-    private Long tempStartLeaveApproval(Long employeeId, LeaveCreateRequestDTO requestDTO) {
-        return IdUtil.getSnowflakeNextId();
-    }
+    //private Long tempStartLeaveApproval(Long employeeId, LeaveCreateRequestDTO requestDTO) {
+    //    return IdUtil.getSnowflakeNextId();
+    //}
 
     /**
      * 构建请假创建结果。
@@ -807,9 +807,9 @@ public class AttendanceServiceImpl implements AttendanceService {
      * @return 审批实例ID
      * 本方法使用的工具类: IdUtil(hutool)
      */
-    private Long tempStartCorrectionApproval(Long employeeId, Long recordId, AttendanceCorrectionCreateRequestDTO requestDTO) {
-        return IdUtil.getSnowflakeNextId();
-    }
+    //private Long tempStartCorrectionApproval(Long employeeId, Long recordId, AttendanceCorrectionCreateRequestDTO requestDTO) {
+    //    return IdUtil.getSnowflakeNextId();
+    //}
 
     /**
      * 构建补卡创建响应。
@@ -1248,13 +1248,13 @@ public class AttendanceServiceImpl implements AttendanceService {
      * @param event 打卡成功事件
      * 本方法使用的工具类: AttendanceClockEventHandler(本模块mq包)
      */
-    private void tempPublishClockCreatedEvent(AttendanceClockCreatedEvent event) {
-        try {
-            attendanceClockEventHandler.handleClockCreatedEvent(event);
-        } catch (Exception ex) {
-            log.warn("temp handle attendance.clock.created failed, event={}", event, ex);
-        }
-    }
+    //private void tempPublishClockCreatedEvent(AttendanceClockCreatedEvent event) {
+    //    try {
+    //        attendanceClockEventHandler.handleClockCreatedEvent(event);
+    //    } catch (Exception ex) {
+    //        log.warn("temp handle attendance.clock.created failed, event={}", event, ex);
+    //    }
+    //}
 
     /**
      * 构建打卡响应。
