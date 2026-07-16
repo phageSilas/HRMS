@@ -62,9 +62,10 @@ export const menuConfig: MenuItem[] = [
     path: '/attendance',
     children: [
       { key: 'attendance-punch', name: '员工打卡', icon: '', path: '/attendance/punch', access: 'attendancePunch' },
-      { key: 'attendance-record', name: '考勤记录', icon: '', path: '/attendance/record', access: 'attendance' },
-      { key: 'attendance-leave', name: '请假申请', icon: '', path: '/attendance/leave', access: 'attendance' },
-      { key: 'attendance-summary', name: '考勤统计', icon: '', path: '/attendance/summary', access: 'attendance' },
+      { key: 'attendance-record', name: '考勤记录', icon: '', path: '/attendance/record', access: 'attendanceManage' },
+      { key: 'attendance-groups', name: '考勤配置', icon: '', path: '/attendance/groups', access: 'attendanceManage' },
+      { key: 'attendance-leave', name: '请假申请', icon: '', path: '/attendance/leave', access: 'attendanceManage' },
+      { key: 'attendance-summary', name: '考勤统计', icon: '', path: '/attendance/summary', access: 'attendanceManage' },
     ],
   },
   {
