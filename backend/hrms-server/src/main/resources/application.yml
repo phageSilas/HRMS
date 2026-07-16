@@ -50,18 +50,23 @@ spring:
           max-idle: 10
           min-idle: 5
 
-  # TODO: 后续放开 RabbitMQ 配置
-  # rabbitmq:
-  #   host: ${RABBITMQ_HOST:localhost}
-  #   port: ${RABBITMQ_PORT:5672}
-  #   username: ${RABBITMQ_USERNAME:guest}
-  #   password: ${RABBITMQ_PASSWORD:guest}
-  #   virtual-host: ${RABBITMQ_VHOST:/}
-  #   listener:
-  #     simple:
-  #       acknowledge-mode: auto
-  #       concurrency: 5
-  #       max-concurrency: 10
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    connection-timeout: ${RABBITMQ_CONNECTION_TIMEOUT:1000ms}
+    dynamic: ${RABBITMQ_DYNAMIC:false}
+    listener:
+      simple:
+        auto-startup: ${RABBITMQ_LISTENER_AUTO_STARTUP:false}
+        acknowledge-mode: auto
+        concurrency: 5
+        max-concurrency: 10
+      direct:
+        auto-startup: ${RABBITMQ_LISTENER_AUTO_STARTUP:false}
 
 # MyBatis-Plus
 mybatis-plus:
@@ -105,5 +110,9 @@ logging:
     root: ${LOG_LEVEL:INFO}
     com.hrms: ${LOG_LEVEL:DEBUG}
     com.baomidou: INFO
+    org.springframework.amqp.rabbit.connection.CachingConnectionFactory: ERROR
+    org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer: ERROR
+    org.springframework.amqp.rabbit.listener.DirectMessageListenerContainer: ERROR
+    com.rabbitmq.client: ERROR
   pattern:
     console: '%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} [%line] - %msg%n'
