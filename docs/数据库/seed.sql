@@ -32,6 +32,7 @@ INSERT IGNORE INTO `sys_menu` (`id`, `parent_id`, `menu_name`, `menu_type`, `pat
 -- 一级目录
 (1, 0, '系统管理', 1, '/system', 'Layout', NULL, 'system', 1, 1, 1, NOW(), NOW(), 0, 0),
 (2, 0, '个人中心', 1, '/profile', 'Layout', NULL, 'profile', 2, 1, 1, NOW(), NOW(), 0, 0),
+(3, 0, 'AI 智能助手', 1, '/ai', '@/pages/ai', 'ai:chat', 'robot', 3, 1, 1, NOW(), NOW(), 0, 0),
 -- 二级菜单
 (101, 1, '用户管理', 2, 'user', 'system/user/index', 'system:user:list', 'user', 1, 1, 1, NOW(), NOW(), 0, 0),
 (102, 1, '角色管理', 2, 'role', 'system/role/index', 'system:role:list', 'role', 2, 1, 1, NOW(), NOW(), 0, 0),
@@ -67,10 +68,22 @@ INSERT IGNORE INTO `sys_role_menu` (`id`, `role_id`, `menu_id`, `create_time`, `
 (12, 1, 10202, NOW(), NOW(), 0, 0),
 (13, 1, 10203, NOW(), NOW(), 0, 0),
 (14, 1, 10204, NOW(), NOW(), 0, 0),
+-- ADMIN: AI 智能助手
+(15, 1, 3, NOW(), NOW(), 0, 0),
 -- EMPLOYEE: 仅个人中心
-(15, 5, 2, NOW(), NOW(), 0, 0),
-(16, 5, 201, NOW(), NOW(), 0, 0),
-(17, 5, 202, NOW(), NOW(), 0, 0);
+(16, 5, 2, NOW(), NOW(), 0, 0),
+(17, 5, 201, NOW(), NOW(), 0, 0),
+(18, 5, 202, NOW(), NOW(), 0, 0),
+
+-- AI 智能助手菜单 (菜单ID: 3)
+-- HR 角色
+(19, 2, 3, NOW(), NOW(), 0, 0),
+-- MANAGER 角色
+(20, 3, 3, NOW(), NOW(), 0, 0),
+-- EMPLOYEE 角色
+(21, 5, 3, NOW(), NOW(), 0, 0),
+-- FINANCE 角色
+(22, 4, 3, NOW(), NOW(), 0, 0);
 
 -- ----------------------------------------
 -- 6. 字典类型 (sys_dict_type)

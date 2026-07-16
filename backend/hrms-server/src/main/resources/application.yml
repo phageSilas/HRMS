@@ -87,6 +87,20 @@ hrms:
   aes:
     secret-key: ${HRMS_AES_KEY:hrms-default-aes-key-256-bit-long-key-2026}
 
+  # AI 智能助手配置（模块 M9）
+  # DashScope（阿里云百炼）统一负责：LLM 对话生成 + 知识库 RAG 检索
+  # 使用 OpenAI 兼容模式接口（/compatible-mode/v1/chat/completions）
+  ai:
+    dashscope:
+      api-key: ${DASHSCOPE_API_KEY:}
+      # 百炼 OpenAI 兼容模式地址
+      base-url: https://dashscope.aliyuncs.com/compatible-mode
+      # 通义千问模型：qwen3.7-plus（推荐）、qwen-plus、qwen-max（最强）、qwen-turbo（最快）
+      model: qwen3.7-plus
+      timeout: 60000
+      # 百炼知识库 ID（可选），未配置时不影响基础对话
+      knowledge-base-id: ${DASHSCOPE_KNOWLEDGE_BASE_ID:}
+
 # SpringDoc OpenAPI
 springdoc:
   api-docs:
