@@ -15,7 +15,7 @@ const { Text } = Typography;
 
 interface UserMenuProps {
   currentUser?: UserInfo;
-  avatarUrl: string;
+  avatarUrl?: string;
   children: React.ReactNode;
   onLogout: () => void;
 }

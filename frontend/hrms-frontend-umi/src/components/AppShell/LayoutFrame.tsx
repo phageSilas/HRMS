@@ -9,7 +9,7 @@ import styles from './index.less';
 
 interface LayoutFrameProps {
   currentUser?: UserInfo;
-  avatarUrl: string;
+  avatarUrl?: string;
   displayName: string;
   onLogout: () => void;
   children?: React.ReactNode;

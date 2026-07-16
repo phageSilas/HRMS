@@ -75,9 +75,7 @@ export async function getInitialState(): Promise<InitialState> {
  * Layout 配置
  */
 export const layout: RunTimeLayoutConfig = ({ initialState }) => {
-  const avatarUrl =
-    initialState?.currentUser?.avatar ||
-    'https://gw.alipayobjects.com/zos/antfincdn/efFD%24gQ%24g/LC_ChangX.png';
+  const avatarUrl = initialState?.currentUser?.avatar;
   const displayName =
     initialState?.currentUser?.nickname ||
     initialState?.currentUser?.username ||

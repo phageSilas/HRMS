@@ -13,6 +13,8 @@ interface WorkTab {
   fixed?: boolean;
 }
 
+type StoredWorkTab = Omit<WorkTab, 'icon'>;
+
 const homeTab: WorkTab = {
   path: '/home',
   title: '首页',
@@ -24,8 +26,17 @@ function readTabs(): WorkTab[] {
   try {
     const text = sessionStorage.getItem('hrms-work-tabs');
     if (!text) return [homeTab];
-    const parsed = JSON.parse(text) as WorkTab[];
-    return parsed.length > 0 ? parsed : [homeTab];
+    const parsed = JSON.parse(text) as StoredWorkTab[];
+    if (parsed.length === 0) return [homeTab];
+    return parsed.map((tab) => {
+      const meta = getRouteMeta(tab.path);
+      return {
+        path: tab.path,
+        title: tab.title || meta.title,
+        fixed: tab.fixed || meta.fixed,
+        icon: meta.icon,
+      };
+    });
   } catch {
     return [homeTab];
   }
@@ -54,7 +65,12 @@ const WorkTabs: React.FC = () => {
   }, [activePath]);
 
   useEffect(() => {
-    sessionStorage.setItem('hrms-work-tabs', JSON.stringify(tabs));
+    const storedTabs: StoredWorkTab[] = tabs.map(({ path, title, fixed }) => ({
+      path,
+      title,
+      fixed,
+    }));
+    sessionStorage.setItem('hrms-work-tabs', JSON.stringify(storedTabs));
   }, [tabs]);
 
   const closeTab = (path: string) => {
