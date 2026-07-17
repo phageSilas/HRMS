@@ -4,26 +4,50 @@
  */
 
 import request from '@/utils/request';
-import type { Result, PageResult, PageQuery } from '@/types/api';
+import type { PageQuery, PageResult } from '@/types/api';
 
 // ============ 类型定义 ============
 
-export interface SalaryAccount {
-  id: number;
-  name: string;
-  description: string;
-  baseSalary: number;
-  probationSalaryRatio: number;
-  status: number;
+export interface SalaryTemplateItem {
+  id?: number;
+  itemCode: string;
+  itemName: string;
+  category: string;
+  calcRule?: string;
+  defaultValue?: number | string;
+  sortNo?: number;
 }
 
-export interface SalaryItem {
+export interface SalaryTemplate {
   id: number;
-  accountId: number;
-  name: string;
-  type: number;  // 1-应发 2-应扣
-  formula: string;
-  sort: number;
+  templateName: string;
+  templateCode?: string;
+  scopeType?: string;
+  scopeValue?: string;
+  scopeName?: string;
+  effectiveDate?: string;
+  status?: number;
+  itemCount?: number;
+  remark?: string;
+  createTime?: string;
+  items: SalaryTemplateItem[];
+}
+
+export interface SalaryTemplateQuery extends Partial<PageQuery> {
+  templateName?: string;
+  scope?: string;
+  status?: number;
+}
+
+export interface SalaryTemplateCreateOrUpdateRequest {
+  templateName: string;
+  templateCode?: string;
+  scopeType?: string;
+  scopeValue?: string;
+  effectiveDate?: string;
+  status?: number;
+  remark?: string;
+  items?: SalaryTemplateItem[];
 }
 
 export interface SalaryBatch {
@@ -62,32 +86,43 @@ export interface Payslip {
   actualSalary: number;
 }
 
-export interface SalaryAccountQuery extends PageQuery {
-  keyword?: string;
-  status?: number;
-}
-
 // ============ 薪资账套接口 ============
 
 /**
  * 获取薪资账套列表
  */
-export async function getSalaryAccountList(params: SalaryAccountQuery) {
-  return request.get<Result<PageResult<SalaryAccount>>>('/salary-accounts', { params });
+export async function getSalaryTemplateList(params: SalaryTemplateQuery) {
+  return request.get<PageResult<SalaryTemplate>>('/api/v1/salary/templates', { params });
 }
 
 /**
- * 获取薪资账套详情
+ * 创建薪资账套
  */
-export async function getSalaryAccountDetail(id: number) {
-  return request.get<Result<SalaryAccount>>(`/salary-accounts/${id}`);
+export async function createSalaryTemplate(data: SalaryTemplateCreateOrUpdateRequest) {
+  return request.post<SalaryTemplate>('/api/v1/salary/templates', data);
+}
+
+/**
+ * 更新薪资账套
+ */
+export async function updateSalaryTemplate(
+  id: number,
+  data: SalaryTemplateCreateOrUpdateRequest,
+) {
+  return request.put<SalaryTemplate>(`/api/v1/salary/templates/${id}`, data);
 }
 
 /**
  * 获取员工薪资档案（跨模块接口）
  */
 export async function getEmployeeSalaryAccount(employeeId: number) {
-  return request.get<Result<{ employeeId: number; salaryAccountId: number; salaryAccountName: string; baseSalary: number; probationSalaryRatio: number }>>(`/salary/account/${employeeId}`);
+  return request.get<{
+    employeeId: number;
+    salaryAccountId: number;
+    salaryAccountName: string;
+    baseSalary: number;
+    probationSalaryRatio: number;
+  }>(`/api/v1/salary/employees/${employeeId}/profile`);
 }
 
 // ============ 薪资核算接口 ============
@@ -96,14 +131,14 @@ export async function getEmployeeSalaryAccount(employeeId: number) {
  * 获取薪资批次列表
  */
 export async function getSalaryBatchList(params: PageQuery & { yearMonth?: string }) {
-  return request.get<Result<PageResult<SalaryBatch>>>('/salary/batches', { params });
+  return request.get<PageResult<SalaryBatch>>('/salary/batches', { params });
 }
 
 /**
  * 发起薪资核算
  */
 export async function calculateSalary(data: { yearMonth: string; departmentIds?: number[] }) {
-  return request.post<Result<SalaryBatch>>('/salary/calculate', data);
+  return request.post<SalaryBatch>('/salary/calculate', data);
 }
 
 // ============ 工资条接口 ============
@@ -112,12 +147,12 @@ export async function calculateSalary(data: { yearMonth: string; departmentIds?:
  * 获取工资条列表
  */
 export async function getPayslipList(params: PageQuery & { yearMonth?: string }) {
-  return request.get<Result<PageResult<SalaryDetail>>>('/salary/payslips', { params });
+  return request.get<PageResult<SalaryDetail>>('/salary/payslips', { params });
 }
 
 /**
  * 获取工资条详情
  */
 export async function getPayslipDetail(employeeId: number, yearMonth: string) {
-  return request.get<Result<Payslip>>(`/salary/payslips/${employeeId}/${yearMonth}`);
+  return request.get<Payslip>(`/salary/payslips/${employeeId}/${yearMonth}`);
 }

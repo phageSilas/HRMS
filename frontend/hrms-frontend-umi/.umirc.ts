@@ -23,6 +23,23 @@ export default defineConfig({
       target: 'http://localhost:8080',
       changeOrigin: true,
     },
+    '/employees': {
+      target: 'http://localhost:8080',
+      changeOrigin: true,
+    },
+    '/departments': {
+      target: 'http://localhost:8080',
+      changeOrigin: true,
+    },
+    '/leave-requests': {
+      target: 'http://localhost:8080',
+      changeOrigin: true,
+    },
+    '/approval': {
+      target: 'http://localhost:8080',
+      changeOrigin: true,
+    },
+    '/my': {
     '/v3/api-docs': {
       target: 'http://localhost:8080',
       changeOrigin: true,
