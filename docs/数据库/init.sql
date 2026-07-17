@@ -1012,7 +1012,7 @@ CREATE TABLE `hr_attendance_overtime` (
   KEY `idx_hr_att_overtime_employee` (`employee_id`),
   KEY `idx_hr_att_overtime_date` (`overtime_date`),
   KEY `idx_hr_att_overtime_status` (`approval_status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='加班申请表'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='加班申请表';
 
 
 
