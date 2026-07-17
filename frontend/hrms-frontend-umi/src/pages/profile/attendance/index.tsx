@@ -345,6 +345,7 @@ const ProfileAttendancePage: React.FC = () => {
                 ))}
               {calendarDays.map((day) => {
                 const dayNum = dayjs(day.date).date();
+                const isMissed = day.status === 'MISSED';
 
                 return (
                   <Col span={3} key={day.date}>
@@ -356,8 +357,16 @@ const ProfileAttendancePage: React.FC = () => {
                         backgroundColor: STATUS_BG_MAP[day.status] || '#fff',
                         border: '1px solid ' + (STATUS_COLOR_MAP[day.status] || '#f0f0f0'),
                         minHeight: 60,
-                        cursor: 'pointer',
+                        cursor: isMissed ? 'pointer' : 'default',
+                        transition: 'all 0.2s',
                       }}
+                      onClick={() => {
+                        if (isMissed) {
+                          makeupForm.setFieldsValue({ correctionDate: dayjs(day.date) });
+                          setMakeupModalOpen(true);
+                        }
+                      }}
+                      title={isMissed ? '点击申请补卡' : undefined}
                     >
                       <div style={{ fontWeight: 500, fontSize: 14 }}>{dayNum}</div>
                       <Tag
@@ -518,6 +527,7 @@ const ProfileAttendancePage: React.FC = () => {
           </Form.Item>
         </Form>
       </Modal>
+
     </PageContainer>
   );
 };

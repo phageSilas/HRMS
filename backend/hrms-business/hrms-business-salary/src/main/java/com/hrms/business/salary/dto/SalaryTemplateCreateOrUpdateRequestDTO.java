@@ -7,6 +7,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -26,6 +27,8 @@ public class SalaryTemplateCreateOrUpdateRequestDTO {
     private String scopeType;
 
     private String scopeValue;
+
+    private LocalDate effectiveDate;
 
     private Integer status;
 

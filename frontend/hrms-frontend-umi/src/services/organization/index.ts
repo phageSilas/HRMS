@@ -97,6 +97,7 @@ export interface PostItem {
   createTime: string;
 }
 
+<<<<<<< HEAD
 /**
  * 职位查询参数
  */
@@ -160,6 +161,11 @@ export interface DictDataItem {
   status: number;
   remark: string;
 }
+
+/**
+ * 字典数据（别名，保持兼容性）
+ */
+export type DictData = DictDataItem;
 
 /**
  * 创建字典类型请求

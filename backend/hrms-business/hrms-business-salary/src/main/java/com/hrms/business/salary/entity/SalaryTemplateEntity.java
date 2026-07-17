@@ -5,6 +5,8 @@ import com.hrms.common.entity.BaseEntity;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
+import java.time.LocalDate;
+
 /**
  * 薪资账套实体，对齐 hr_salary_template 表。
  */
@@ -20,6 +22,8 @@ public class SalaryTemplateEntity extends BaseEntity {
     private String scopeType;
 
     private String scopeValue;
+
+    private LocalDate effectiveDate;
 
     private Integer status;
 

@@ -46,6 +46,50 @@ export interface AttendanceSummary {
   overtimeHours: number;
 }
 
+export interface AttendanceTrendPoint {
+  date: string | number[];
+  attendanceRate: number | string;
+  actualDays: number;
+  expectedDays: number;
+}
+
+export interface AttendanceDeptDistribution {
+  deptId: number;
+  deptName: string;
+  actualDays: number;
+  expectedDays: number;
+  attendanceRate: number | string;
+}
+
+export interface AttendanceExceptionPie {
+  type: string;
+  count: number;
+}
+
+export interface AttendanceEmployeeRanking {
+  employeeId: number;
+  employeeName: string;
+  employeeNo: string;
+  deptName: string;
+  abnormalCount: number;
+  lateCount: number;
+  earlyLeaveCount: number;
+  absentCount: number;
+}
+
+export interface AttendanceSummaryDashboard {
+  expectedDays: number;
+  actualDays: number;
+  lateCount: number;
+  earlyLeaveCount: number;
+  absentCount: number;
+  leaveCount: number | string;
+  dailyTrend: AttendanceTrendPoint[];
+  deptDistribution: AttendanceDeptDistribution[];
+  exceptionPie: AttendanceExceptionPie[];
+  employeeRanking: AttendanceEmployeeRanking[];
+}
+
 export interface AttendanceQuery extends PageQuery {
   employeeId?: number;
   departmentId?: number;
@@ -159,6 +203,58 @@ export interface AttendanceGroupRecord {
   statusName?: string;
 }
 
+export interface AttendanceLeaveManageQuery extends Partial<PageQuery> {
+  yearMonth?: string;
+  deptId?: number;
+  keyword?: string;
+  approvalStatus?: number;
+}
+
+export interface AttendanceLeaveManageItem {
+  id: number;
+  employeeId: number;
+  employeeName: string;
+  employeeNo?: string;
+  deptId?: number;
+  deptName?: string;
+  leaveType?: string;
+  leaveTypeDesc?: string;
+  startTime?: string;
+  endTime?: string;
+  totalDays?: number | string;
+  leaveReason?: string;
+  approvalStatus?: number;
+  approvalStatusDesc?: string;
+  approvalInstanceId?: number;
+  currentNodeName?: string;
+  currentApproverName?: string;
+  createTime?: string;
+}
+
+export interface AttendanceLeaveType {
+  id: number;
+  label: string;
+  value: string;
+}
+
+export interface AttendanceLeaveCreateRequest {
+  leaveTypeId?: number;
+  leaveType?: string;
+  startDate: string;
+  startPeriod: 'AM' | 'PM';
+  endDate: string;
+  endPeriod: 'AM' | 'PM';
+  reason?: string;
+  attachmentFileId?: number;
+  attachment?: string;
+}
+
+export interface AttendanceLeaveCreateResult {
+  leaveId?: number;
+  approvalInstanceId?: number;
+  approvalStatus?: number;
+}
+
 // ============ 考勤组接口 ============
 
 /**
@@ -242,11 +338,34 @@ export async function createLeaveRequest(data: Partial<LeaveRequest>) {
   return request.post<LeaveRequest>('/leave-requests', data);
 }
 
+/**
+ * 获取管理侧请假列表
+ */
+export async function getAttendanceLeaveManageList(params: AttendanceLeaveManageQuery) {
+  return request.get<PageResult<AttendanceLeaveManageItem>>('/api/v1/attendance/leaves', {
+    params,
+  });
+}
+
+/**
+ * 获取启用的请假类型
+ */
+export async function getAttendanceLeaveTypes() {
+  return request.get<AttendanceLeaveType[]>('/api/v1/leaves/types');
+}
+
 // ============ 考勤汇总接口 ============
 
 /**
  * 获取员工考勤汇总（跨模块接口）
  */
+/**
+ * 提交请假申请
+ */
+export async function createAttendanceLeave(data: AttendanceLeaveCreateRequest) {
+  return request.post<AttendanceLeaveCreateResult>('/api/v1/leaves', data);
+}
+
 export async function getAttendanceSummary(employeeId: number, yearMonth: string) {
   return request.get<AttendanceSummary>(`/attendance/summary/${employeeId}/${yearMonth}`);
 }
@@ -256,4 +375,16 @@ export async function getAttendanceSummary(employeeId: number, yearMonth: string
  */
 export async function getAttendanceStatistics(params: { yearMonth: string; departmentId?: number }) {
   return request.get<AttendanceSummary[]>('/attendance/statistics', { params });
+}
+
+/**
+ * 获取HR和主管考勤统计看板。
+ */
+export async function getAttendanceSummaryDashboard(params: {
+  yearMonth: string;
+  deptId?: number;
+}) {
+  return request.get<AttendanceSummaryDashboard>('/api/v1/attendance/summary/dashboard', {
+    params,
+  });
 }

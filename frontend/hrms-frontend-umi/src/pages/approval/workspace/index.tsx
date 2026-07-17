@@ -30,6 +30,7 @@ const BUSINESS_TYPE_OPTIONS = [
   { label: '离职审批', value: 'LEAVE' },
   { label: '请假审批', value: 'LEAVE_REQUEST' },
   { label: '补卡审批', value: 'CORRECTION' },
+  { label: '加班审批', value: 'OVERTIME' },
   { label: '薪资批次审批', value: 'SALARY' },
 ];
 

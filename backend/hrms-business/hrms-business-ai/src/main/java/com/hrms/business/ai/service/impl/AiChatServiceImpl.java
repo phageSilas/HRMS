@@ -287,9 +287,9 @@ public class AiChatServiceImpl implements AiChatService {
         sb.append("\n## 意图识别与路由建议\n");
         sb.append("识别用户的操作意图，在回答末尾输出路由建议。格式如下：\n\n");
         sb.append("---SUGGESTIONS---\n");
-        sb.append("[{\"label\":\"去请假\",\"path\":\"/attendance/leave\"}]\n\n");
+        sb.append("[{\"label\":\"去请假管理\",\"path\":\"/attendance/leaveManage\"}]\n\n");
         sb.append("### 可识别的意图与对应路由\n");
-        sb.append("- 请假相关 → /attendance/leave\n");
+        sb.append("- 请假管理相关 → /attendance/leaveManage\n");
         sb.append("- 查工资/薪资/工资条 → /salary/payslip\n");
         sb.append("- 查考勤记录 → /attendance/record\n");
         sb.append("- 查加班 → /attendance/record\n");

@@ -11,13 +11,15 @@ export default defineConfig({
   },
   // Mock 配置（已关闭，请求直接通过 proxy 转发到后端）
   mock: false,
-  // 代理配置（全量转发至后端 /api/v1/* 和其他模块前缀）
+  // 代理配置：仅保留 /api/v1/* 统一前缀，删除各模块独立规则
+  // 所有后端 Controller 均已注册在 /api/v1/* 下，独立规则会拦截 SPA 路由（如 /approval/workspace）
   proxy: {
     '/api/v1': {
       target: 'http://localhost:8080',
       changeOrigin: true,
     },
-    '/auth': {
+    // Swagger UI 代理
+    '/swagger-ui': {
       target: 'http://localhost:8080',
       changeOrigin: true,
     },
@@ -37,11 +39,8 @@ export default defineConfig({
       target: 'http://localhost:8080',
       changeOrigin: true,
     },
-    '/salary': {
-      target: 'http://localhost:8080',
-      changeOrigin: true,
-    },
     '/my': {
+    '/v3/api-docs': {
       target: 'http://localhost:8080',
       changeOrigin: true,
     },
@@ -211,9 +210,15 @@ export default defineConfig({
         },
         {
           path: '/attendance/leave',
-          name: '请假申请',
-          access: 'attendanceManage',
+          name: '我的请假',
           component: '@/pages/attendance/leave',
+          hideInMenu: true,
+        },
+        {
+          path: '/attendance/leaveManage',
+          name: '请假管理',
+          access: 'attendanceManage',
+          component: '@/pages/attendance/leaveManage',
         },
         {
           path: '/attendance/summary',
@@ -265,7 +270,7 @@ export default defineConfig({
         },
         {
           path: '/approval/delegation',
-          name: '审批配置',
+          name: '委托审批',
           component: '@/pages/approval/delegation',
         },
         {
@@ -302,7 +307,7 @@ export default defineConfig({
         {
           path: '/profile/leave',
           name: '我的请假',
-          component: '@/pages/profile/leave',
+          redirect: '/attendance/leave',
         },
         {
           path: '/profile/salary',

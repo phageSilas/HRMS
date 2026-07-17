@@ -277,12 +277,9 @@ INSERT IGNORE INTO `sys_role` (`id`, `role_name`, `role_code`, `data_scope`, `st
 --      赵六(id=5) → BOSS
 -- ============================================================
 INSERT IGNORE INTO `sys_user_role` (`id`, `user_id`, `role_id`, `create_time`, `update_time`, `is_deleted`, `version`) VALUES
-    (100, 3, 10, NOW(), NOW(), 0, 0),   -- 李四 → HR_HEAD
-    (101, 4, 11, NOW(), NOW(), 0, 0),   -- 王五 → FINANCE_HEAD
-    (102, 5, 12, NOW(), NOW(), 0, 0),   -- 赵六 → BOSS
-    -- 2026.07.17 10:28 补充角色分配（审批权限区分）
-    (103, 2, 3,  NOW(), NOW(), 0, 0),   -- 张三 → MANAGER（技术部经理，审批人权限）
-    (104, 6, 5,  NOW(), NOW(), 0, 0);   -- 孙七 → EMPLOYEE（普通员工，无审批权限）
+    (100, 3, 10, NOW(), NOW(), 0, 0),
+    (101, 4, 11, NOW(), NOW(), 0, 0),
+    (102, 5, 12, NOW(), NOW(), 0, 0);
 
 -- ============================================================
 -- 17. 薪资批次数据 (hr_salary_batch) — 测试工资条用
@@ -314,91 +311,49 @@ UPDATE hr_salary_batch_item SET employee_id = 6 WHERE id IN (1,3) AND employee_i
 INSERT IGNORE INTO `hr_attendance_overtime` (`id`, `employee_id`, `overtime_date`, `duration`, `reason`, `approval_status`, `create_time`, `update_time`, `is_deleted`, `version`) VALUES
     (1, 5, '2026-07-10 18:00:00', 3.0, '项目上线紧急支持', 2, NOW(), NOW(), 0, 0);
 
--- ============================================================
--- 22. 审批中心测试数据 (M7)
--- 添加时间: 2026.07.17 10:28
--- 说明: 包含请假、补卡、加班、入职、转正等多种审批类型的实例与任务
--- ============================================================
+# 新增用户职级字段
+START TRANSACTION;
 
--- ============================================================
--- 22a. 审批实例数据 (hr_approval_instance)
--- 申请人孙七(user_id=6)的请假/补卡/加班审批
--- ============================================================
-INSERT IGNORE INTO `hr_approval_instance` (`id`, `approval_no`, `approval_type`, `biz_id`, `title`, `applicant_user_id`, `applicant_employee_id`, `current_node_name`, `approval_status`, `form_json`, `apply_time`, `finish_time`, `create_time`, `update_time`, `is_deleted`, `version`) VALUES
-(1,  'APR20260716210434', 'LEAVE_REQUEST', 2,  '年假申请-07/20', 6, 5, '直接上级审批', 1,
-  '{"leaveType":"ANNUAL","startTime":"2026-07-20 09:00","endTime":"2026-07-20 18:00","totalDays":1,"totalHours":8,"leaveReason":"test"}',
-  '2026-07-16 21:04:34', NULL, NOW(), NOW(), 0, 0),
-(3,  'APR20260716210737', 'CORRECTION',   2,  '补卡申请-07/15上班卡', 6, 5, '直接上级审批', 1,
-  '{"correctionDate":"2026-07-15","correctionType":"CLOCK_IN","correctionReason":"test"}',
-  '2026-07-16 21:07:38', NULL, NOW(), NOW(), 0, 0),
-(4,  'APR20260716210818', 'CORRECTION',   3,  '补卡申请-07/14下班卡', 6, 5, '直接上级审批', 1,
-  '{"correctionDate":"2026-07-14","correctionType":"CLOCK_OUT","correctionReason":"test"}',
-  '2026-07-16 21:08:19', NULL, NOW(), NOW(), 0, 0),
-(5,  'APR20260716210913', 'LEAVE_REQUEST', 4,  '年假申请-07/21', 6, 5, '直接上级审批', 1,
-  '{"leaveType":"ANNUAL","startTime":"2026-07-21 09:00","endTime":"2026-07-21 18:00","totalDays":1,"totalHours":8,"leaveReason":"年假测试"}',
-  '2026-07-16 21:09:14', NULL, NOW(), NOW(), 0, 0),
-(6,  'APR20260716211444', 'LEAVE_REQUEST', 5,  '病假申请-07/22', 6, 5, '直接上级审批', 1,
-  '{"leaveType":"SICK","startTime":"2026-07-22 09:00","endTime":"2026-07-22 18:00","totalDays":1,"totalHours":8,"leaveReason":"病假测试"}',
-  '2026-07-16 21:14:44', NULL, NOW(), NOW(), 0, 0),
-(7,  'APR20260716211521', 'LEAVE_REQUEST', 6,  '年假申请-07/23', 6, 5, '直接上级审批', 1,
-  '{"leaveType":"ANNUAL","startTime":"2026-07-23 09:00","endTime":"2026-07-23 18:00","totalDays":1,"totalHours":8,"leaveReason":"测试上级审批"}',
-  '2026-07-16 21:15:22', NULL, NOW(), NOW(), 0, 0),
-(8,  'APR20260716214754', 'OVERTIME',      3,  '加班申请-紧急Bug修复', 6, 5, '直接上级审批', 2,
-  '{"overtimeDate":"2026-07-16 19:00","duration":2.5,"reason":"紧急Bug修复"}',
-  '2026-07-16 21:47:54', '2026-07-16 21:49:42', NOW(), NOW(), 0, 1),
-(9,  'APR20260716214951', 'OVERTIME',      4,  '加班申请-Night build', 6, 5, '直接上级审批', 3,
-  '{"overtimeDate":"2026-07-17 20:00","duration":1.5,"reason":"Night build"}',
-  '2026-07-16 21:49:52', '2026-07-16 21:50:04', NOW(), NOW(), 0, 1);
+INSERT INTO sys_dict_type (
+    dict_name,
+    dict_type,
+    status,
+    remark,
+    create_by,
+    update_by,
+    is_deleted
+) VALUES (
+             '职级',
+             'job_level',
+             1,
+             '薪资账套适用范围-职级',
+             1,
+             1,
+             0
+         );
 
--- ============================================================
--- 22b. 审批任务数据 (hr_approval_task)
--- 审批人为张三(user_id=2，孙七的直接上级)
--- ============================================================
-INSERT IGNORE INTO `hr_approval_task` (`id`, `instance_id`, `node_code`, `node_name`, `approver_user_id`, `original_approver_id`, `delegate_flag`, `task_status`, `approve_result`, `approve_comment`, `receive_time`, `approve_time`, `deadline_time`, `sort_no`, `create_time`, `update_time`) VALUES
-(1, 1, 'SUPERIOR', '直接上级审批', 2, NULL, 0, 0, NULL, NULL, '2026-07-16 21:04:35', NULL, '2026-07-19 21:04:34', 1, NOW(), NOW()),
-(2, 3, 'SUPERIOR', '直接上级审批', 2, NULL, 0, 0, NULL, NULL, '2026-07-16 21:07:38', NULL, '2026-07-19 21:07:37', 1, NOW(), NOW()),
-(3, 4, 'SUPERIOR', '直接上级审批', 2, NULL, 0, 0, NULL, NULL, '2026-07-16 21:08:19', NULL, '2026-07-19 21:08:18', 1, NOW(), NOW()),
-(4, 5, 'SUPERIOR', '直接上级审批', 2, NULL, 0, 0, NULL, NULL, '2026-07-16 21:09:14', NULL, '2026-07-19 21:09:13', 1, NOW(), NOW()),
-(5, 6, 'SUPERIOR', '直接上级审批', 2, NULL, 0, 0, NULL, NULL, '2026-07-16 21:14:44', NULL, '2026-07-19 21:14:44', 1, NOW(), NOW()),
-(6, 7, 'SUPERIOR', '直接上级审批', 2, NULL, 0, 0, NULL, NULL, '2026-07-16 21:15:22', NULL, '2026-07-19 21:15:21', 1, NOW(), NOW()),
-(7, 8, 'SUPERIOR', '直接上级审批', 2, NULL, 0, 1, 1, 'Approved',  '2026-07-16 21:47:54', '2026-07-16 21:49:42', '2026-07-19 21:47:54', 1, NOW(), NOW()),
-(8, 9, 'SUPERIOR', '直接上级审批', 2, NULL, 0, 1, 2, 'Rejected, work hours only', '2026-07-16 21:49:52', '2026-07-16 21:50:04', '2026-07-19 21:49:51', 1, NOW(), NOW());
+INSERT INTO sys_dict_data (
+    dict_type,
+    dict_label,
+    dict_value,
+    css_class,
+    sort,
+    status,
+    remark,
+    create_by,
+    update_by,
+    is_deleted
+) VALUES
+      ('job_level', 'P1', 'P1', NULL, 1, 1, '职级', 1, 1, 0),
+      ('job_level', 'P2', 'P2', NULL, 2, 1, '职级', 1, 1, 0),
+      ('job_level', 'P3', 'P3', NULL, 3, 1, '职级', 1, 1, 0),
+      ('job_level', 'P4', 'P4', NULL, 4, 1, '职级', 1, 1, 0),
+      ('job_level', 'P5', 'P5', NULL, 5, 1, '职级', 1, 1, 0),
+      ('job_level', 'P6', 'P6', NULL, 6, 1, '职级', 1, 1, 0),
+      ('job_level', 'P7', 'P7', NULL, 7, 1, '职级', 1, 1, 0),
+      ('job_level', 'P8', 'P8', NULL, 8, 1, '职级', 1, 1, 0),
+      ('job_level', 'M1', 'M1', NULL, 9, 1, '职级', 1, 1, 0),
+      ('job_level', 'M2', 'M2', NULL, 10, 1, '职级', 1, 1, 0),
+      ('job_level', 'M3', 'M3', NULL, 11, 1, '职级', 1, 1, 0);
 
--- ============================================================
--- 22c. 委托审批数据 (hr_approval_delegation)
--- ============================================================
-INSERT IGNORE INTO `hr_approval_delegation` (`id`, `delegator_id`, `delegator_name`, `delegate_to_id`, `delegate_to_name`, `start_date`, `end_date`, `reason`, `status`, `create_time`, `update_time`) VALUES
-(1, 1, '系统管理员', 2, '张三', '2026-07-15 00:00:00', '2026-07-31 23:59:59', '出差委托', 0, NOW(), NOW()),
-(2, 1, '系统管理员', 2, '张三', '2026-07-25 00:00:00', '2026-07-26 23:59:59', '出差审批委托', 1, NOW(), NOW());
-
--- ============================================================
--- 23. 数据修复（针对已有数据库的存量数据修正）
--- 添加时间: 2026.07.17 10:28
--- 说明: 如果上述 INSERT IGNORE 因主键冲突未生效（数据库已存在旧数据），
---       则执行以下 UPDATE 修复旧数据中的字段值问题。
---       新数据库无需执行（INSERT IGNORE 已插入正确值）。
--- ============================================================
-
--- 23a. 修复委托记录中的名称（旧数据存储了用户ID而非姓名） 2026.07.17 10:58
-UPDATE hr_approval_delegation SET delegator_name = '系统管理员' WHERE id = 1 AND delegator_name NOT IN ('系统管理员', '张三', '李四', '王五', '赵六', '孙七');
-UPDATE hr_approval_delegation SET delegate_to_name = '张三' WHERE id = 1 AND delegate_to_name NOT IN ('系统管理员', '张三', '李四', '王五', '赵六', '孙七');
-UPDATE hr_approval_delegation SET delegate_to_name = '张三' WHERE id = 2 AND (delegate_to_name = '系统管理员' OR delegate_to_name = '1');
-
--- 23b. 补充任务截止时间（按申请时间+72h设置默认截止时间） 2026.07.17 10:58
-UPDATE hr_approval_task t
-  JOIN hr_approval_instance i ON t.instance_id = i.id AND i.is_deleted = 0
-  SET t.deadline_time = DATE_ADD(i.apply_time, INTERVAL 3 DAY)
-  WHERE t.deadline_time IS NULL;
-
--- 23d. 修复已有截止时间早于申请时间或明显错误的旧数据（如2024年的错误日期） 2026.07.17 10:58
-UPDATE hr_approval_task t
-  JOIN hr_approval_instance i ON t.instance_id = i.id AND i.is_deleted = 0
-  SET t.deadline_time = DATE_ADD(i.apply_time, INTERVAL 3 DAY)
-  WHERE t.deadline_time IS NOT NULL
-    AND (t.deadline_time < i.apply_time
-      OR t.deadline_time < '2026-01-01 00:00:00');
-
--- 23c. 补充用户角色关联（确保审批权限区分） 2026.07.17 10:58
-INSERT IGNORE INTO `sys_user_role` (`id`, `user_id`, `role_id`, `create_time`, `update_time`, `is_deleted`, `version`) VALUES
-    (103, 2, 3, NOW(), NOW(), 0, 0),   -- 张三 → MANAGER
-    (104, 6, 5, NOW(), NOW(), 0, 0);   -- 孙七 → EMPLOYEE
+COMMIT;
