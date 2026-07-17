@@ -67,6 +67,17 @@ interface LocationState {
   location?: AmapLocationResult;
 }
 
+interface LocalTodayRecord {
+  date: string;
+  clockInTime?: string | number[];
+  clockOutTime?: string | number[];
+  clockInStatus?: string;
+  clockOutStatus?: string;
+  clockInIp?: string;
+  clockOutIp?: string;
+  dayStatus?: string;
+}
+
 type ClockPeriod = 'CLOCK_IN' | 'CLOCK_OUT';
 type BackendDateValue = string | number[] | Date | undefined | null;
 type ClockResponsePayload =
@@ -200,6 +211,7 @@ const AttendancePunchPage: React.FC = () => {
   const currentDate = now.format('YYYY-MM-DD');
   const currentMonth = now.format('YYYY-MM');
   const [clocking, setClocking] = useState(false);
+  const [localTodayRecord, setLocalTodayRecord] = useState<LocalTodayRecord>();
   const [locationState, setLocationState] = useState<LocationState>({
     status: 'idle',
     text: '点击打卡时获取高德定位',
@@ -228,6 +240,16 @@ const AttendancePunchPage: React.FC = () => {
       (item) => normalizeDate(item.date as BackendDateValue) === currentDate,
     );
   }, [calendarData?.days, currentDate]);
+
+  const resolvedTodayRecord = useMemo(() => {
+    if (todayRecord) {
+      return todayRecord;
+    }
+    if (localTodayRecord?.date === currentDate) {
+      return localTodayRecord;
+    }
+    return undefined;
+  }, [currentDate, localTodayRecord, todayRecord]);
 
   const handleSubmitClock = async (type: ClockPeriod) => {
     if (clocking) return;
@@ -275,6 +297,33 @@ const AttendancePunchPage: React.FC = () => {
       const networkIp = getClockIp(result);
       const locationDetail = formatLocationDetail(location);
 
+      setLocalTodayRecord((previous) => {
+        const baseRecord =
+          previous?.date === currentDate
+            ? previous
+            : {
+                date: currentDate,
+              };
+
+        if (result.period === 'CLOCK_OUT') {
+          return {
+            ...baseRecord,
+            clockOutTime: result.clockTime,
+            clockOutStatus: result.status,
+            clockOutIp: networkIp,
+            dayStatus: result.status || baseRecord.dayStatus,
+          };
+        }
+
+        return {
+          ...baseRecord,
+          clockInTime: result.clockTime,
+          clockInStatus: result.status,
+          clockInIp: networkIp,
+          dayStatus: result.status || baseRecord.dayStatus,
+        };
+      });
+
       Modal.success({
         title: `${label}成功`,
         content: (
@@ -288,16 +337,20 @@ const AttendancePunchPage: React.FC = () => {
         ),
         okText: '我知道了',
       });
-      refresh();
+      await refresh();
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : '打卡提交失败';
-      Modal.error({
-        title: '打卡提交失败',
-        content: errorMessage,
-        okText: '我知道了',
-      });
-      refresh();
+      await refresh();
+      if (errorMessage.includes('已打卡')) {
+        message.warning(errorMessage);
+      } else {
+        Modal.error({
+          title: '打卡提交失败',
+          content: errorMessage,
+          okText: '我知道了',
+        });
+      }
     } finally {
       setClocking(false);
     }
@@ -308,14 +361,27 @@ const AttendancePunchPage: React.FC = () => {
     return () => window.clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    setLocalTodayRecord((previous) => {
+      if (!previous) {
+        return previous;
+      }
+      if (previous.date !== currentDate) {
+        return undefined;
+      }
+      return todayRecord ? undefined : previous;
+    });
+  }, [currentDate, todayRecord]);
+
   const latestNetworkIp =
-    todayRecord?.clockOutIp || todayRecord?.clockInIp;
-  const clockInDone = Boolean(todayRecord?.clockInTime);
-  const clockOutDone = Boolean(todayRecord?.clockOutTime);
+    resolvedTodayRecord?.clockOutIp || resolvedTodayRecord?.clockInIp;
+  const clockInDone = Boolean(resolvedTodayRecord?.clockInTime);
+  const clockOutDone = Boolean(resolvedTodayRecord?.clockOutTime);
   const nextClockType: ClockPeriod = clockInDone ? 'CLOCK_OUT' : 'CLOCK_IN';
   const nextClockText = clockInDone ? '下班打卡' : '上班打卡';
   const dayStatus =
-    todayRecord?.dayStatus || (clockInDone || clockOutDone ? 'NORMAL' : undefined);
+    resolvedTodayRecord?.dayStatus ||
+    (clockInDone || clockOutDone ? 'NORMAL' : undefined);
 
   return (
     <div className={styles.punchPage}>
@@ -360,18 +426,22 @@ const AttendancePunchPage: React.FC = () => {
                         }
                       >
                         {formatTime(
-                          todayRecord?.clockInTime as BackendDateValue,
+                          resolvedTodayRecord?.clockInTime as BackendDateValue,
                         )}
                       </div>
                       <Tag
                         color={
                           clockInDone
-                            ? STATUS_COLOR_MAP[todayRecord?.clockInStatus || 'NORMAL']
+                            ? STATUS_COLOR_MAP[
+                                resolvedTodayRecord?.clockInStatus || 'NORMAL'
+                              ]
                             : 'default'
                         }
                       >
                         {clockInDone
-                          ? getStatusLabel(todayRecord?.clockInStatus || 'NORMAL')
+                          ? getStatusLabel(
+                              resolvedTodayRecord?.clockInStatus || 'NORMAL',
+                            )
                           : '待打卡'}
                       </Tag>
                     </div>
@@ -398,18 +468,22 @@ const AttendancePunchPage: React.FC = () => {
                         }
                       >
                         {formatTime(
-                          todayRecord?.clockOutTime as BackendDateValue,
+                          resolvedTodayRecord?.clockOutTime as BackendDateValue,
                         )}
                       </div>
                       <Tag
                         color={
                           clockOutDone
-                            ? STATUS_COLOR_MAP[todayRecord?.clockOutStatus || 'NORMAL']
+                            ? STATUS_COLOR_MAP[
+                                resolvedTodayRecord?.clockOutStatus || 'NORMAL'
+                              ]
                             : 'default'
                         }
                       >
                         {clockOutDone
-                          ? getStatusLabel(todayRecord?.clockOutStatus || 'NORMAL')
+                          ? getStatusLabel(
+                              resolvedTodayRecord?.clockOutStatus || 'NORMAL',
+                            )
                           : '待打卡'}
                       </Tag>
                     </div>
@@ -493,7 +567,7 @@ const AttendancePunchPage: React.FC = () => {
                 <div>
                   <div className={styles.recordTime}>
                     {formatTime(
-                      todayRecord?.clockInTime as BackendDateValue,
+                      resolvedTodayRecord?.clockInTime as BackendDateValue,
                     )}
                   </div>
                   <div className={styles.recordMeta}>
@@ -501,17 +575,21 @@ const AttendancePunchPage: React.FC = () => {
                     <Tag
                       color={
                         clockInDone
-                          ? STATUS_COLOR_MAP[todayRecord?.clockInStatus || 'NORMAL']
+                          ? STATUS_COLOR_MAP[
+                              resolvedTodayRecord?.clockInStatus || 'NORMAL'
+                            ]
                           : 'default'
                       }
                     >
                       {clockInDone
-                        ? getStatusLabel(todayRecord?.clockInStatus || 'NORMAL')
+                        ? getStatusLabel(
+                            resolvedTodayRecord?.clockInStatus || 'NORMAL',
+                          )
                         : '未打卡'}
                     </Tag>
                   </div>
                 </div>
-                <Text type="secondary">{todayRecord?.clockInIp || '--'}</Text>
+                <Text type="secondary">{resolvedTodayRecord?.clockInIp || '--'}</Text>
               </div>
 
               <div className={styles.timelineItem}>
@@ -525,7 +603,7 @@ const AttendancePunchPage: React.FC = () => {
                 <div>
                   <div className={styles.recordTime}>
                     {formatTime(
-                      todayRecord?.clockOutTime as BackendDateValue,
+                      resolvedTodayRecord?.clockOutTime as BackendDateValue,
                     )}
                   </div>
                   <div className={styles.recordMeta}>
@@ -533,17 +611,21 @@ const AttendancePunchPage: React.FC = () => {
                     <Tag
                       color={
                         clockOutDone
-                          ? STATUS_COLOR_MAP[todayRecord?.clockOutStatus || 'NORMAL']
+                          ? STATUS_COLOR_MAP[
+                              resolvedTodayRecord?.clockOutStatus || 'NORMAL'
+                            ]
                           : 'default'
                       }
                     >
                       {clockOutDone
-                        ? getStatusLabel(todayRecord?.clockOutStatus || 'NORMAL')
+                        ? getStatusLabel(
+                            resolvedTodayRecord?.clockOutStatus || 'NORMAL',
+                          )
                         : '未打卡'}
                     </Tag>
                   </div>
                 </div>
-                <Text type="secondary">{todayRecord?.clockOutIp || '--'}</Text>
+                <Text type="secondary">{resolvedTodayRecord?.clockOutIp || '--'}</Text>
               </div>
             </div>
 

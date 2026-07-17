@@ -36,7 +36,7 @@ export function usePageAutoRefresh(
       return;
     }
     triggerRefresh();
-  }, [location.key]);
+  }, [location.pathname, location.search]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
