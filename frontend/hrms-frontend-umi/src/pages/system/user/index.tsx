@@ -78,6 +78,14 @@ const UserPage: React.FC = () => {
   // 表格列定义
   const columns: ProColumns<UserItem>[] = [
     {
+      title: '关键词',
+      dataIndex: 'keyword',
+      hideInTable: true,
+      search: {
+        transform: (value: string) => ({ keyword: value }),
+      },
+    },
+    {
       title: '用户名',
       dataIndex: 'username',
       width: 120,
@@ -129,6 +137,7 @@ const UserPage: React.FC = () => {
         0: { text: '禁用', status: 'Error' },
         1: { text: '启用', status: 'Success' },
       },
+      search: false,
       render: (_, record) => statusTag(record.status),
     },
     {
