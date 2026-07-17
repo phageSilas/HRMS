@@ -72,6 +72,18 @@ public class SalaryBatchController {
     }
 
     /**
+     * 重新计算薪资批次。
+     *
+     * @param id 薪资批次ID
+     * @return 重新计算后的薪资批次
+     * 本方法使用的工具类: Result(hrms-common)
+     */
+    @PostMapping("/{id}/recalculate")
+    public Result<SalaryBatchVO> recalculateBatch(@PathVariable Long id) {
+        return Result.success(salaryService.recalculateBatch(id));
+    }
+
+    /**
      * 触发薪资核算。
      *
      * @param id 批次ID

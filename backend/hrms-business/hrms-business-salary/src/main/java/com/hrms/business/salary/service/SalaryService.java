@@ -102,6 +102,15 @@ public interface SalaryService {
     SalaryBatchItemVO saveBatchAdjustments(Long batchId, SalaryBatchAdjustmentRequestDTO requestDTO);
 
     /**
+     * 重新计算薪资批次。
+     *
+     * @param batchId 薪资批次ID
+     * @return 重新计算后的薪资批次
+     * 本方法使用的工具类: 无
+     */
+    SalaryBatchVO recalculateBatch(Long batchId);
+
+    /**
      * 触发薪资核算。
      *
      * @param batchId 批次ID

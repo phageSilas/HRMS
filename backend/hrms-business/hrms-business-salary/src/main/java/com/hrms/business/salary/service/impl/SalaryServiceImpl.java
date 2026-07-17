@@ -388,6 +388,42 @@ public class SalaryServiceImpl implements SalaryService {
     }
 
     /**
+     * 重新计算薪资批次并应用人工调整。
+     *
+     * @param batchId 薪资批次ID
+     * @return 重新计算后的薪资批次
+     * 本方法使用的工具类: StringRedisTemplate(spring-data-redis),Transactional(Spring)
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public SalaryBatchVO recalculateBatch(Long batchId) {
+        assertSalaryManagerRole();
+        SalaryBatchEntity batch = getBatchRequired(batchId);
+        if (!Set.of(SalaryBatchStatusEnum.DRAFT.name(), SalaryBatchStatusEnum.PENDING_REVIEW.name())
+                .contains(batch.getBatchStatus())) {
+            throw new GlobalException(ErrorCode.BUSINESS_ERROR, "只有草稿或待复核批次可以重新计算");
+        }
+        StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+        String lockKey = SalaryCacheKeys.calculateLock(batchId);
+        Boolean locked = redisTemplate == null ? Boolean.TRUE :
+                redisTemplate.opsForValue().setIfAbsent(lockKey, "1", 10, TimeUnit.MINUTES);
+        if (!Boolean.TRUE.equals(locked)) {
+            throw new GlobalException(ErrorCode.CONFLICT, "薪资批次正在核算中，请稍后重试");
+        }
+        try {
+            doCalculateBatch(batchId);
+            applyBatchAdjustments(batchId);
+            evictBatchCache(batchId);
+            previewBatch(batchId);
+            return toBatchVO(getBatchRequired(batchId));
+        } finally {
+            if (redisTemplate != null) {
+                redisTemplate.delete(lockKey);
+            }
+        }
+    }
+
+    /**
      * 触发薪资核算。
      *
      * @param batchId 批次ID
@@ -1494,6 +1530,38 @@ public class SalaryServiceImpl implements SalaryService {
         batch.setRedWarningCount(red);
         batch.setBlockCount(block);
         salaryBatchMapper.updateById(batch);
+    }
+
+    /**
+     * 应用薪资批次全部有效人工调整。
+     *
+     * @param batchId 薪资批次ID
+     * 本方法使用的工具类: Wrappers(MyBatis-Plus),Collectors(JDK)
+     */
+    private void applyBatchAdjustments(Long batchId) {
+        List<SalaryBatchAdjustmentEntity> adjustments = salaryBatchAdjustmentMapper.selectList(
+                Wrappers.lambdaQuery(SalaryBatchAdjustmentEntity.class)
+                        .eq(SalaryBatchAdjustmentEntity::getBatchId, batchId));
+        if (CollUtil.isEmpty(adjustments)) {
+            refreshBatchSummary(batchId);
+            return;
+        }
+        Map<Long, List<SalaryBatchAdjustmentEntity>> adjustmentMap = adjustments.stream()
+                .collect(Collectors.groupingBy(SalaryBatchAdjustmentEntity::getEmployeeId));
+        List<SalaryBatchItemEntity> items = salaryBatchItemMapper.selectList(Wrappers.lambdaQuery(SalaryBatchItemEntity.class)
+                .eq(SalaryBatchItemEntity::getBatchId, batchId));
+        for (SalaryBatchItemEntity item : items) {
+            List<SalaryBatchAdjustmentEntity> employeeAdjustments = adjustmentMap.get(item.getEmployeeId());
+            if (CollUtil.isEmpty(employeeAdjustments)) {
+                continue;
+            }
+            for (SalaryBatchAdjustmentEntity adjustment : employeeAdjustments) {
+                applyAdjustmentToItem(item, adjustment.getItemCode(), adjustment.getAdjustAmount());
+            }
+            recalculateItemAmount(item);
+            salaryBatchItemMapper.updateById(item);
+        }
+        refreshBatchSummary(batchId);
     }
 
     /**
