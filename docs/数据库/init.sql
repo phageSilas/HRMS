@@ -1012,7 +1012,7 @@ CREATE TABLE `hr_attendance_overtime` (
   KEY `idx_hr_att_overtime_employee` (`employee_id`),
   KEY `idx_hr_att_overtime_date` (`overtime_date`),
   KEY `idx_hr_att_overtime_status` (`approval_status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='加班申请表'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='加班申请表';
 
 
 
@@ -1027,3 +1027,9 @@ ALTER TABLE `hr_attendance_correction` MODIFY COLUMN `record_id` BIGINT UNSIGNED
 ALTER TABLE `sys_user`
     ADD COLUMN `dept_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '部门ID（冗余字段，避免跨模块查询）' AFTER `employee_id`,
 ADD INDEX `idx_sys_user_dept_id` (`dept_id`);
+
+
+# 添加 hr_salary_template 表的 effective_date 字段，表示账套生效日期
+ALTER TABLE hr_salary_template
+    ADD COLUMN effective_date DATE DEFAULT NULL COMMENT '账套生效日期'
+        AFTER scope_value;
