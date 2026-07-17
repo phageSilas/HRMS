@@ -1,15 +1,19 @@
 import { usePageAutoRefresh } from '@/hooks/usePageAutoRefresh';
-import type { AttendanceLeaveType } from '@/services/attendance';
-import { getAttendanceLeaveTypes } from '@/services/attendance';
+import type {
+  AttendanceLeaveCreateRequest,
+  AttendanceLeaveType,
+} from '@/services/attendance';
+import {
+  createAttendanceLeave,
+  getAttendanceLeaveTypes,
+} from '@/services/attendance';
 import {
   cancelLeave,
-  createLeave,
   getLeaveBalance,
   getLeaveList,
 } from '@/services/profile';
 import type {
   LeaveBalanceVO,
-  LeaveRequestDTO,
   LeaveVO,
 } from '@/services/profile';
 import {
@@ -40,7 +44,7 @@ import {
   message,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import dayjs from 'dayjs';
+import dayjs, { type Dayjs } from 'dayjs';
 import React, { useEffect, useMemo, useState } from 'react';
 
 const { Paragraph, Text, Title } = Typography;
@@ -67,6 +71,12 @@ const APPROVAL_RULES = [
   { leaveType: '病假/事假 > 1天', approver: '直接上级 → 部门负责人' },
   { leaveType: '婚假/产假/丧假', approver: '直接上级 → HR备案' },
 ];
+
+interface LeaveFormValues {
+  leaveType: string;
+  dateRange: [Dayjs, Dayjs];
+  leaveReason: string;
+}
 
 function formatDateTime(value?: string) {
   if (!value) {
@@ -101,10 +111,29 @@ function buildBalanceCards(balance?: LeaveBalanceVO) {
   ];
 }
 
+function resolvePeriod(value: Dayjs): 'AM' | 'PM' {
+  return value.hour() < 12 ? 'AM' : 'PM';
+}
+
+function buildAttendanceLeaveCreatePayload(
+  values: LeaveFormValues,
+): AttendanceLeaveCreateRequest {
+  const [startTime, endTime] = values.dateRange;
+  return {
+    leaveType: values.leaveType,
+    startDate: startTime.format('YYYY-MM-DD'),
+    startPeriod: resolvePeriod(startTime),
+    endDate: endTime.format('YYYY-MM-DD'),
+    endPeriod: resolvePeriod(endTime),
+    reason: values.leaveReason,
+    attachment: undefined,
+  };
+}
+
 const AttendanceLeavePage: React.FC = () => {
   const [activeTab, setActiveTab] = useState('all');
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
-  const [submitForm] = Form.useForm();
+  const [submitForm] = Form.useForm<LeaveFormValues>();
   const [balance, setBalance] = useState<LeaveBalanceVO>();
   const [leaveList, setLeaveList] = useState<LeaveVO[]>([]);
   const [leaveTypes, setLeaveTypes] = useState<AttendanceLeaveType[]>([]);
@@ -173,20 +202,10 @@ const AttendanceLeavePage: React.FC = () => {
   const handleSubmitLeave = async () => {
     try {
       const values = await submitForm.validateFields();
-      const startTime = values.dateRange[0];
-      const endTime = values.dateRange[1];
-      const totalDays = endTime.diff(startTime, 'day') + 1;
-      const payload: LeaveRequestDTO = {
-        leaveType: values.leaveType,
-        startTime: startTime.format('YYYY-MM-DDTHH:mm:ss'),
-        endTime: endTime.format('YYYY-MM-DDTHH:mm:ss'),
-        totalDays,
-        leaveReason: values.leaveReason,
-        attachmentUrl: undefined,
-      };
+      const payload = buildAttendanceLeaveCreatePayload(values);
 
       setSubmitting(true);
-      await createLeave(payload);
+      await createAttendanceLeave(payload);
       message.success('请假申请已提交');
       setSubmitModalOpen(false);
       submitForm.resetFields();
