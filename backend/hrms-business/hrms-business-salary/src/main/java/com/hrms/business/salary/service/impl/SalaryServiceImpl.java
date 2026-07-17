@@ -116,8 +116,9 @@ public class SalaryServiceImpl implements SalaryService {
         LambdaQueryWrapper<SalaryTemplateEntity> wrapper = Wrappers.lambdaQuery(SalaryTemplateEntity.class)
                 .like(StrUtil.isNotBlank(queryDTO.getTemplateName()), SalaryTemplateEntity::getTemplateName,
                         queryDTO.getTemplateName())
-                .eq(queryDTO.getStatus() != null, SalaryTemplateEntity::getStatus, queryDTO.getStatus())
-                .orderByDesc(SalaryTemplateEntity::getCreateTime);
+                .eq(queryDTO.getStatus() != null, SalaryTemplateEntity::getStatus, queryDTO.getStatus());
+        appendTemplateScopeCondition(wrapper, queryDTO.getScope());
+        wrapper.orderByDesc(SalaryTemplateEntity::getCreateTime);
         Page<SalaryTemplateEntity> page = salaryTemplateMapper.selectPage(
                 Page.of(queryDTO.getPageNum(), queryDTO.getPageSize()), wrapper);
         List<Long> templateIds = page.getRecords().stream().map(SalaryTemplateEntity::getId).toList();
@@ -144,6 +145,7 @@ public class SalaryServiceImpl implements SalaryService {
         entity.setTemplateCode(StrUtil.blankToDefault(requestDTO.getTemplateCode(), "SAL-TPL-" + IdUtil.fastSimpleUUID().substring(0, 12)));
         entity.setScopeType(normalizeScopeType(requestDTO.getScopeType()));
         entity.setScopeValue(requestDTO.getScopeValue());
+        entity.setEffectiveDate(requestDTO.getEffectiveDate());
         entity.setStatus(Optional.ofNullable(requestDTO.getStatus()).orElse(1));
         entity.setRemark(requestDTO.getRemark());
         salaryTemplateMapper.insert(entity);
@@ -170,6 +172,7 @@ public class SalaryServiceImpl implements SalaryService {
         }
         entity.setScopeType(normalizeScopeType(requestDTO.getScopeType()));
         entity.setScopeValue(requestDTO.getScopeValue());
+        entity.setEffectiveDate(requestDTO.getEffectiveDate());
         entity.setStatus(Optional.ofNullable(requestDTO.getStatus()).orElse(entity.getStatus()));
         entity.setRemark(requestDTO.getRemark());
         salaryTemplateMapper.updateById(entity);
@@ -969,6 +972,8 @@ public class SalaryServiceImpl implements SalaryService {
                 .templateCode(entity.getTemplateCode())
                 .scopeType(entity.getScopeType())
                 .scopeValue(entity.getScopeValue())
+                .scopeName(resolveScopeName(entity.getScopeType()))
+                .effectiveDate(entity.getEffectiveDate())
                 .status(entity.getStatus())
                 .remark(entity.getRemark())
                 .createTime(entity.getCreateTime())
@@ -1120,17 +1125,83 @@ public class SalaryServiceImpl implements SalaryService {
         if ("DEPARTMENT".equals(normalized)) {
             return "DEPT";
         }
-        if (!Set.of("ALL", "DEPT", "EMPLOYEE").contains(normalized)) {
-            throw new GlobalException(ErrorCode.PARAM_FORMAT_ERROR, "范围类型仅支持 ALL/DEPT/EMPLOYEE");
+        if ("LEVEL".equals(normalized)) {
+            return "JOB_LEVEL";
+        }
+        if (!Set.of("ALL", "DEPT", "EMPLOYEE", "JOB_LEVEL").contains(normalized)) {
+            throw new GlobalException(ErrorCode.PARAM_FORMAT_ERROR, "范围类型仅支持 ALL/DEPT/EMPLOYEE/JOB_LEVEL");
         }
         return normalized;
     }
 
     /**
-     * 规范化薪资账套范围值。
-     * @param scopeType 范围类型
+     * 追加薪资账套适用范围查询条件。
+     *
+     * @param wrapper 查询条件构造器
+     * @param scope   适用范围查询值
+     * 本方法使用的工具类: StrUtil(hutool),LambdaQueryWrapper(MyBatis-Plus)
+     */
+    private void appendTemplateScopeCondition(LambdaQueryWrapper<SalaryTemplateEntity> wrapper, String scope) {
+        if (StrUtil.isBlank(scope)) {
+            return;
+        }
+        String scopeText = scope.trim();
+        String normalized = normalizeTemplateScopeFilter(scopeText);
+        if (normalized != null) {
+            wrapper.eq(SalaryTemplateEntity::getScopeType, normalized);
+            return;
+        }
+        wrapper.like(SalaryTemplateEntity::getScopeValue, scopeText);
+    }
+
+    /**
+     * 规范化薪资账套适用范围查询值。
+     *
+     * @param scope 适用范围查询值
+     * @return 可按范围类型查询的标准值，非范围类型时返回 null
+     * 本方法使用的工具类: Set(JDK)
+     */
+    private String normalizeTemplateScopeFilter(String scope) {
+        String normalized = scope.trim().toUpperCase();
+        if ("DEPARTMENT".equals(normalized)) {
+            return "DEPT";
+        }
+        if ("LEVEL".equals(normalized)) {
+            return "JOB_LEVEL";
+        }
+        if (Set.of("ALL", "DEPT", "EMPLOYEE", "JOB_LEVEL").contains(normalized)) {
+            return normalized;
+        }
+        return null;
+    }
+
+    /**
+     * 解析薪资账套适用范围展示名称。
+     *
+     * @param scopeType 适用范围类型
+     * @return 适用范围展示名称
+     * 本方法使用的工具类: StrUtil(hutool)
+     */
+    private String resolveScopeName(String scopeType) {
+        if (StrUtil.isBlank(scopeType)) {
+            return "全部";
+        }
+        return switch (scopeType.trim().toUpperCase()) {
+            case "ALL" -> "全部";
+            case "DEPT" -> "部门";
+            case "EMPLOYEE" -> "员工";
+            case "JOB_LEVEL" -> "职级";
+            default -> scopeType;
+        };
+    }
+
+    /**
+     * 规范化薪资批次范围值。
+     *
+     * @param scopeType  范围类型
      * @param requestDTO 请求参数
      * @return 规范化后的范围值
+     * 本方法使用的工具类: CollUtil(hutool),StrUtil(hutool),Collectors(JDK)
      */
     private String normalizeScopeValue(String scopeType, SalaryBatchCreateRequestDTO requestDTO) {
         if ("EMPLOYEE".equals(scopeType) && CollUtil.isNotEmpty(requestDTO.getEmployeeIds())) {
