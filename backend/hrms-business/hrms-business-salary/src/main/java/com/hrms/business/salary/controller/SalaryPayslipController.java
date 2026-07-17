@@ -1,11 +1,15 @@
 package com.hrms.business.salary.controller;
 
+import com.hrms.business.salary.dto.SalaryManagePayslipVerifyRequestDTO;
+import com.hrms.business.salary.dto.SalaryManagePayslipQueryDTO;
 import com.hrms.business.salary.dto.SalaryPayslipVerifyRequestDTO;
 import com.hrms.business.salary.service.SalaryService;
 import com.hrms.business.salary.vo.SalaryPayslipDetailVO;
 import com.hrms.business.salary.vo.SalaryPayslipListVO;
 import com.hrms.business.salary.vo.SalaryPayslipVerifyVO;
+import com.hrms.business.salary.vo.SalaryManagePayslipPageVO;
 import com.hrms.business.salary.vo.SalaryTrendVO;
+import com.hrms.common.web.PageResult;
 import com.hrms.common.web.Result;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -54,6 +58,44 @@ public class SalaryPayslipController {
     public Result<SalaryPayslipVerifyVO> verifyPayslip(
             @Valid @RequestBody SalaryPayslipVerifyRequestDTO requestDTO) {
         return Result.success(salaryService.verifyPayslip(requestDTO));
+    }
+
+    /**
+     * 管理端工资条二次验证。
+     *
+     * @param requestDTO 验证请求
+     * @return 验证结果
+     * 本方法使用的工具类: Result(hrms-common)
+     */
+    @PostMapping("/manage/payslip/verify")
+    public Result<SalaryPayslipVerifyVO> verifyManagePayslip(
+            @Valid @RequestBody SalaryManagePayslipVerifyRequestDTO requestDTO) {
+        return Result.success(salaryService.verifyManagePayslip(requestDTO));
+    }
+
+    /**
+     * 分页查询管理端工资条列表。
+     *
+     * @param queryDTO 查询参数
+     * @return 工资条分页结果
+     * 本方法使用的工具类: Result(hrms-common),PageResult(hrms-common)
+     */
+    @GetMapping("/manage/payslips")
+    public Result<PageResult<SalaryManagePayslipPageVO>> pageManagePayslips(
+            @Valid SalaryManagePayslipQueryDTO queryDTO) {
+        return Result.success(salaryService.pageManagePayslips(queryDTO));
+    }
+
+    /**
+     * 查询管理端工资条详情。
+     *
+     * @param id 工资条ID
+     * @return 工资条详情
+     * 本方法使用的工具类: Result(hrms-common)
+     */
+    @GetMapping("/manage/payslip/{id}")
+    public Result<SalaryPayslipDetailVO> getManagePayslipDetail(@PathVariable Long id) {
+        return Result.success(salaryService.getManagePayslipDetail(id));
     }
 
     /**
