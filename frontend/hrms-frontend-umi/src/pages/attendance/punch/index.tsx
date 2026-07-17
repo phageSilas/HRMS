@@ -72,6 +72,8 @@ interface LocalTodayRecord {
   date: string;
   clockInTime?: string | number[];
   clockOutTime?: string | number[];
+  clockInGps?: string;
+  clockOutGps?: string;
   clockInStatus?: string;
   clockOutStatus?: string;
   clockInIp?: string;
@@ -174,6 +176,7 @@ function normalizeClockResult(
     clockTime:
       normalizeDateTime(data?.clockTime as BackendDateValue) ||
       fallbackNow.format('YYYY-MM-DDTHH:mm:ss'),
+    clockGps: data?.clockGps,
     networkIp: data?.networkIp,
     clientIp: data?.clientIp,
   } satisfies AttendanceClockVO;
@@ -182,6 +185,27 @@ function normalizeClockResult(
 function formatLocationText(location?: AmapLocationResult) {
   if (!location) return '未获取定位，以后端校验结果为准';
   return `经度 ${location.longitude.toFixed(6)}，纬度 ${location.latitude.toFixed(6)}`;
+}
+
+function buildGpsText(location?: AmapLocationResult) {
+  if (!location) return undefined;
+  return `${location.latitude},${location.longitude}`;
+}
+
+function formatGpsText(value?: string) {
+  if (!value) return undefined;
+  const [latitudeText, longitudeText] = value.split(',').map((item) => item.trim());
+  if (!latitudeText || !longitudeText) {
+    return value;
+  }
+
+  const latitude = Number(latitudeText);
+  const longitude = Number(longitudeText);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return value;
+  }
+
+  return `经度 ${longitude.toFixed(6)}，纬度 ${latitude.toFixed(6)}`;
 }
 
 function formatLocationDetail(location?: AmapLocationResult) {
@@ -306,6 +330,7 @@ const AttendancePunchPage: React.FC = () => {
       );
       const label = getClockLabel(result.period);
       const networkIp = getClockIp(result);
+      const clockGps = result.clockGps || buildGpsText(location);
       const locationDetail = formatLocationDetail(location);
 
       setLocalTodayRecord((previous) => {
@@ -320,6 +345,7 @@ const AttendancePunchPage: React.FC = () => {
           return {
             ...baseRecord,
             clockOutTime: result.clockTime,
+            clockOutGps: clockGps,
             clockOutStatus: result.status,
             clockOutIp: networkIp,
             dayStatus: result.status || baseRecord.dayStatus,
@@ -329,6 +355,7 @@ const AttendancePunchPage: React.FC = () => {
         return {
           ...baseRecord,
           clockInTime: result.clockTime,
+          clockInGps: clockGps,
           clockInStatus: result.status,
           clockInIp: networkIp,
           dayStatus: result.status || baseRecord.dayStatus,
@@ -386,6 +413,9 @@ const AttendancePunchPage: React.FC = () => {
 
   const latestNetworkIp =
     resolvedTodayRecord?.clockOutIp || resolvedTodayRecord?.clockInIp;
+  const latestGpsText = formatGpsText(
+    resolvedTodayRecord?.clockOutGps || resolvedTodayRecord?.clockInGps,
+  );
   const clockInDone = Boolean(resolvedTodayRecord?.clockInTime);
   const clockOutDone = Boolean(resolvedTodayRecord?.clockOutTime);
   const nextClockType: ClockPeriod = clockInDone ? 'CLOCK_OUT' : 'CLOCK_IN';
@@ -531,11 +561,13 @@ const AttendancePunchPage: React.FC = () => {
                     >
                       {locationState.text}
                     </Tag>
-                    {locationState.location && (
+                    {latestGpsText ? (
+                      <Text type="secondary">{latestGpsText}</Text>
+                    ) : locationState.location ? (
                       <Text type="secondary">
                         {formatLocationText(locationState.location)}
                       </Text>
-                    )}
+                    ) : null}
                     {locationState.detail && (
                       <Text type="secondary">，{locationState.detail}</Text>
                     )}
