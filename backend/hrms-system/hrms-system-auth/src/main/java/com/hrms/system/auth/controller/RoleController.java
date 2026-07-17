@@ -72,9 +72,10 @@ public class RoleController {
      * 查询所有角色（返回RoleVO，包含菜单ID）
      */
     @GetMapping
-    @Operation(summary = "查询角色列表", description = "查询所有角色列表，包含关联的菜单ID")
-    public Result<List<RoleVO>> list() {
-        List<RoleVO> roles = roleService.listRoleVOs();
+    @Operation(summary = "查询角色列表", description = "查询所有角色列表，支持按角色名称搜索，包含关联的菜单ID")
+    public Result<List<RoleVO>> list(@RequestParam(required = false) String keyword,
+                                     @RequestParam(required = false) Integer status) {
+        List<RoleVO> roles = roleService.listRoleVOs(keyword, status);
         return Result.success(roles);
     }
 

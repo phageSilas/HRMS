@@ -87,8 +87,8 @@ export interface RoleItem {
 /**
  * 获取角色列表
  */
-export function getRoleList(): Promise<RoleItem[]> {
-  return request.get('/api/v1/roles');
+export function getRoleList(params?: { keyword?: string; status?: number }): Promise<RoleItem[]> {
+  return request.get('/api/v1/roles', { params });
 }
 
 /**
@@ -138,8 +138,8 @@ export interface MenuItem {
 /**
  * 获取菜单列表
  */
-export function getMenuList(): Promise<MenuItem[]> {
-  return request.get('/api/v1/menus');
+export function getMenuList(params?: { keyword?: string; status?: number }): Promise<MenuItem[]> {
+  return request.get('/api/v1/menus', { params });
 }
 
 /**

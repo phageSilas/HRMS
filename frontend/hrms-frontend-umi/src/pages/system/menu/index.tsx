@@ -96,6 +96,7 @@ const MenuPage: React.FC = () => {
       dataIndex: 'menuName',
       width: 180,
       fixed: 'left',
+      search: false,
     },
     {
       title: '类型',
@@ -326,8 +327,9 @@ const MenuPage: React.FC = () => {
               labelWidth: 'auto',
             }}
             cardBordered
-            request={async () => {
-              const res = await getMenuList();
+            request={async (params) => {
+              const { keyword, status } = params;
+              const res = await getMenuList({ keyword, status });
               const list = res || [];
               setMenuList(list);
               return {

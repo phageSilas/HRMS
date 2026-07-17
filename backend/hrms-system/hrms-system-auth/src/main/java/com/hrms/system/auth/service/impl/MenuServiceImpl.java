@@ -89,9 +89,14 @@ public class MenuServiceImpl implements MenuService {
     }
 
     @Override
-    public List<MenuEntity> list() {
+    public List<MenuEntity> list(String keyword, Integer status) {
         LambdaQueryWrapper<MenuEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(MenuEntity::getStatus, 1);
+        if (StringUtils.hasText(keyword)) {
+            wrapper.like(MenuEntity::getMenuName, keyword);
+        }
+        if (status != null) {
+            wrapper.eq(MenuEntity::getStatus, status);
+        }
         wrapper.orderByAsc(MenuEntity::getSortNo);
         return menuMapper.selectList(wrapper);
     }

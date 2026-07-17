@@ -69,11 +69,13 @@ const RolePage: React.FC = () => {
       dataIndex: 'roleName',
       width: 150,
       fixed: 'left',
+      search: false,
     },
     {
       title: '角色编码',
       dataIndex: 'roleCode',
       width: 150,
+      search: false,
     },
     {
       title: '数据权限',
@@ -271,8 +273,9 @@ const RolePage: React.FC = () => {
           labelWidth: 'auto',
         }}
         cardBordered
-        request={async () => {
-          const res = await getRoleList();
+        request={async (params) => {
+          const { keyword, status } = params;
+          const res = await getRoleList({ keyword, status });
           return {
             data: res || [],
             success: true,

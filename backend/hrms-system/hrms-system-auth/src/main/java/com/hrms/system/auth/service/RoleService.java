@@ -78,9 +78,11 @@ public interface RoleService {
     /**
      * 查询所有角色VO列表（包含菜单ID）
      *
+     * @param keyword 角色名称关键字（可选）
+     * @param status  状态（可选）
      * @return 角色VO列表
      */
-    List<RoleVO> listRoleVOs();
+    List<RoleVO> listRoleVOs(String keyword, Integer status);
 
     /**
      * 分配角色菜单权限

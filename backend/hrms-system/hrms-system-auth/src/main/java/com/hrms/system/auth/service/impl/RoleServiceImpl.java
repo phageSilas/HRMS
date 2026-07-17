@@ -131,10 +131,15 @@ public class RoleServiceImpl implements RoleService {
     }
 
     @Override
-    public List<RoleVO> listRoleVOs() {
-        // 1. 查询所有角色
+    public List<RoleVO> listRoleVOs(String keyword, Integer status) {
+        // 1. 构建查询条件
         LambdaQueryWrapper<RoleEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(RoleEntity::getStatus, 1);
+        if (StringUtils.hasText(keyword)) {
+            wrapper.like(RoleEntity::getRoleName, keyword);
+        }
+        if (status != null) {
+            wrapper.eq(RoleEntity::getStatus, status);
+        }
         wrapper.orderByAsc(RoleEntity::getSortNo);
         List<RoleEntity> roles = roleMapper.selectList(wrapper);
 
