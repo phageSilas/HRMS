@@ -3,6 +3,7 @@ package com.hrms.business.salary.service;
 import com.hrms.business.salary.dto.EmployeeSalaryProfileRequestDTO;
 import com.hrms.business.salary.dto.SalaryBatchAdjustmentRequestDTO;
 import com.hrms.business.salary.dto.SalaryBatchCreateRequestDTO;
+import com.hrms.business.salary.dto.SalaryManagePayslipQueryDTO;
 import com.hrms.business.salary.dto.SalaryManagePayslipVerifyRequestDTO;
 import com.hrms.business.salary.dto.SalaryPayslipVerifyRequestDTO;
 import com.hrms.business.salary.dto.SalaryTemplateCreateOrUpdateRequestDTO;
@@ -15,6 +16,7 @@ import com.hrms.business.salary.vo.SalaryBatchVO;
 import com.hrms.business.salary.vo.SalaryPayslipDetailVO;
 import com.hrms.business.salary.vo.SalaryPayslipListVO;
 import com.hrms.business.salary.vo.SalaryPayslipVerifyVO;
+import com.hrms.business.salary.vo.SalaryManagePayslipPageVO;
 import com.hrms.business.salary.vo.SalaryTemplatePageVO;
 import com.hrms.business.salary.vo.SalaryTrendVO;
 import com.hrms.common.web.PageResult;
@@ -177,6 +179,15 @@ public interface SalaryService {
      * 本方法使用的工具类: 无
      */
     SalaryPayslipVerifyVO verifyManagePayslip(SalaryManagePayslipVerifyRequestDTO requestDTO);
+
+    /**
+     * 分页查询管理端工资条列表。
+     *
+     * @param queryDTO 查询参数
+     * @return 工资条分页结果
+     * 本方法使用的工具类: PageResult(hrms-common)
+     */
+    PageResult<SalaryManagePayslipPageVO> pageManagePayslips(SalaryManagePayslipQueryDTO queryDTO);
 
     /**
      * 查询工资条详情。

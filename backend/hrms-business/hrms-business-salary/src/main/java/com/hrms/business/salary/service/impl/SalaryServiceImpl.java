@@ -15,6 +15,7 @@ import com.hrms.business.salary.cache.SalaryCacheKeys;
 import com.hrms.business.salary.dto.EmployeeSalaryProfileRequestDTO;
 import com.hrms.business.salary.dto.SalaryBatchAdjustmentRequestDTO;
 import com.hrms.business.salary.dto.SalaryBatchCreateRequestDTO;
+import com.hrms.business.salary.dto.SalaryManagePayslipQueryDTO;
 import com.hrms.business.salary.dto.SalaryManagePayslipVerifyRequestDTO;
 import com.hrms.business.salary.dto.SalaryPayslipVerifyRequestDTO;
 import com.hrms.business.salary.dto.SalaryTemplateCreateOrUpdateRequestDTO;
@@ -49,6 +50,7 @@ import com.hrms.business.salary.vo.SalaryBatchVO;
 import com.hrms.business.salary.vo.SalaryPayslipDetailVO;
 import com.hrms.business.salary.vo.SalaryPayslipListVO;
 import com.hrms.business.salary.vo.SalaryPayslipVerifyVO;
+import com.hrms.business.salary.vo.SalaryManagePayslipPageVO;
 import com.hrms.business.salary.vo.SalaryTemplateItemVO;
 import com.hrms.business.salary.vo.SalaryTemplatePageVO;
 import com.hrms.business.salary.vo.SalaryTrendVO;
@@ -101,6 +103,9 @@ public class SalaryServiceImpl implements SalaryService {
     );
     private static final Set<String> SALARY_MANAGER_ROLE_CODES = Set.of(
             "FINANCE", "HR", "HR_TEST", "ADMIN", "ROLE_ADMIN"
+    );
+    private static final Set<String> PAYSLIP_MANAGE_VIEW_STATUS = Set.of(
+            "VIEWED", "UNVIEWED", "UNPUBLISHED"
     );
     private static final Set<String> SALARY_ADJUST_ITEM_CODES = Set.of(
             "BASE_SALARY",
@@ -689,6 +694,32 @@ public class SalaryServiceImpl implements SalaryService {
                 .token(token)
                 .expireTime(LocalDateTime.now().plusMinutes(30))
                 .build();
+    }
+
+    /**
+     * 分页查询管理端工资条列表。
+     *
+     * @param queryDTO 查询参数
+     * @return 工资条分页结果
+     * 本方法使用的工具类: Page(MyBatis-Plus),PageResult(hrms-common),SecurityContextHolder(hrms-common)
+     */
+    @Override
+    public PageResult<SalaryManagePayslipPageVO> pageManagePayslips(SalaryManagePayslipQueryDTO queryDTO) {
+        assertSalaryManagerRole();
+        queryDTO.setViewStatus(normalizeManagePayslipViewStatus(queryDTO.getViewStatus()));
+        int pageNum = Optional.ofNullable(queryDTO.getPageNum()).orElse(1);
+        int pageSize = Optional.ofNullable(queryDTO.getPageSize()).orElse(10);
+        Page<SalaryManagePayslipPageVO> page = salaryBatchItemMapper.selectManagePayslipPage(
+                Page.of(pageNum, pageSize), queryDTO, PAYSLIP_VISIBLE_STATUS);
+        boolean verified = hasManagePayslipVerified();
+        page.getRecords().forEach(record -> {
+            SalaryEmployeeSnapshotEntity employee = new SalaryEmployeeSnapshotEntity();
+            employee.setId(record.getEmployeeId());
+            employee.setDeptId(record.getDeptId());
+            record.setDeptName(resolveDeptName(employee));
+            record.setVerified(verified);
+        });
+        return PageResult.of(page.getRecords(), page.getTotal(), (int) page.getCurrent(), (int) page.getSize());
     }
 
     /**
@@ -1477,6 +1508,36 @@ public class SalaryServiceImpl implements SalaryService {
      * @return 规范化后的月份数量
      * 本方法使用的工具类: 无
      */
+    /**
+     * 规范化管理端工资条查看状态。
+     *
+     * @param viewStatus 查看状态
+     * @return 规范化后的查看状态
+     * 本方法使用的工具类: StrUtil(hutool)
+     */
+    private String normalizeManagePayslipViewStatus(String viewStatus) {
+        if (StrUtil.isBlank(viewStatus)) {
+            return null;
+        }
+        String normalized = viewStatus.trim().toUpperCase();
+        if (!PAYSLIP_MANAGE_VIEW_STATUS.contains(normalized)) {
+            throw new GlobalException(ErrorCode.PARAM_FORMAT_ERROR, "查看状态仅支持 VIEWED/UNVIEWED/UNPUBLISHED");
+        }
+        return normalized;
+    }
+
+    /**
+     * 判断管理端工资条是否已完成二次验证。
+     *
+     * @return 是否已验证
+     * 本方法使用的工具类: SecurityContextHolder(hrms-common),StringRedisTemplate(spring-data-redis)
+     */
+    private boolean hasManagePayslipVerified() {
+        StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+        return redisTemplate != null && Boolean.TRUE.equals(redisTemplate.hasKey(
+                SalaryCacheKeys.managePayslipVerify(SecurityContextHolder.getUserId())));
+    }
+
     private int normalizeTrendMonths(Integer months) {
         int value = Optional.ofNullable(months).orElse(6);
         if (value < 1 || value > 24) {
