@@ -15,7 +15,7 @@ import {
   SearchOutlined,
 } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
-import { history, useRequest } from '@umijs/max';
+import { history } from '@umijs/max';
 import type { PageResult } from '@/types/api';
 import {
   Button,
@@ -39,14 +39,6 @@ import styles from './index.less';
 
 const { RangePicker } = DatePicker;
 const { Text, Title } = Typography;
-
-type AttendanceGroupPageLike =
-  | {
-      records?: AttendanceGroup[];
-      data?: { records?: AttendanceGroup[] } | AttendanceGroup[];
-    }
-  | AttendanceGroup[]
-  | undefined;
 
 interface RecordFilterValues {
   groupId?: number;
@@ -87,21 +79,6 @@ const statusOptions = Object.entries(statusMeta).map(([value, meta]) => ({
 }));
 
 const RECORD_QUERY_STORAGE_PREFIX = 'attendance-record-query';
-
-function normalizeGroups(pageData: AttendanceGroupPageLike) {
-  if (Array.isArray(pageData)) return pageData;
-  if (!pageData) return [];
-  if (Array.isArray(pageData.records)) return pageData.records;
-  if (Array.isArray(pageData.data)) return pageData.data;
-  if (
-    pageData.data &&
-    !Array.isArray(pageData.data) &&
-    Array.isArray(pageData.data.records)
-  ) {
-    return pageData.data.records;
-  }
-  return [];
-}
 
 function parseUrlGroupId() {
   const groupId = new URLSearchParams(history.location.search).get('groupId');
@@ -190,6 +167,12 @@ function buildRecordQuery(query: RecordQueryState): AttendanceGroupRecordQuery {
 const AttendanceRecordPage: React.FC = () => {
   const [form] = Form.useForm<RecordFilterValues>();
   const storedQuery = getStoredRecordQuery();
+  const [groups, setGroups] = useState<AttendanceGroup[]>([]);
+  const [groupLoading, setGroupLoading] = useState(false);
+  const [recordLoading, setRecordLoading] = useState(false);
+  const [recordPageData, setRecordPageData] = useState<
+    PageResult<AttendanceGroupRecord>
+  >();
   const [query, setQuery] = useState<RecordQueryState>({
     groupId: parseUrlGroupId() ?? storedQuery.groupId,
     yearMonth: storedQuery.yearMonth || dayjs().format('YYYY-MM'),
@@ -202,22 +185,53 @@ const AttendanceRecordPage: React.FC = () => {
     pageSize: storedQuery.pageSize || 10,
   });
 
-  const {
-    data: groupData,
-    loading: groupLoading,
-    refresh: refreshGroups,
-  } = useRequest(
-    () => getAttendanceGroups({ pageNum: 1, pageSize: 100 }),
-    {
-      onError: (error) => {
-        message.error(error.message || '考勤组加载失败');
-      },
-    },
-  );
+  const loadGroups = async () => {
+    setGroupLoading(true);
+    try {
+      const page = await getAttendanceGroups({ pageNum: 1, pageSize: 100 });
+      const nextGroups = page.records ?? [];
+      setGroups(nextGroups);
+      return nextGroups;
+    } catch (error) {
+      const messageText =
+        error instanceof Error ? error.message : '考勤组加载失败';
+      message.error(messageText);
+      return groups;
+    } finally {
+      setGroupLoading(false);
+    }
+  };
 
-  const groups = useMemo(() => {
-    return normalizeGroups(groupData as AttendanceGroupPageLike);
-  }, [groupData]);
+  const loadRecords = async (nextQuery: RecordQueryState) => {
+    if (!nextQuery.groupId) {
+      setRecordPageData({
+        records: [],
+        total: 0,
+        pageNum: nextQuery.pageNum,
+        pageSize: nextQuery.pageSize,
+      });
+      return;
+    }
+
+    setRecordLoading(true);
+    try {
+      const nextPageData = await getAttendanceGroupRecords(
+        nextQuery.groupId,
+        buildRecordQuery(nextQuery),
+      );
+      setRecordPageData(nextPageData);
+    } catch (error) {
+      const messageText =
+        error instanceof Error ? error.message : '考勤记录加载失败';
+      message.error(messageText);
+    } finally {
+      setRecordLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadGroups();
+  }, []);
 
   useEffect(() => {
     if (groups.length === 0) return;
@@ -249,29 +263,9 @@ const AttendanceRecordPage: React.FC = () => {
     query.yearMonth,
   ]);
 
-  const {
-    data: recordData,
-    loading: recordLoading,
-    refresh: refreshRecords,
-  } = useRequest(
-    () => {
-      if (!query.groupId) {
-        return Promise.resolve({
-          records: [],
-          total: 0,
-          pageNum: query.pageNum,
-          pageSize: query.pageSize,
-        });
-      }
-      return getAttendanceGroupRecords(query.groupId, buildRecordQuery(query));
-    },
-    {
-      refreshDeps: [query],
-      onError: (error) => {
-        message.error(error.message || '考勤记录加载失败');
-      },
-    },
-  );
+  useEffect(() => {
+    void loadRecords(query);
+  }, [query]);
 
   useEffect(() => {
     const storageKey = resolveRecordQueryStorageKey();
@@ -279,13 +273,29 @@ const AttendanceRecordPage: React.FC = () => {
   }, [query]);
 
   usePageAutoRefresh(() => {
-    refreshGroups();
-    if (query.groupId) {
-      refreshRecords();
-    }
-  });
+    void (async () => {
+      const nextGroups = await loadGroups();
+      const nextGroupId =
+        query.groupId && nextGroups.some((item) => item.id === query.groupId)
+          ? query.groupId
+          : nextGroups[0]?.id;
 
-  const tablePageData = recordData as PageResult<AttendanceGroupRecord> | undefined;
+      if (!nextGroupId) {
+        return;
+      }
+
+      if (nextGroupId !== query.groupId) {
+        setQuery((previous) => ({
+          ...previous,
+          groupId: nextGroupId,
+          pageNum: 1,
+        }));
+        return;
+      }
+
+      await loadRecords({ ...query, groupId: nextGroupId });
+    })();
+  });
 
   const selectedGroup = groups.find((item) => item.id === query.groupId);
 
@@ -480,13 +490,13 @@ const AttendanceRecordPage: React.FC = () => {
             String(record.recordId || `${record.employeeId}-${formatBackendDate(record.recordDate)}`)
           }
           columns={columns}
-          dataSource={tablePageData?.records || []}
+          dataSource={recordPageData?.records || []}
           loading={recordLoading || groupLoading}
           scroll={{ x: 1180 }}
           pagination={{
-            current: tablePageData?.pageNum || query.pageNum,
-            pageSize: tablePageData?.pageSize || query.pageSize,
-            total: tablePageData?.total || 0,
+            current: recordPageData?.pageNum || query.pageNum,
+            pageSize: recordPageData?.pageSize || query.pageSize,
+            total: recordPageData?.total || 0,
             showSizeChanger: true,
             showTotal: (total) => `共 ${total} 条`,
             onChange: (pageNum, pageSize) => {
