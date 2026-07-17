@@ -210,8 +210,19 @@ function buildCompositionData(items: SalaryBatchItem[]) {
     totals.加班费 += toNumber(item.overtimePay);
   });
 
+  const totalAmount = Object.values(totals).reduce((sum, amount) => sum + amount, 0);
+
   return Object.entries(totals)
-    .map(([type, amount]) => ({ type, amount }))
+    .map(([type, amount]) => {
+      const percent = totalAmount > 0 ? amount / totalAmount : 0;
+      return {
+        type,
+        amount,
+        percent,
+        percentText: `${(percent * 100).toFixed(1)}%`,
+        labelText: `${type} ${`${(percent * 100).toFixed(1)}%`}`,
+      };
+    })
     .filter((item) => item.amount > 0);
 }
 
@@ -810,22 +821,50 @@ const SalaryBatchPage: React.FC = () => {
                   <Col xs={24} xl={12}>
                     <Card bordered={false} style={{ borderRadius: 20 }} title="薪资构成占比">
                       {compositionData.length > 0 ? (
-                        <Pie
-                          height={260}
-                          data={compositionData}
-                          angleField="amount"
-                          colorField="type"
-                          innerRadius={0.65}
-                          label={{ text: 'type', style: { fontWeight: 600 } }}
-                          tooltip={{
-                            items: [
-                              (datum: { type: string; amount: number }) => ({
-                                name: datum.type,
-                                value: formatCurrency(datum.amount),
-                              }),
-                            ],
-                          }}
-                        />
+                        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                          <Space wrap size={[16, 8]} style={{ paddingTop: 4 }}>
+                            {compositionData.map((item, index) => (
+                              <Space key={item.type} size={8}>
+                                <span
+                                  style={{
+                                    width: 10,
+                                    height: 10,
+                                    borderRadius: 2,
+                                    display: 'inline-block',
+                                    background:
+                                      ['#1677ff', '#13c2c2', '#fa8c16', '#b37feb'][index % 4],
+                                  }}
+                                />
+                                <Text>{item.type}</Text>
+                              </Space>
+                            ))}
+                          </Space>
+                          <Pie
+                            height={230}
+                            data={compositionData}
+                            angleField="amount"
+                            colorField="type"
+                            innerRadius={0.68}
+                            radius={0.78}
+                            legend={false}
+                            label={{
+                              text: 'labelText',
+                              position: 'outside',
+                              style: {
+                                fontWeight: 600,
+                                fontSize: 12,
+                              },
+                            }}
+                            tooltip={{
+                              items: [
+                                (datum: { type: string; amount: number; percentText: string }) => ({
+                                  name: datum.type,
+                                  value: `${formatCurrency(datum.amount)} (${datum.percentText})`,
+                                }),
+                              ],
+                            }}
+                          />
+                        </Space>
                       ) : (
                         <Empty description="暂无薪资构成数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
                       )}
