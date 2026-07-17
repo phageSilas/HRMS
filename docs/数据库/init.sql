@@ -989,3 +989,41 @@ CREATE TABLE `hr_attendance_group_member` (
                                               KEY `idx_group_id` (`group_id`),
                                               KEY `idx_effective_date` (`effective_start_date`, `effective_end_date`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='考勤组成员关系表';
+
+-- ----------------------------------------
+-- hr_attendance_overtime（加班申请表）
+-- ----------------------------------------
+CREATE TABLE `hr_attendance_overtime` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `employee_id` BIGINT UNSIGNED NOT NULL COMMENT '员工ID',
+  `overtime_date` DATETIME NOT NULL COMMENT '加班日期',
+  `duration` DECIMAL(5,1) NOT NULL COMMENT '加班时长（小时）',
+  `reason` VARCHAR(500) NOT NULL COMMENT '加班事由',
+  `approval_instance_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '审批实例ID',
+  `approval_status` TINYINT NOT NULL DEFAULT 0 COMMENT '审批状态：0-草稿 1-审批中 2-已通过 3-已拒绝',
+  `create_by` BIGINT UNSIGNED DEFAULT NULL COMMENT '创建人',
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_by` BIGINT UNSIGNED DEFAULT NULL COMMENT '更新人',
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  `version` INT NOT NULL DEFAULT 0 COMMENT '版本号',
+  `remark` VARCHAR(500) DEFAULT NULL COMMENT '备注',
+  PRIMARY KEY (`id`),
+  KEY `idx_hr_att_overtime_employee` (`employee_id`),
+  KEY `idx_hr_att_overtime_date` (`overtime_date`),
+  KEY `idx_hr_att_overtime_status` (`approval_status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='加班申请表'
+
+
+
+-- ============================================================
+-- 修复补卡表的 record_id 字段（允许为空，因为补卡可以先于打卡记录存在）
+-- ============================================================
+ALTER TABLE `hr_attendance_correction` MODIFY COLUMN `record_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '打卡记录ID（补卡时可先无打卡记录）';
+
+-- ============================================================
+-- 添加sys-user表的 dept_id 字段部门ID（冗余字段，避免跨模块查询）
+-- ============================================================
+ALTER TABLE `sys_user`
+    ADD COLUMN `dept_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '部门ID（冗余字段，避免跨模块查询）' AFTER `employee_id`,
+ADD INDEX `idx_sys_user_dept_id` (`dept_id`);
