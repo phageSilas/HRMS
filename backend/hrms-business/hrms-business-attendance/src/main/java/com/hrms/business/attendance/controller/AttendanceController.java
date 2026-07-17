@@ -26,6 +26,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -84,6 +85,19 @@ public class AttendanceController {
             @PathVariable Long id,
             @Valid @RequestBody AttendanceGroupCreateOrUpdateRequestDTO requestDTO) {
         return Result.success(attendanceService.updateAttendanceGroup(id, requestDTO));
+    }
+
+    /**
+     * 逻辑删除考勤组。
+     *
+     * @param id 考勤组ID
+     * @return 删除结果
+     * 本方法使用的工具类: Result(hrms-common)
+     */
+    @DeleteMapping("/groups/{id}")
+    public Result<Void> deleteAttendanceGroup(@PathVariable Long id) {
+        attendanceService.deleteAttendanceGroup(id);
+        return Result.success();
     }
 
     /**

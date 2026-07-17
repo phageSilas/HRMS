@@ -117,6 +117,10 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     private static final ErrorCode LEAVE_DAYS_INVALID = new ErrorCode(40057, "请假天数必须大于0且不超过30天");
 
+    private static final ErrorCode ATTENDANCE_GROUP_MEMBER_EXISTS = new ErrorCode(40058, "考勤组已关联成员，无法删除");
+
+    private static final ErrorCode ATTENDANCE_GROUP_RECORD_EXISTS = new ErrorCode(40059, "考勤组已产生打卡记录，无法删除");
+
     private static final long GROUP_RECORD_MAX_DAYS = 31L;
 
     private static final int DASHBOARD_RANKING_LIMIT = 10;
@@ -217,6 +221,29 @@ public class AttendanceServiceImpl implements AttendanceService {
      * @return 考勤组打卡记录分页结果
      * 本方法使用的工具类: PageResult(hrms-common),ChronoUnit(JDK),StrUtil(hutool)
      */
+    /**
+     * 逻辑删除考勤组。
+     *
+     * @param id 考勤组ID
+     * 本方法使用的工具类: LambdaQueryWrapper(mybatis-plus),GlobalException(hrms-common)
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteAttendanceGroup(Long id) {
+        AttendanceGroupEntity entity = getRequiredAttendanceGroup(id);
+        long memberCount = attendanceGroupMemberMapper.selectCount(new LambdaQueryWrapper<AttendanceGroupMemberEntity>()
+                .eq(AttendanceGroupMemberEntity::getGroupId, id)
+                .eq(AttendanceGroupMemberEntity::getIsDeleted, 0));
+        if (memberCount > 0) {
+            throw new GlobalException(ATTENDANCE_GROUP_MEMBER_EXISTS);
+        }
+        if (attendanceRecordMapper.countByGroupId(id) > 0) {
+            throw new GlobalException(ATTENDANCE_GROUP_RECORD_EXISTS);
+        }
+        attendanceGroupMapper.deleteById(entity.getId());
+        evictGroupRuleCache(id);
+    }
+
     @Override
     public PageResult<AttendanceGroupRecordPageVO> pageGroupAttendanceRecords(Long groupId,
                                                                               AttendanceGroupRecordQueryDTO queryDTO) {
