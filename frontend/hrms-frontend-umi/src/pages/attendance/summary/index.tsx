@@ -17,6 +17,7 @@ import {
   DashboardOutlined,
   FallOutlined,
   ReloadOutlined,
+  RiseOutlined,
   SearchOutlined,
   TeamOutlined,
 } from '@ant-design/icons';
@@ -63,6 +64,17 @@ interface SummaryCardConfig {
   color: string;
   icon: React.ReactNode;
   suffix: string;
+  ratioLabel?: string;
+  ratioValue?: number;
+  momValue?: number | null;
+  momDirection?: 'up' | 'down' | 'flat' | 'none';
+}
+
+interface SummaryMetricMeta {
+  ratioLabel: string;
+  ratioValue: number;
+  momValue: number | null;
+  momDirection: 'up' | 'down' | 'flat' | 'none';
 }
 
 const exceptionTypeLabelMap: Record<string, string> = {
@@ -136,6 +148,40 @@ function toNumber(value?: number | string) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function safeDivide(numerator: number, denominator: number) {
+  if (denominator <= 0) {
+    return 0;
+  }
+  return numerator / denominator;
+}
+
+function toPercent(value?: number | null, digits = 1) {
+  if (value == null || !Number.isFinite(value)) {
+    return '--';
+  }
+  return `${(value * 100).toFixed(digits)}%`;
+}
+
+function calcMoM(current: number, previous: number) {
+  if (previous === 0) {
+    return current === 0 ? 0 : null;
+  }
+  return (current - previous) / previous;
+}
+
+function getMomDirection(value: number | null): SummaryMetricMeta['momDirection'] {
+  if (value == null) {
+    return 'none';
+  }
+  if (value > 0) {
+    return 'up';
+  }
+  if (value < 0) {
+    return 'down';
+  }
+  return 'flat';
+}
+
 function formatDateLabel(value: string | number[]) {
   if (Array.isArray(value)) {
     const [, month, day] = value;
@@ -176,6 +222,7 @@ const AttendanceSummaryPage: React.FC = () => {
   const [departmentLoading, setDepartmentLoading] = useState(false);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [dashboard, setDashboard] = useState<AttendanceSummaryDashboard>();
+  const [previousDashboard, setPreviousDashboard] = useState<AttendanceSummaryDashboard>();
   const [filter, setFilter] = useState<SummaryFilterState>({
     yearMonth: storedFilter.yearMonth || dayjs().format('YYYY-MM'),
     deptId: storedFilter.deptId ?? (isHr ? undefined : currentUser?.deptId),
@@ -200,11 +247,21 @@ const AttendanceSummaryPage: React.FC = () => {
   const loadDashboard = async (nextFilter: SummaryFilterState) => {
     setLoading(true);
     try {
-      const nextDashboard = await getAttendanceSummaryDashboard({
-        yearMonth: nextFilter.yearMonth,
-        deptId: nextFilter.deptId,
-      });
+      const previousYearMonth = dayjs(nextFilter.yearMonth, 'YYYY-MM')
+        .subtract(1, 'month')
+        .format('YYYY-MM');
+      const [nextDashboard, nextPreviousDashboard] = await Promise.all([
+        getAttendanceSummaryDashboard({
+          yearMonth: nextFilter.yearMonth,
+          deptId: nextFilter.deptId,
+        }),
+        getAttendanceSummaryDashboard({
+          yearMonth: previousYearMonth,
+          deptId: nextFilter.deptId,
+        }).catch(() => undefined),
+      ]);
       setDashboard(nextDashboard);
+      setPreviousDashboard(nextPreviousDashboard);
     } catch (error) {
       const messageText =
         error instanceof Error ? error.message : '考勤统计加载失败';
@@ -269,6 +326,70 @@ const AttendanceSummaryPage: React.FC = () => {
     () => normalizePieData(dashboard?.exceptionPie || []),
     [dashboard?.exceptionPie],
   );
+
+  const metricMeta = useMemo(() => {
+    const currentExpectedDays = dashboard?.expectedDays || 0;
+    const previousExpectedDays = previousDashboard?.expectedDays || 0;
+
+    const actualRate = safeDivide(dashboard?.actualDays || 0, currentExpectedDays);
+    const previousActualRate = safeDivide(previousDashboard?.actualDays || 0, previousExpectedDays);
+    const lateRate = safeDivide(dashboard?.lateCount || 0, currentExpectedDays);
+    const previousLateRate = safeDivide(previousDashboard?.lateCount || 0, previousExpectedDays);
+    const earlyLeaveRate = safeDivide(
+      dashboard?.earlyLeaveCount || 0,
+      currentExpectedDays,
+    );
+    const previousEarlyLeaveRate = safeDivide(
+      previousDashboard?.earlyLeaveCount || 0,
+      previousExpectedDays,
+    );
+    const absentRate = safeDivide(dashboard?.absentCount || 0, currentExpectedDays);
+    const previousAbsentRate = safeDivide(
+      previousDashboard?.absentCount || 0,
+      previousExpectedDays,
+    );
+    const leaveRate = safeDivide(
+      Number(dashboard?.leaveCount || 0),
+      currentExpectedDays,
+    );
+    const previousLeaveRate = safeDivide(
+      Number(previousDashboard?.leaveCount || 0),
+      previousExpectedDays,
+    );
+
+    return {
+      actualDays: {
+        ratioLabel: '本月出勤率',
+        ratioValue: actualRate,
+        momValue: calcMoM(actualRate, previousActualRate),
+        momDirection: getMomDirection(calcMoM(actualRate, previousActualRate)),
+      },
+      lateCount: {
+        ratioLabel: '本月占比',
+        ratioValue: lateRate,
+        momValue: calcMoM(lateRate, previousLateRate),
+        momDirection: getMomDirection(calcMoM(lateRate, previousLateRate)),
+      },
+      earlyLeaveCount: {
+        ratioLabel: '本月占比',
+        ratioValue: earlyLeaveRate,
+        momValue: calcMoM(earlyLeaveRate, previousEarlyLeaveRate),
+        momDirection: getMomDirection(calcMoM(earlyLeaveRate, previousEarlyLeaveRate)),
+      },
+      absentCount: {
+        ratioLabel: '本月占比',
+        ratioValue: absentRate,
+        momValue: calcMoM(absentRate, previousAbsentRate),
+        momDirection: getMomDirection(calcMoM(absentRate, previousAbsentRate)),
+      },
+      leaveCount: {
+        ratioLabel: '本月占比',
+        ratioValue: leaveRate,
+        momValue: calcMoM(leaveRate, previousLeaveRate),
+        momDirection: getMomDirection(calcMoM(leaveRate, previousLeaveRate)),
+      },
+    } satisfies Record<string, SummaryMetricMeta>;
+  }, [dashboard, previousDashboard]);
 
   const rankingColumns: ColumnsType<AttendanceEmployeeRanking> = [
     {
@@ -336,6 +457,7 @@ const AttendanceSummaryPage: React.FC = () => {
       color: '#13c2c2',
       icon: <TeamOutlined />,
       suffix: '人天',
+      ...metricMeta.actualDays,
     },
     {
       key: 'lateCount',
@@ -344,6 +466,7 @@ const AttendanceSummaryPage: React.FC = () => {
       color: '#fa8c16',
       icon: <ClockCircleOutlined />,
       suffix: '次',
+      ...metricMeta.lateCount,
     },
     {
       key: 'earlyLeaveCount',
@@ -352,6 +475,7 @@ const AttendanceSummaryPage: React.FC = () => {
       color: '#722ed1',
       icon: <FallOutlined />,
       suffix: '次',
+      ...metricMeta.earlyLeaveCount,
     },
     {
       key: 'absentCount',
@@ -360,6 +484,7 @@ const AttendanceSummaryPage: React.FC = () => {
       color: '#f5222d',
       icon: <AreaChartOutlined />,
       suffix: '次',
+      ...metricMeta.absentCount,
     },
     {
       key: 'leaveCount',
@@ -368,6 +493,7 @@ const AttendanceSummaryPage: React.FC = () => {
       color: '#52c41a',
       icon: <DashboardOutlined />,
       suffix: '天',
+      ...metricMeta.leaveCount,
     },
   ];
 
@@ -473,6 +599,30 @@ const AttendanceSummaryPage: React.FC = () => {
                   <Space direction="vertical" size={4}>
                     <Text type="secondary">{card.title}</Text>
                     <Statistic value={card.value} suffix={card.suffix} />
+                    {card.ratioLabel && (
+                      <Text type="secondary">
+                        {card.ratioLabel} {toPercent(card.ratioValue)}
+                      </Text>
+                    )}
+                    {card.ratioLabel && (
+                      <Space size={4}>
+                        <Text type="secondary">较上月</Text>
+                        {card.momDirection === 'up' && <RiseOutlined style={{ color: '#52c41a' }} />}
+                        {card.momDirection === 'down' && <FallOutlined style={{ color: '#ff4d4f' }} />}
+                        <Text
+                          style={{
+                            color:
+                              card.momDirection === 'up'
+                                ? '#52c41a'
+                                : card.momDirection === 'down'
+                                ? '#ff4d4f'
+                                : '#8c8c8c',
+                          }}
+                        >
+                          {toPercent(card.momValue)}
+                        </Text>
+                      </Space>
+                    )}
                   </Space>
                 </Space>
               </Card>
