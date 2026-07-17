@@ -68,6 +68,7 @@ interface SummaryCardConfig {
   ratioValue?: number;
   momValue?: number | null;
   momDirection?: 'up' | 'down' | 'flat' | 'none';
+  showMetricMeta?: boolean;
 }
 
 interface SummaryMetricMeta {
@@ -87,6 +88,35 @@ const chartColorMap: Record<string, string> = {
   LATE: '#fa8c16',
   EARLY_LEAVE: '#1677ff',
   ABSENCE: '#ff4d4f',
+};
+
+const summaryCardStyles = {
+  card: {
+    borderRadius: 20,
+    minHeight: 212,
+  } satisfies React.CSSProperties,
+  body: {
+    height: 180,
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'space-between',
+  } satisfies React.CSSProperties,
+  metricPanel: {
+    minHeight: 70,
+    borderTop: '1px solid #f0f0f0',
+    paddingTop: 12,
+  } satisfies React.CSSProperties,
+  metricTitle: {
+    fontSize: 13,
+    color: '#8c8c8c',
+    lineHeight: '20px',
+  } satisfies React.CSSProperties,
+  metricValue: {
+    fontSize: 20,
+    fontWeight: 700,
+    lineHeight: '28px',
+    color: '#1f1f1f',
+  } satisfies React.CSSProperties,
 };
 
 function resolveSummaryFilterStorageKey() {
@@ -212,6 +242,30 @@ function normalizePieData(exceptionPie: AttendanceExceptionPie[]) {
     count: item.count,
     rawType: item.type,
   }));
+}
+
+function renderMomValue(
+  direction?: SummaryMetricMeta['momDirection'],
+  value: number | null | undefined,
+) {
+  const text = toPercent(value, 1);
+  if (direction === 'up') {
+    return (
+      <Space size={4}>
+        <RiseOutlined style={{ color: '#52c41a' }} />
+        <Text style={{ ...summaryCardStyles.metricValue, color: '#52c41a' }}>{text}</Text>
+      </Space>
+    );
+  }
+  if (direction === 'down') {
+    return (
+      <Space size={4}>
+        <FallOutlined style={{ color: '#ff4d4f' }} />
+        <Text style={{ ...summaryCardStyles.metricValue, color: '#ff4d4f' }}>{text}</Text>
+      </Space>
+    );
+  }
+  return <Text style={summaryCardStyles.metricValue}>{text}</Text>;
 }
 
 const AttendanceSummaryPage: React.FC = () => {
@@ -449,6 +503,7 @@ const AttendanceSummaryPage: React.FC = () => {
       color: '#1677ff',
       icon: <CalendarCardIcon />,
       suffix: '人天',
+      showMetricMeta: false,
     },
     {
       key: 'actualDays',
@@ -458,6 +513,7 @@ const AttendanceSummaryPage: React.FC = () => {
       icon: <TeamOutlined />,
       suffix: '人天',
       ...metricMeta.actualDays,
+      showMetricMeta: true,
     },
     {
       key: 'lateCount',
@@ -467,6 +523,7 @@ const AttendanceSummaryPage: React.FC = () => {
       icon: <ClockCircleOutlined />,
       suffix: '次',
       ...metricMeta.lateCount,
+      showMetricMeta: true,
     },
     {
       key: 'earlyLeaveCount',
@@ -476,6 +533,7 @@ const AttendanceSummaryPage: React.FC = () => {
       icon: <FallOutlined />,
       suffix: '次',
       ...metricMeta.earlyLeaveCount,
+      showMetricMeta: true,
     },
     {
       key: 'absentCount',
@@ -485,6 +543,7 @@ const AttendanceSummaryPage: React.FC = () => {
       icon: <AreaChartOutlined />,
       suffix: '次',
       ...metricMeta.absentCount,
+      showMetricMeta: true,
     },
     {
       key: 'leaveCount',
@@ -494,6 +553,7 @@ const AttendanceSummaryPage: React.FC = () => {
       icon: <DashboardOutlined />,
       suffix: '天',
       ...metricMeta.leaveCount,
+      showMetricMeta: true,
     },
   ];
 
@@ -579,7 +639,11 @@ const AttendanceSummaryPage: React.FC = () => {
         <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
           {summaryCards.map((card) => (
             <Col xs={24} sm={12} xl={8} xxl={4} key={card.key}>
-              <Card bordered={false} style={{ borderRadius: 20, minHeight: 148 }}>
+              <Card
+                bordered={false}
+                style={summaryCardStyles.card}
+                bodyStyle={summaryCardStyles.body}
+              >
                 <Space align="start" size={16}>
                   <div
                     style={{
@@ -599,32 +663,29 @@ const AttendanceSummaryPage: React.FC = () => {
                   <Space direction="vertical" size={4}>
                     <Text type="secondary">{card.title}</Text>
                     <Statistic value={card.value} suffix={card.suffix} />
-                    {card.ratioLabel && (
-                      <Text type="secondary">
-                        {card.ratioLabel} {toPercent(card.ratioValue)}
-                      </Text>
-                    )}
-                    {card.ratioLabel && (
-                      <Space size={4}>
-                        <Text type="secondary">较上月</Text>
-                        {card.momDirection === 'up' && <RiseOutlined style={{ color: '#52c41a' }} />}
-                        {card.momDirection === 'down' && <FallOutlined style={{ color: '#ff4d4f' }} />}
-                        <Text
-                          style={{
-                            color:
-                              card.momDirection === 'up'
-                                ? '#52c41a'
-                                : card.momDirection === 'down'
-                                ? '#ff4d4f'
-                                : '#8c8c8c',
-                          }}
-                        >
-                          {toPercent(card.momValue)}
-                        </Text>
-                      </Space>
-                    )}
                   </Space>
                 </Space>
+
+                {card.showMetricMeta ? (
+                  <Row gutter={16} style={summaryCardStyles.metricPanel}>
+                    <Col span={12}>
+                      <Space direction="vertical" size={2}>
+                        <Text style={summaryCardStyles.metricTitle}>{card.ratioLabel}</Text>
+                        <Text style={summaryCardStyles.metricValue}>
+                          {toPercent(card.ratioValue, 1)}
+                        </Text>
+                      </Space>
+                    </Col>
+                    <Col span={12}>
+                      <Space direction="vertical" size={2}>
+                        <Text style={summaryCardStyles.metricTitle}>较上月</Text>
+                        {renderMomValue(card.momDirection, card.momValue)}
+                      </Space>
+                    </Col>
+                  </Row>
+                ) : (
+                  <div style={summaryCardStyles.metricPanel} />
+                )}
               </Card>
             </Col>
           ))}
