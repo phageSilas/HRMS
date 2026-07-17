@@ -81,8 +81,9 @@ const UserPage: React.FC = () => {
       title: '关键词',
       dataIndex: 'keyword',
       hideInTable: true,
-      search: {
-        transform: (value: string) => ({ keyword: value }),
+      valueType: 'text',
+      fieldProps: {
+        placeholder: '请输入用户名/姓名/手机号',
       },
     },
     {
@@ -285,7 +286,6 @@ const UserPage: React.FC = () => {
         rowKey="id"
         search={{
           labelWidth: 'auto',
-          filterType: 'light',
           searchText: '搜索',
           resetText: '重置',
         }}
