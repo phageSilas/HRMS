@@ -231,6 +231,12 @@ export interface AttendanceLeaveManageItem {
   createTime?: string;
 }
 
+export interface AttendanceLeaveType {
+  id: number;
+  label: string;
+  value: string;
+}
+
 // ============ 考勤组接口 ============
 
 /**
@@ -321,6 +327,13 @@ export async function getAttendanceLeaveManageList(params: AttendanceLeaveManage
   return request.get<PageResult<AttendanceLeaveManageItem>>('/api/v1/attendance/leaves', {
     params,
   });
+}
+
+/**
+ * 获取启用的请假类型
+ */
+export async function getAttendanceLeaveTypes() {
+  return request.get<AttendanceLeaveType[]>('/api/v1/leaves/types');
 }
 
 // ============ 考勤汇总接口 ============
