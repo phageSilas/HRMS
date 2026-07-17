@@ -217,11 +217,7 @@ const AttendanceRecordPage: React.FC = () => {
   const loadDepartments = async () => {
     setDepartmentLoading(true);
     try {
-      const page = await getDepartmentList({
-        pageNum: 1,
-        pageSize: DEPARTMENT_PAGE_SIZE,
-      });
-      const nextDepartments = page.records ?? [];
+      const nextDepartments = await getDepartmentList();
       setDepartments(nextDepartments);
       return nextDepartments;
     } catch (error) {

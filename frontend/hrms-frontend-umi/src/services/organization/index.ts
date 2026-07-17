@@ -4,7 +4,7 @@
  */
 
 import request from '@/utils/request';
-import type { Result, PageResult, PageQuery } from '@/types/api';
+import type { PageQuery, PageResult } from '@/types/api';
 
 // ============ 类型定义 ============
 
@@ -58,8 +58,8 @@ export async function getDepartmentTree() {
 /**
  * 获取部门列表
  */
-export async function getDepartmentList(params?: PageQuery) {
-  return request.get<PageResult<Department>>('/api/v1/depts', { params });
+export async function getDepartmentList() {
+  return request.get<Department[]>('/api/v1/depts');
 }
 
 /**
