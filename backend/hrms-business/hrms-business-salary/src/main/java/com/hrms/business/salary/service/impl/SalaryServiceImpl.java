@@ -15,6 +15,7 @@ import com.hrms.business.salary.cache.SalaryCacheKeys;
 import com.hrms.business.salary.dto.EmployeeSalaryProfileRequestDTO;
 import com.hrms.business.salary.dto.SalaryBatchAdjustmentRequestDTO;
 import com.hrms.business.salary.dto.SalaryBatchCreateRequestDTO;
+import com.hrms.business.salary.dto.SalaryManagePayslipVerifyRequestDTO;
 import com.hrms.business.salary.dto.SalaryPayslipVerifyRequestDTO;
 import com.hrms.business.salary.dto.SalaryTemplateCreateOrUpdateRequestDTO;
 import com.hrms.business.salary.dto.SalaryTemplateItemRequestDTO;
@@ -650,6 +651,38 @@ public class SalaryServiceImpl implements SalaryService {
         if (redisTemplate != null) {
             redisTemplate.opsForValue().set(SalaryCacheKeys.payslipVerify(employeeId, requestDTO.getMonth()),
                     token, 30, TimeUnit.MINUTES);
+        }
+        return SalaryPayslipVerifyVO.builder()
+                .success(true)
+                .token(token)
+                .expireTime(LocalDateTime.now().plusMinutes(30))
+                .build();
+    }
+
+    /**
+     * 管理端工资条二次验证。
+     *
+     * @param requestDTO 验证请求
+     * @return 验证结果
+     * 本方法使用的工具类: SecurityContextHolder(hrms-common),PasswordEncoder(spring-security-crypto),StringRedisTemplate(spring-data-redis),IdUtil(hutool)
+     */
+    @Override
+    public SalaryPayslipVerifyVO verifyManagePayslip(SalaryManagePayslipVerifyRequestDTO requestDTO) {
+        assertSalaryManagerRole();
+        Long userId = SecurityContextHolder.getUserId();
+        SalarySysUserEntity user = salarySysUserMapper.selectById(userId);
+        if (user == null || Objects.equals(user.getIsDeleted(), 1) || Objects.equals(user.getStatus(), 0)) {
+            throw new GlobalException(ErrorCode.UNAUTHORIZED, "当前用户不可用");
+        }
+        boolean passwordOk = StrUtil.isNotBlank(requestDTO.getPassword())
+                && getPasswordEncoder().matches(requestDTO.getPassword(), user.getPassword());
+        if (!passwordOk) {
+            throw new GlobalException(ErrorCode.FORBIDDEN, "登录密码验证失败");
+        }
+        String token = IdUtil.fastSimpleUUID();
+        StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+        if (redisTemplate != null) {
+            redisTemplate.opsForValue().set(SalaryCacheKeys.managePayslipVerify(userId), token, 30, TimeUnit.MINUTES);
         }
         return SalaryPayslipVerifyVO.builder()
                 .success(true)

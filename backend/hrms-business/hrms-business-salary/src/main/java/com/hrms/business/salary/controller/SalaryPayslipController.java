@@ -1,5 +1,6 @@
 package com.hrms.business.salary.controller;
 
+import com.hrms.business.salary.dto.SalaryManagePayslipVerifyRequestDTO;
 import com.hrms.business.salary.dto.SalaryPayslipVerifyRequestDTO;
 import com.hrms.business.salary.service.SalaryService;
 import com.hrms.business.salary.vo.SalaryPayslipDetailVO;
@@ -54,6 +55,19 @@ public class SalaryPayslipController {
     public Result<SalaryPayslipVerifyVO> verifyPayslip(
             @Valid @RequestBody SalaryPayslipVerifyRequestDTO requestDTO) {
         return Result.success(salaryService.verifyPayslip(requestDTO));
+    }
+
+    /**
+     * 管理端工资条二次验证。
+     *
+     * @param requestDTO 验证请求
+     * @return 验证结果
+     * 本方法使用的工具类: Result(hrms-common)
+     */
+    @PostMapping("/manage/payslip/verify")
+    public Result<SalaryPayslipVerifyVO> verifyManagePayslip(
+            @Valid @RequestBody SalaryManagePayslipVerifyRequestDTO requestDTO) {
+        return Result.success(salaryService.verifyManagePayslip(requestDTO));
     }
 
     /**

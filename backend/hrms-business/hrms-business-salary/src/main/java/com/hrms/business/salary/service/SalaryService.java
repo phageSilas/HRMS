@@ -3,6 +3,7 @@ package com.hrms.business.salary.service;
 import com.hrms.business.salary.dto.EmployeeSalaryProfileRequestDTO;
 import com.hrms.business.salary.dto.SalaryBatchAdjustmentRequestDTO;
 import com.hrms.business.salary.dto.SalaryBatchCreateRequestDTO;
+import com.hrms.business.salary.dto.SalaryManagePayslipVerifyRequestDTO;
 import com.hrms.business.salary.dto.SalaryPayslipVerifyRequestDTO;
 import com.hrms.business.salary.dto.SalaryTemplateCreateOrUpdateRequestDTO;
 import com.hrms.business.salary.dto.SalaryTemplateQueryDTO;
@@ -167,6 +168,15 @@ public interface SalaryService {
      * 本方法使用的工具类: 无
      */
     SalaryPayslipVerifyVO verifyPayslip(SalaryPayslipVerifyRequestDTO requestDTO);
+
+    /**
+     * 管理端工资条二次验证。
+     *
+     * @param requestDTO 验证请求
+     * @return 验证结果
+     * 本方法使用的工具类: 无
+     */
+    SalaryPayslipVerifyVO verifyManagePayslip(SalaryManagePayslipVerifyRequestDTO requestDTO);
 
     /**
      * 查询工资条详情。
