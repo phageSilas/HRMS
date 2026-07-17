@@ -85,21 +85,6 @@ export default defineConfig({
           name: '菜单管理',
           component: '@/pages/system/menu',
         },
-        {
-          path: '/system/dept',
-          name: '部门管理',
-          component: '@/pages/system/dept',
-        },
-        {
-          path: '/system/post',
-          name: '职位管理',
-          component: '@/pages/system/post',
-        },
-        {
-          path: '/system/dict',
-          name: '字典管理',
-          component: '@/pages/system/dict',
-        },
       ],
     },
 
@@ -109,7 +94,24 @@ export default defineConfig({
       name: '组织架构',
       icon: 'apartment',
       access: 'organization',
-      component: '@/pages/organization',
+      routes: [
+        { path: '/organization', redirect: '/organization/dept' },
+        {
+          path: '/organization/dept',
+          name: '部门管理',
+          component: '@/pages/organization/dept',
+        },
+        {
+          path: '/organization/post',
+          name: '职位管理',
+          component: '@/pages/organization/post',
+        },
+        {
+          path: '/organization/dict',
+          name: '字典管理',
+          component: '@/pages/organization/dict',
+        },
+      ],
     },
 
     // 员工档案（成员 B）- ADMIN, HR, MANAGER 可见
