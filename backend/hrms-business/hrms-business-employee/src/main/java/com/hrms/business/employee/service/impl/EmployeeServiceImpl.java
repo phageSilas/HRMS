@@ -281,6 +281,11 @@ public class EmployeeServiceImpl implements EmployeeService {
 
         employeeMapper.updateById(entity);
 
+        // 同步更新 sys_user 的 dept_id（如果部门发生变更）
+        if (updateDTO.getDeptId() != null && !updateDTO.getDeptId().equals(oldDeptId)) {
+            syncUserDeptId(entity.getUserId(), updateDTO.getDeptId());
+        }
+
         // 发布员工更新事件，更新部门人数
         if (updateDTO.getDeptId() != null && !updateDTO.getDeptId().equals(oldDeptId)) {
             eventPublisher.publishEvent(new EmployeeChangeEvent(this, EmployeeChangeEvent.ChangeType.UPDATE, id, oldDeptId, updateDTO.getDeptId()));
@@ -646,6 +651,27 @@ public class EmployeeServiceImpl implements EmployeeService {
         DeptDetailVO dept = deptService.getDeptById(deptId);
         if (dept == null) {
             throw new GlobalException(ErrorCode.EMPLOYEE_DEPT_NOT_FOUND);
+        }
+    }
+
+    /**
+     * 同步更新用户表的 dept_id
+     * <p>
+     * 当员工部门发生变更时，同步更新关联的系统账号的部门ID
+     * </p>
+     *
+     * @param userId 用户ID
+     * @param deptId 新部门ID
+     */
+    private void syncUserDeptId(Long userId, Long deptId) {
+        if (userId == null) {
+            return;
+        }
+        try {
+            userService.updateUserDept(userId, deptId);
+            log.info("同步更新用户部门成功，userId={}, deptId={}", userId, deptId);
+        } catch (Exception e) {
+            log.error("同步更新用户部门失败，userId={}", userId, e);
         }
     }
 

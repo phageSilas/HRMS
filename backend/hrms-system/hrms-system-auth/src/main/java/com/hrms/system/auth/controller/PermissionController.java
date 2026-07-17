@@ -3,6 +3,8 @@ package com.hrms.system.auth.controller;
 import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.Result;
 import com.hrms.system.auth.entity.RoleEntity;
+import com.hrms.system.auth.entity.UserEntity;
+import com.hrms.system.auth.mapper.UserMapper;
 import com.hrms.system.auth.service.FieldPermissionService;
 import com.hrms.system.auth.service.RoleService;
 import com.hrms.system.auth.vo.DataScopeVO;
@@ -30,6 +32,7 @@ public class PermissionController {
 
     private final RoleService roleService;
     private final FieldPermissionService fieldPermissionService;
+    private final UserMapper userMapper;
 
     /**
      * 获取字段权限
@@ -59,9 +62,12 @@ public class PermissionController {
         Long userId = SecurityContextHolder.getUserId();
         Integer dataScope = roleService.getDataScope(userId);
 
+        // 查询用户获取 deptId
+        UserEntity user = userMapper.selectById(userId);
+
         DataScopeVO vo = new DataScopeVO();
         vo.setScopeType(dataScope);
-        vo.setDepartmentIds(List.of()); // TODO: 根据部门关系查询部门ID列表
+        vo.setDepartmentIds(List.of(user.getDeptId())); // 直接使用用户表冗余的 deptId
         vo.setScopeDesc(getScopeDesc(dataScope));
 
         return Result.success(vo);

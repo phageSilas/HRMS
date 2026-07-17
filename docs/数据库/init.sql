@@ -41,6 +41,7 @@ CREATE TABLE `sys_user` (
   `phone` VARCHAR(20) NOT NULL COMMENT '手机号',
   `email` VARCHAR(128) DEFAULT NULL COMMENT '邮箱',
   `avatar_url` VARCHAR(255) DEFAULT NULL COMMENT '头像地址',
+  `dept_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '部门ID（冗余字段，避免跨模块查询）',
   `employee_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '关联员工 ID',
   `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态：1-启用 0-禁用',
   `last_login_time` DATETIME DEFAULT NULL COMMENT '最后登录时间',
@@ -60,6 +61,7 @@ CREATE TABLE `sys_user` (
   UNIQUE KEY `uk_sys_user_username` (`username`),
   UNIQUE KEY `uk_sys_user_phone` (`phone`),
   KEY `idx_sys_user_employee_id` (`employee_id`),
+  KEY `idx_sys_user_dept_id` (`dept_id`),
   KEY `idx_sys_user_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='系统用户表';
 
@@ -1010,4 +1012,18 @@ CREATE TABLE `hr_attendance_overtime` (
   KEY `idx_hr_att_overtime_employee` (`employee_id`),
   KEY `idx_hr_att_overtime_date` (`overtime_date`),
   KEY `idx_hr_att_overtime_status` (`approval_status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='加班申请表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='加班申请表'
+
+
+
+-- ============================================================
+-- 修复补卡表的 record_id 字段（允许为空，因为补卡可以先于打卡记录存在）
+-- ============================================================
+ALTER TABLE `hr_attendance_correction` MODIFY COLUMN `record_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '打卡记录ID（补卡时可先无打卡记录）';
+
+-- ============================================================
+-- 添加sys-user表的 dept_id 字段部门ID（冗余字段，避免跨模块查询）
+-- ============================================================
+ALTER TABLE `sys_user`
+    ADD COLUMN `dept_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '部门ID（冗余字段，避免跨模块查询）' AFTER `employee_id`,
+ADD INDEX `idx_sys_user_dept_id` (`dept_id`);

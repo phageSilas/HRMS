@@ -24,7 +24,6 @@ export interface UserInfo {
 export interface LoginRequest {
   username: string;
   password: string;
-  role?: string; // 开发阶段选择的角色
 }
 
 /**

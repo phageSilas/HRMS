@@ -51,6 +51,11 @@ public class UserEntity extends BaseEntity {
     private String avatarUrl;
 
     /**
+     * 部门ID（冗余字段，避免跨模块查询）
+     */
+    private Long deptId;
+
+    /**
      * 关联员工 ID
      */
     private Long employeeId;

@@ -6,9 +6,57 @@
 -- 1. 系统用户 (sys_user)
 -- 密码: 123456 (BCrypt加密, cost=10)
 -- ----------------------------------------
-INSERT IGNORE INTO `sys_user` (`id`, `username`, `password`, `nickname`, `real_name`, `phone`, `email`, `status`, `need_change_password`, `create_time`, `update_time`, `is_deleted`, `version`) VALUES
-    (1, 'admin', '$2b$12$DM3WJuIpv4IN4aXoqp8EFOZKsfV1DXlCwbDsrYelpGlGINCLznpJe', '管理员', '系统管理员', '13800000000', 'admin@company.com', 1, 0, NOW(), NOW(), 0, 0);
-
+INSERT IGNORE INTO `sys_user` (
+    `id`,
+    `username`,
+    `password`,
+    `nickname`,
+    `real_name`,
+    `phone`,
+    `email`,
+    `avatar_url`,
+    `dept_id`,
+    `employee_id`,
+    `status`,
+    `last_login_time`,
+    `last_login_ip`,
+    `need_change_password`,
+    `password_update_time`,
+    `login_fail_count`,
+    `lock_time`,
+    `create_by`,
+    `create_time`,
+    `update_by`,
+    `update_time`,
+    `is_deleted`,
+    `version`,
+    `remark`
+) VALUES (
+    1,
+    'admin',
+    '$2b$12$T5qSEbFF5OFSEj1GEH5UDedLtO0ljBiIDrRtJmLcpIuzL0/.RfCWC',
+    '管理员',
+    '系统管理员',
+    '13800000000',
+    'admin@company.com',
+    NULL,                                 -- avatar_url
+    NULL,                                 -- dept_id（管理员不属任何部门）
+    NULL,                                 -- employee_id（未关联员工）
+    1,                                    -- status
+    NULL,                                 -- last_login_time
+    NULL,                                 -- last_login_ip
+    0,                                    -- need_change_password（初始不需要强制修改）
+    NULL,                                 -- password_update_time
+    0,                                    -- login_fail_count
+    NULL,                                 -- lock_time
+    NULL,                                 -- create_by
+    NOW(),                                -- create_time
+    NULL,                                 -- update_by
+    NOW(),                                -- update_time
+    0,                                    -- is_deleted
+    0,                                    -- version
+    NULL                                  -- remark
+);
 -- ----------------------------------------
 -- 2. 角色 (sys_role)
 -- ----------------------------------------
@@ -172,12 +220,12 @@ INSERT IGNORE INTO hr_attendance_group_member (
 -- 密码统一: 123456 (BCrypt加密, cost=12)
 -- employee_id 先填占位值，后续员工插入后回补
 -- ============================================================
-INSERT IGNORE INTO `sys_user` (`id`, `username`, `password`, `nickname`, `real_name`, `phone`, `email`, `employee_id`, `status`, `need_change_password`, `create_time`, `update_time`, `is_deleted`, `version`) VALUES
-    (2, 'zhangsan', '$2b$12$DM3WJuIpv4IN4aXoqp8EFOZKsfV1DXlCwbDsrYelpGlGINCLznpJe', '张三', '张三', '13800000001', 'zhangsan@company.com', 6, 1, 0, NOW(), NOW(), 0, 0),
-    (3, 'lisi',    '$2b$12$DM3WJuIpv4IN4aXoqp8EFOZKsfV1DXlCwbDsrYelpGlGINCLznpJe', '李四', '李四', '13800000002', 'lisi@company.com', 2, 1, 0, NOW(), NOW(), 0, 0),
-    (4, 'wangwu',  '$2b$12$DM3WJuIpv4IN4aXoqp8EFOZKsfV1DXlCwbDsrYelpGlGINCLznpJe', '王五', '王五', '13800000003', 'wangwu@company.com', 3, 1, 0, NOW(), NOW(), 0, 0),
-    (5, 'zhaoliu', '$2b$12$DM3WJuIpv4IN4aXoqp8EFOZKsfV1DXlCwbDsrYelpGlGINCLznpJe', '赵六', '赵六', '13800000004', 'zhaoliu@company.com', 4, 1, 0, NOW(), NOW(), 0, 0),
-    (6, 'sunqi',   '$2b$12$DM3WJuIpv4IN4aXoqp8EFOZKsfV1DXlCwbDsrYelpGlGINCLznpJe', '孙七', '孙七', '13800000005', 'sunqi@company.com', 5, 1, 0, NOW(), NOW(), 0, 0);
+-- INSERT IGNORE INTO `sys_user` (`id`, `username`, `password`, `nickname`, `real_name`, `phone`, `email`, `employee_id`, `status`, `need_change_password`, `create_time`, `update_time`, `is_deleted`, `version`) VALUES
+--     (2, 'zhangsan', '$2b$12$DM3WJuIpv4IN4aXoqp8EFOZKsfV1DXlCwbDsrYelpGlGINCLznpJe', '张三', '张三', '13800000001', 'zhangsan@company.com', 6, 1, 0, NOW(), NOW(), 0, 0),
+--     (3, 'lisi',    '$2b$12$DM3WJuIpv4IN4aXoqp8EFOZKsfV1DXlCwbDsrYelpGlGINCLznpJe', '李四', '李四', '13800000002', 'lisi@company.com', 2, 1, 0, NOW(), NOW(), 0, 0),
+--     (4, 'wangwu',  '$2b$12$DM3WJuIpv4IN4aXoqp8EFOZKsfV1DXlCwbDsrYelpGlGINCLznpJe', '王五', '王五', '13800000003', 'wangwu@company.com', 3, 1, 0, NOW(), NOW(), 0, 0),
+--     (5, 'zhaoliu', '$2b$12$DM3WJuIpv4IN4aXoqp8EFOZKsfV1DXlCwbDsrYelpGlGINCLznpJe', '赵六', '赵六', '13800000004', 'zhaoliu@company.com', 4, 1, 0, NOW(), NOW(), 0, 0),
+--     (6, 'sunqi',   '$2b$12$DM3WJuIpv4IN4aXoqp8EFOZKsfV1DXlCwbDsrYelpGlGINCLznpJe', '孙七', '孙七', '13800000005', 'sunqi@company.com', 5, 1, 0, NOW(), NOW(), 0, 0);
 
 -- ============================================================
 -- 13. 补充部门数据 (sys_dept) — 设置负责人
@@ -255,11 +303,6 @@ INSERT IGNORE INTO `hr_salary_batch_item` (`id`, `batch_id`, `employee_id`, `bas
 -- 19. 回补薪资明细：如果 INSERT IGNORE 因主键冲突未生效，用 UPDATE 修正 employee_id
 -- ============================================================
 UPDATE hr_salary_batch_item SET employee_id = 6 WHERE id IN (1,3) AND employee_id = 1;
-
--- ============================================================
--- 20. 修复补卡表的 record_id 字段（允许为空，因为补卡可以先于打卡记录存在）
--- ============================================================
-ALTER TABLE `hr_attendance_correction` MODIFY COLUMN `record_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '打卡记录ID（补卡时可先无打卡记录）';
 
 -- ============================================================
 -- 21. 加班申请数据 (hr_attendance_overtime)

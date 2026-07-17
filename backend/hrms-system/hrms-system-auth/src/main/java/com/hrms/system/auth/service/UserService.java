@@ -61,4 +61,15 @@ public interface UserService {
      */
     ResetPasswordVO resetPassword(Long id);
 
+    /**
+     * 更新用户部门ID
+     * <p>
+     * 当员工部门发生变更时，同步更新关联用户的部门ID
+     * </p>
+     *
+     * @param userId 用户ID
+     * @param deptId 新部门ID
+     */
+    void updateUserDept(Long userId, Long deptId);
+
 }
