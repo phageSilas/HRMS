@@ -260,41 +260,33 @@ const MenuPage: React.FC = () => {
 
   // 构建树形数据
   const buildTreeData = (menus: MenuItem[]): any[] => {
-    const menuMap = new Map<number, MenuItem>();
-    menus.forEach((menu) => menuMap.set(menu.id, menu));
-
+    const menuMap = new Map<number, any>();
     const treeData: any[] = [];
+
+    // 第一遍：创建所有节点
     menus.forEach((menu) => {
-      const node = {
+      menuMap.set(menu.id, {
         title: menu.menuName,
         key: menu.id,
         children: [] as any[],
-      };
+      });
+    });
+
+    // 第二遍：建立父子关系
+    menus.forEach((menu) => {
+      const node = menuMap.get(menu.id);
       if (menu.parentId === 0 || !menu.parentId) {
         treeData.push(node);
       } else {
         const parent = menuMap.get(menu.parentId);
         if (parent) {
-          const parentNode = findNodeInTree(treeData, menu.parentId);
-          if (parentNode) {
-            parentNode.children = parentNode.children || [];
-            parentNode.children.push(node);
-          }
+          parent.children = parent.children || [];
+          parent.children.push(node);
         }
       }
     });
-    return treeData;
-  };
 
-  const findNodeInTree = (tree: any[], key: number): any | null => {
-    for (const node of tree) {
-      if (node.key === key) return node;
-      if (node.children) {
-        const found = findNodeInTree(node.children, key);
-        if (found) return found;
-      }
-    }
-    return null;
+    return treeData;
   };
 
   // 获取父菜单选项

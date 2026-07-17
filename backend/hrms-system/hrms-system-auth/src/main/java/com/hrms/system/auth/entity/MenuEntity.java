@@ -1,9 +1,12 @@
 package com.hrms.system.auth.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.hrms.common.entity.BaseEntity;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+
+import java.util.List;
 
 /**
  * 菜单实体
@@ -67,5 +70,11 @@ public class MenuEntity extends BaseEntity {
      * 备注
      */
     private String remark;
+
+    /**
+     * 子菜单列表（非数据库字段）
+     */
+    @TableField(exist = false)
+    private List<MenuEntity> children;
 
 }

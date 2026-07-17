@@ -16,7 +16,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import com.hrms.system.auth.dto.RoleCreateDTO;
 import com.hrms.system.auth.dto.RoleMenuAssignDTO;
+import com.hrms.system.auth.dto.RoleUpdateDTO;
 import com.hrms.system.auth.mapper.RoleMenuMapper;
 import com.hrms.system.auth.vo.RoleVO;
 
@@ -39,9 +41,17 @@ public class RoleServiceImpl implements RoleService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Long create(RoleEntity role) {
+    public Long create(RoleCreateDTO createDTO) {
         // 校验角色编码唯一性
-        checkRoleCodeUnique(role.getRoleCode(), null);
+        checkRoleCodeUnique(createDTO.getRoleCode(), null);
+
+        RoleEntity role = new RoleEntity();
+        role.setRoleName(createDTO.getRoleName());
+        role.setRoleCode(createDTO.getRoleCode());
+        role.setDataScope(createDTO.getDataScope());
+        role.setSortNo(createDTO.getSortNo());
+        role.setStatus(createDTO.getStatus());
+        role.setRemark(createDTO.getRemark());
 
         roleMapper.insert(role);
         return role.getId();
@@ -49,16 +59,25 @@ public class RoleServiceImpl implements RoleService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void update(RoleEntity role) {
-        RoleEntity existing = roleMapper.selectById(role.getId());
+    public void update(Long id, RoleUpdateDTO updateDTO) {
+        RoleEntity existing = roleMapper.selectById(id);
         if (existing == null) {
             throw new GlobalException(ErrorCode.NOT_FOUND, "角色不存在");
         }
 
         // 校验角色编码唯一性（排除自身）
-        checkRoleCodeUnique(role.getRoleCode(), role.getId());
+        if (StringUtils.hasText(updateDTO.getRoleCode())) {
+            checkRoleCodeUnique(updateDTO.getRoleCode(), id);
+        }
 
-        roleMapper.updateById(role);
+        existing.setRoleName(updateDTO.getRoleName());
+        existing.setRoleCode(updateDTO.getRoleCode());
+        existing.setDataScope(updateDTO.getDataScope());
+        existing.setSortNo(updateDTO.getSortNo());
+        existing.setStatus(updateDTO.getStatus());
+        existing.setRemark(updateDTO.getRemark());
+
+        roleMapper.updateById(existing);
     }
 
     @Override

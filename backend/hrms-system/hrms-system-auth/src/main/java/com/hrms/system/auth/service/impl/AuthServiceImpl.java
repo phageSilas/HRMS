@@ -60,12 +60,6 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public LoginVO login(String username, String password) {
-        // 生成密码哈希（调试用）
-        String encoded = passwordEncoder.encode("123456");
-        System.out.println("============================================");
-        System.out.println("BCrypt hash for '123456':" + encoded);
-        System.out.println("============================================");
-
         // 1. 检查账号是否被锁定
         checkAccountLocked(username);
 

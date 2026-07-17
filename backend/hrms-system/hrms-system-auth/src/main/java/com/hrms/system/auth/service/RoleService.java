@@ -1,7 +1,9 @@
 package com.hrms.system.auth.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.hrms.system.auth.dto.RoleCreateDTO;
 import com.hrms.system.auth.dto.RoleMenuAssignDTO;
+import com.hrms.system.auth.dto.RoleUpdateDTO;
 import com.hrms.system.auth.entity.RoleEntity;
 import com.hrms.system.auth.vo.RoleVO;
 
@@ -15,17 +17,18 @@ public interface RoleService {
     /**
      * 创建角色
      *
-     * @param role 角色实体
+     * @param createDTO 角色创建DTO
      * @return 角色 ID
      */
-    Long create(RoleEntity role);
+    Long create(RoleCreateDTO createDTO);
 
     /**
      * 更新角色
      *
-     * @param role 角色实体
+     * @param id 角色ID
+     * @param updateDTO 角色更新DTO
      */
-    void update(RoleEntity role);
+    void update(Long id, RoleUpdateDTO updateDTO);
 
     /**
      * 删除角色
