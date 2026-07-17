@@ -190,6 +190,15 @@ public interface SalaryService {
     PageResult<SalaryManagePayslipPageVO> pageManagePayslips(SalaryManagePayslipQueryDTO queryDTO);
 
     /**
+     * 查询管理端工资条详情。
+     *
+     * @param payslipId 工资条ID
+     * @return 工资条详情
+     * 本方法使用的工具类: 无
+     */
+    SalaryPayslipDetailVO getManagePayslipDetail(Long payslipId);
+
+    /**
      * 查询工资条详情。
      *
      * @param payslipId 工资条ID

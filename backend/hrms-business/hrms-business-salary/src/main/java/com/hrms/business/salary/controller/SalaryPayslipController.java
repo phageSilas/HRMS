@@ -87,6 +87,18 @@ public class SalaryPayslipController {
     }
 
     /**
+     * 查询管理端工资条详情。
+     *
+     * @param id 工资条ID
+     * @return 工资条详情
+     * 本方法使用的工具类: Result(hrms-common)
+     */
+    @GetMapping("/manage/payslip/{id}")
+    public Result<SalaryPayslipDetailVO> getManagePayslipDetail(@PathVariable Long id) {
+        return Result.success(salaryService.getManagePayslipDetail(id));
+    }
+
+    /**
      * 查询工资条详情。
      *
      * @param id 工资条ID

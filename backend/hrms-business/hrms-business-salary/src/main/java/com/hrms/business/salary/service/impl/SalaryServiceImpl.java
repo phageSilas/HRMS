@@ -26,6 +26,7 @@ import com.hrms.business.salary.entity.SalaryBatchAdjustmentEntity;
 import com.hrms.business.salary.entity.SalaryBatchEntity;
 import com.hrms.business.salary.entity.SalaryBatchItemEntity;
 import com.hrms.business.salary.entity.SalaryEmployeeSnapshotEntity;
+import com.hrms.business.salary.entity.SalaryPayslipViewRecordEntity;
 import com.hrms.business.salary.entity.SalarySysUserEntity;
 import com.hrms.business.salary.entity.SalaryTemplateEntity;
 import com.hrms.business.salary.entity.SalaryTemplateItemEntity;
@@ -36,6 +37,7 @@ import com.hrms.business.salary.mapper.SalaryBatchAdjustmentMapper;
 import com.hrms.business.salary.mapper.SalaryBatchItemMapper;
 import com.hrms.business.salary.mapper.SalaryBatchMapper;
 import com.hrms.business.salary.mapper.SalaryEmployeeSnapshotMapper;
+import com.hrms.business.salary.mapper.SalaryPayslipViewRecordMapper;
 import com.hrms.business.salary.mapper.SalarySysUserMapper;
 import com.hrms.business.salary.mapper.SalaryTemplateItemMapper;
 import com.hrms.business.salary.mapper.SalaryTemplateMapper;
@@ -125,6 +127,7 @@ public class SalaryServiceImpl implements SalaryService {
     private final SalaryBatchMapper salaryBatchMapper;
     private final SalaryBatchAdjustmentMapper salaryBatchAdjustmentMapper;
     private final SalaryBatchItemMapper salaryBatchItemMapper;
+    private final SalaryPayslipViewRecordMapper salaryPayslipViewRecordMapper;
     private final SalaryEmployeeSnapshotMapper employeeSnapshotMapper;
     private final SalarySysUserMapper salarySysUserMapper;
     private final ObjectProvider<StringRedisTemplate> redisTemplateProvider;
@@ -746,6 +749,7 @@ public class SalaryServiceImpl implements SalaryService {
             throw new GlobalException(ErrorCode.FORBIDDEN, "请先完成工资条二次验证");
         }
         SalaryEmployeeSnapshotEntity employee = employeeSnapshotMapper.selectById(employeeId);
+        recordPayslipView(item, batch);
         return payslipDetailBuilder(item, employee)
                 .salaryMonth(batch.getSalaryMonth())
                 .batchNo(batch.getBatchNo())
@@ -758,6 +762,31 @@ public class SalaryServiceImpl implements SalaryService {
      * @return 薪资趋势
      * 本方法使用的工具类: YearMonth(JDK),Wrappers(MyBatis-Plus),List(JDK)
      */
+    /**
+     * 查询管理端工资条详情。
+     *
+     * @param payslipId 工资条ID
+     * @return 工资条详情
+     * 本方法使用的工具类: SecurityContextHolder(hrms-common),StringRedisTemplate(spring-data-redis),Wrappers(MyBatis-Plus)
+     */
+    @Override
+    public SalaryPayslipDetailVO getManagePayslipDetail(Long payslipId) {
+        assertSalaryManagerRole();
+        if (!hasManagePayslipVerified()) {
+            throw new GlobalException(ErrorCode.FORBIDDEN, "请先完成管理端工资条二次验证");
+        }
+        SalaryBatchItemEntity item = salaryBatchItemMapper.selectById(payslipId);
+        if (item == null) {
+            throw new GlobalException(ErrorCode.NOT_FOUND, "工资条不存在");
+        }
+        SalaryBatchEntity batch = getBatchRequired(item.getBatchId());
+        SalaryEmployeeSnapshotEntity employee = employeeSnapshotMapper.selectById(item.getEmployeeId());
+        return payslipDetailBuilder(item, employee)
+                .salaryMonth(batch.getSalaryMonth())
+                .batchNo(batch.getBatchNo())
+                .build();
+    }
+
     @Override
     public List<SalaryTrendVO> getTrend() {
         Long employeeId = getCurrentEmployeeId();
@@ -1812,6 +1841,36 @@ public class SalaryServiceImpl implements SalaryService {
      * 获取密码编码器。
      * @return 密码编码器
      */
+    /**
+     * 记录员工工资条查看行为。
+     *
+     * @param item  工资条明细
+     * @param batch 薪资批次
+     * 本方法使用的工具类: Wrappers(MyBatis-Plus),LocalDateTime(JDK)
+     */
+    private void recordPayslipView(SalaryBatchItemEntity item, SalaryBatchEntity batch) {
+        SalaryPayslipViewRecordEntity record = salaryPayslipViewRecordMapper.selectOne(Wrappers
+                .lambdaQuery(SalaryPayslipViewRecordEntity.class)
+                .eq(SalaryPayslipViewRecordEntity::getPayslipItemId, item.getId())
+                .last("LIMIT 1"));
+        LocalDateTime now = LocalDateTime.now();
+        if (record == null) {
+            record = new SalaryPayslipViewRecordEntity();
+            record.setPayslipItemId(item.getId());
+            record.setBatchId(item.getBatchId());
+            record.setEmployeeId(item.getEmployeeId());
+            record.setSalaryMonth(batch.getSalaryMonth());
+            record.setFirstViewTime(now);
+            record.setLastViewTime(now);
+            record.setViewCount(1);
+            salaryPayslipViewRecordMapper.insert(record);
+            return;
+        }
+        record.setLastViewTime(now);
+        record.setViewCount(Optional.ofNullable(record.getViewCount()).orElse(0) + 1);
+        salaryPayslipViewRecordMapper.updateById(record);
+    }
+
     private PasswordEncoder getPasswordEncoder() {
         return Optional.ofNullable(passwordEncoderProvider.getIfAvailable()).orElseGet(BCryptPasswordEncoder::new);
     }
