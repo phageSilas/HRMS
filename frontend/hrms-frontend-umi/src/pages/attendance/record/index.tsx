@@ -1,3 +1,6 @@
+import { usePageAutoRefresh } from '@/hooks/usePageAutoRefresh';
+import type { Department } from '@/services/organization';
+import { getDepartmentList } from '@/services/organization';
 import type {
   AttendanceGroup,
   AttendanceGroupRecord,
@@ -14,14 +17,14 @@ import {
   SearchOutlined,
 } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
-import { history, useRequest } from '@umijs/max';
+import { history } from '@umijs/max';
+import type { PageResult } from '@/types/api';
 import {
   Button,
   Card,
   DatePicker,
   Form,
   Input,
-  InputNumber,
   Select,
   Space,
   Table,
@@ -37,14 +40,6 @@ import styles from './index.less';
 
 const { RangePicker } = DatePicker;
 const { Text, Title } = Typography;
-
-type AttendanceGroupPageLike =
-  | {
-      records?: AttendanceGroup[];
-      data?: { records?: AttendanceGroup[] } | AttendanceGroup[];
-    }
-  | AttendanceGroup[]
-  | undefined;
 
 interface RecordFilterValues {
   groupId?: number;
@@ -67,6 +62,8 @@ interface RecordQueryState {
   pageSize: number;
 }
 
+interface StoredRecordQueryState extends Partial<RecordQueryState> {}
+
 const statusMeta: Record<string, { label: string; color: string; desc: string }> = {
   NORMAL: { label: '正常', color: 'success', desc: '上下班均正常' },
   LATE: { label: '迟到', color: 'warning', desc: '上班状态为迟到' },
@@ -82,18 +79,47 @@ const statusOptions = Object.entries(statusMeta).map(([value, meta]) => ({
   value,
 }));
 
-function normalizeGroups(pageData: AttendanceGroupPageLike) {
-  if (Array.isArray(pageData)) return pageData;
-  if (Array.isArray(pageData?.records)) return pageData.records;
-  if (Array.isArray(pageData?.data)) return pageData.data;
-  if (Array.isArray(pageData?.data?.records)) return pageData.data.records;
-  return [];
-}
+const RECORD_QUERY_STORAGE_PREFIX = 'attendance-record-query';
+const DEPARTMENT_PAGE_SIZE = 200;
 
 function parseUrlGroupId() {
   const groupId = new URLSearchParams(history.location.search).get('groupId');
   const parsed = Number(groupId);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function resolveRecordQueryStorageKey() {
+  const userInfoText = localStorage.getItem('userInfo');
+  if (!userInfoText) {
+    return `${RECORD_QUERY_STORAGE_PREFIX}:anonymous`;
+  }
+
+  try {
+    const userInfo = JSON.parse(userInfoText) as {
+      userId?: number | string;
+      id?: number | string;
+      username?: string;
+    };
+    const identity = userInfo.userId || userInfo.id || userInfo.username || 'anonymous';
+    return `${RECORD_QUERY_STORAGE_PREFIX}:${identity}`;
+  } catch {
+    return `${RECORD_QUERY_STORAGE_PREFIX}:anonymous`;
+  }
+}
+
+function getStoredRecordQuery(): StoredRecordQueryState {
+  const storageKey = resolveRecordQueryStorageKey();
+  const storedText = sessionStorage.getItem(storageKey);
+  if (!storedText) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(storedText) as StoredRecordQueryState;
+  } catch {
+    sessionStorage.removeItem(storageKey);
+    return {};
+  }
 }
 
 function formatBackendDate(value?: string | number[]) {
@@ -142,60 +168,187 @@ function buildRecordQuery(query: RecordQueryState): AttendanceGroupRecordQuery {
 
 const AttendanceRecordPage: React.FC = () => {
   const [form] = Form.useForm<RecordFilterValues>();
+  const storedQuery = getStoredRecordQuery();
+  const [groups, setGroups] = useState<AttendanceGroup[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [groupLoading, setGroupLoading] = useState(false);
+  const [departmentLoading, setDepartmentLoading] = useState(false);
+  const [recordLoading, setRecordLoading] = useState(false);
+  const [recordPageData, setRecordPageData] = useState<
+    PageResult<AttendanceGroupRecord>
+  >();
   const [query, setQuery] = useState<RecordQueryState>({
-    groupId: parseUrlGroupId(),
-    yearMonth: dayjs().format('YYYY-MM'),
-    pageNum: 1,
-    pageSize: 10,
+    groupId: parseUrlGroupId() ?? storedQuery.groupId,
+    yearMonth: storedQuery.yearMonth || dayjs().format('YYYY-MM'),
+    dateStart: storedQuery.dateStart,
+    dateEnd: storedQuery.dateEnd,
+    keyword: storedQuery.keyword,
+    departmentId: storedQuery.departmentId,
+    status: storedQuery.status,
+    pageNum: storedQuery.pageNum || 1,
+    pageSize: storedQuery.pageSize || 10,
   });
-
-  const { data: groupData, loading: groupLoading } = useRequest(
-    () => getAttendanceGroups({ pageNum: 1, pageSize: 100 }),
-    {
-      onError: (error) => {
-        message.error(error.message || '考勤组加载失败');
-      },
-    },
+  const departmentOptions = useMemo(
+    () =>
+      departments.map((department) => ({
+        label: department.deptName,
+        value: department.id,
+      })),
+    [departments],
   );
 
-  const groups = useMemo(() => {
-    return normalizeGroups(groupData as AttendanceGroupPageLike);
-  }, [groupData]);
+  const loadGroups = async () => {
+    setGroupLoading(true);
+    try {
+      const page = await getAttendanceGroups({ pageNum: 1, pageSize: 100 });
+      const nextGroups = page.records ?? [];
+      setGroups(nextGroups);
+      return nextGroups;
+    } catch (error) {
+      const messageText =
+        error instanceof Error ? error.message : '考勤组加载失败';
+      message.error(messageText);
+      return groups;
+    } finally {
+      setGroupLoading(false);
+    }
+  };
+
+  const loadDepartments = async () => {
+    setDepartmentLoading(true);
+    try {
+      const nextDepartments = await getDepartmentList();
+      setDepartments(nextDepartments);
+      return nextDepartments;
+    } catch (error) {
+      const messageText =
+        error instanceof Error ? error.message : '部门列表加载失败';
+      message.error(messageText);
+      return departments;
+    } finally {
+      setDepartmentLoading(false);
+    }
+  };
+
+  const loadRecords = async (nextQuery: RecordQueryState) => {
+    if (!nextQuery.groupId) {
+      setRecordPageData({
+        records: [],
+        total: 0,
+        pageNum: nextQuery.pageNum,
+        pageSize: nextQuery.pageSize,
+      });
+      return;
+    }
+
+    setRecordLoading(true);
+    try {
+      const nextPageData = await getAttendanceGroupRecords(
+        nextQuery.groupId,
+        buildRecordQuery(nextQuery),
+      );
+      setRecordPageData(nextPageData);
+    } catch (error) {
+      const messageText =
+        error instanceof Error ? error.message : '考勤记录加载失败';
+      message.error(messageText);
+    } finally {
+      setRecordLoading(false);
+    }
+  };
 
   useEffect(() => {
-    if (query.groupId || groups.length === 0) return;
+    void loadGroups();
+    void loadDepartments();
+  }, []);
+
+  useEffect(() => {
+    if (groups.length === 0) return;
+    if (query.groupId && groups.some((item) => item.id === query.groupId)) return;
     const firstGroupId = groups[0].id;
-    setQuery((previous) => ({ ...previous, groupId: firstGroupId }));
-    form.setFieldsValue({ groupId: firstGroupId });
-  }, [form, groups, query.groupId]);
+    setQuery((previous) => ({ ...previous, groupId: firstGroupId, pageNum: 1 }));
+  }, [groups, query.groupId]);
 
   useEffect(() => {
-    if (!query.groupId) return;
+    if (!query.departmentId) return;
+    if (departments.some((item) => item.id === query.departmentId)) return;
+    setQuery((previous) => ({
+      ...previous,
+      departmentId: undefined,
+      pageNum: 1,
+    }));
+  }, [departments, query.departmentId]);
+
+  useEffect(() => {
     form.setFieldsValue({
       groupId: query.groupId,
-      yearMonth: dayjs(query.yearMonth),
+      yearMonth: dayjs(query.yearMonth, 'YYYY-MM'),
+      dateRange:
+        query.dateStart && query.dateEnd
+          ? [dayjs(query.dateStart, 'YYYY-MM-DD'), dayjs(query.dateEnd, 'YYYY-MM-DD')]
+          : undefined,
+      keyword: query.keyword,
+      departmentId: query.departmentId,
+      status: query.status,
     });
-  }, [form, query.groupId, query.yearMonth]);
+  }, [
+    form,
+    query.dateEnd,
+    query.dateStart,
+    query.departmentId,
+    query.groupId,
+    query.keyword,
+    query.status,
+    query.yearMonth,
+  ]);
 
-  const { data: recordData, loading: recordLoading } = useRequest(
-    () => {
-      if (!query.groupId) {
-        return Promise.resolve({
-          records: [],
-          total: 0,
-          pageNum: query.pageNum,
-          pageSize: query.pageSize,
-        });
+  useEffect(() => {
+    void loadRecords(query);
+  }, [query]);
+
+  useEffect(() => {
+    const storageKey = resolveRecordQueryStorageKey();
+    sessionStorage.setItem(storageKey, JSON.stringify(query));
+  }, [query]);
+
+  usePageAutoRefresh(() => {
+    void (async () => {
+      const nextGroups = await loadGroups();
+      const nextDepartments = await loadDepartments();
+      const nextGroupId =
+        query.groupId && nextGroups.some((item) => item.id === query.groupId)
+          ? query.groupId
+          : nextGroups[0]?.id;
+      const nextDepartmentId =
+        query.departmentId &&
+        nextDepartments.some((item) => item.id === query.departmentId)
+          ? query.departmentId
+          : undefined;
+
+      if (!nextGroupId) {
+        return;
       }
-      return getAttendanceGroupRecords(query.groupId, buildRecordQuery(query));
-    },
-    {
-      refreshDeps: [query],
-      onError: (error) => {
-        message.error(error.message || '考勤记录加载失败');
-      },
-    },
-  );
+
+      if (
+        nextGroupId !== query.groupId ||
+        nextDepartmentId !== query.departmentId
+      ) {
+        setQuery((previous) => ({
+          ...previous,
+          groupId: nextGroupId,
+          departmentId: nextDepartmentId,
+          pageNum: 1,
+        }));
+        return;
+      }
+
+      await loadRecords({
+        ...query,
+        groupId: nextGroupId,
+        departmentId: nextDepartmentId,
+      });
+    })();
+  });
 
   const selectedGroup = groups.find((item) => item.id === query.groupId);
 
@@ -269,17 +422,10 @@ const AttendanceRecordPage: React.FC = () => {
 
   const handleReset = () => {
     const nextGroupId = query.groupId || groups[0]?.id;
-    form.setFieldsValue({
-      groupId: nextGroupId,
-      yearMonth: dayjs(),
-      dateRange: undefined,
-      keyword: undefined,
-      departmentId: undefined,
-      status: undefined,
-    });
     setQuery({
       groupId: nextGroupId,
       yearMonth: dayjs().format('YYYY-MM'),
+      departmentId: undefined,
       pageNum: 1,
       pageSize: query.pageSize,
     });
@@ -348,8 +494,15 @@ const AttendanceRecordPage: React.FC = () => {
           <Form.Item label="员工" name="keyword">
             <Input allowClear placeholder="姓名/工号" />
           </Form.Item>
-          <Form.Item label="部门ID" name="departmentId">
-            <InputNumber min={1} precision={0} placeholder="部门ID" />
+          <Form.Item label="部门" name="departmentId">
+            <Select
+              showSearch
+              allowClear
+              loading={departmentLoading}
+              placeholder="请选择部门"
+              optionFilterProp="label"
+              options={departmentOptions}
+            />
           </Form.Item>
           <Form.Item label="综合状态" name="status">
             <Select
@@ -398,13 +551,13 @@ const AttendanceRecordPage: React.FC = () => {
             String(record.recordId || `${record.employeeId}-${formatBackendDate(record.recordDate)}`)
           }
           columns={columns}
-          dataSource={recordData?.records || []}
+          dataSource={recordPageData?.records || []}
           loading={recordLoading || groupLoading}
           scroll={{ x: 1180 }}
           pagination={{
-            current: recordData?.pageNum || query.pageNum,
-            pageSize: recordData?.pageSize || query.pageSize,
-            total: recordData?.total || 0,
+            current: recordPageData?.pageNum || query.pageNum,
+            pageSize: recordPageData?.pageSize || query.pageSize,
+            total: recordPageData?.total || 0,
             showSizeChanger: true,
             showTotal: (total) => `共 ${total} 条`,
             onChange: (pageNum, pageSize) => {

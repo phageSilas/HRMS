@@ -43,6 +43,16 @@ public class AttendanceCalendarDayVO {
     private String clockOutIp;
 
     /**
+     * 上班打卡 GPS 位置。
+     */
+    private String clockInGps;
+
+    /**
+     * 下班打卡 GPS 位置。
+     */
+    private String clockOutGps;
+
+    /**
      * 上班状态。
      */
     private String clockInStatus;

@@ -1,3 +1,4 @@
+import { usePageAutoRefresh } from '@/hooks/usePageAutoRefresh';
 import type {
   AttendanceGroup,
   AttendanceGroupRequest,
@@ -16,7 +17,8 @@ import {
   TeamOutlined,
 } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
-import { history, useRequest } from '@umijs/max';
+import { history } from '@umijs/max';
+import type { PageResult } from '@/types/api';
 import {
   Button,
   Card,
@@ -65,14 +67,6 @@ type GroupFormValues = Omit<
   enabled?: boolean;
 };
 
-type AttendanceGroupPageLike =
-  | {
-      records?: AttendanceGroup[];
-      data?: { records?: AttendanceGroup[] } | AttendanceGroup[];
-    }
-  | AttendanceGroup[]
-  | undefined;
-
 const shiftTypeMap: Record<string, { label: string; color: string }> = {
   FIXED: { label: '固定班', color: 'blue' },
   FLEXIBLE: { label: '弹性班', color: 'purple' },
@@ -106,28 +100,40 @@ function getShiftMeta(type?: string) {
   };
 }
 
-function normalizeGroups(pageData: AttendanceGroupPageLike) {
-  if (Array.isArray(pageData)) return pageData;
-  if (Array.isArray(pageData?.records)) return pageData.records;
-  if (Array.isArray(pageData?.data)) return pageData.data;
-  if (Array.isArray(pageData?.data?.records)) return pageData.data.records;
-  return [];
-}
-
 const AttendanceGroupsPage: React.FC = () => {
   const [form] = Form.useForm<GroupFormValues>();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<AttendanceGroup>();
   const [query] = useState({ pageNum: 1, pageSize: 20 });
+  const [groups, setGroups] = useState<AttendanceGroup[]>([]);
+  const [groupPageData, setGroupPageData] = useState<PageResult<AttendanceGroup>>();
+  const [loading, setLoading] = useState(false);
 
-  const { data, loading, refresh } = useRequest(
-    () => getAttendanceGroups(query),
-    { refreshDeps: [query] },
-  );
+  const loadGroups = async () => {
+    setLoading(true);
+    try {
+      const page = await getAttendanceGroups(query);
+      setGroupPageData(page);
+      const nextGroups = page.records ?? [];
+      setGroups(nextGroups);
+      return nextGroups;
+    } catch (error) {
+      const messageText =
+        error instanceof Error ? error.message : '考勤组加载失败';
+      message.error(messageText);
+      return groups;
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const groups = useMemo(() => {
-    return normalizeGroups(data as AttendanceGroupPageLike);
-  }, [data]);
+  useEffect(() => {
+    void loadGroups();
+  }, [query]);
+
+  usePageAutoRefresh(() => {
+    void loadGroups();
+  });
 
   const activeCount = useMemo(
     () => groups.filter((item) => item.status !== 0).length,
@@ -207,7 +213,7 @@ const AttendanceGroupsPage: React.FC = () => {
     }
 
     setDrawerOpen(false);
-    refresh();
+    await loadGroups();
   };
 
   return (
