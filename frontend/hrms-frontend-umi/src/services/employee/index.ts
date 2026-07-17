@@ -103,17 +103,59 @@ export interface FieldPermissions {
   hiddenFields: string[];
 }
 
-/** 合同信息 */
+/** 合同信息（字段与后端 EmployeeContractVO 对齐） */
 export interface Contract {
   id: number;
   employeeId: number;
-  employeeName: string;
-  employeeNo: string;
-  contractType: string;
-  contractStartDate: string;
-  contractEndDate: string;
-  renewalStatus: string;
-  remark: string;
+  contractNo?: string;
+  /** 合同类型：1-固定期限 2-无固定期限 3-劳务合同 */
+  contractType: number;
+  contractTypeDesc?: string;
+  /** 合同开始日期 */
+  startDate: string;
+  /** 合同结束日期 */
+  endDate: string;
+  /** 试用期（月） */
+  probationMonth?: number;
+  /** 试用期薪资比例（%） */
+  probationSalaryRatio?: number;
+  /** 附件文件ID */
+  attachmentFileId?: number;
+  /** 续签次数 */
+  signingCount: number;
+  /** 备注 */
+  remark?: string;
+  /** 创建时间 */
+  createTime?: string;
+
+  // 前端扩展字段（列表展示时关联查询）
+  employeeName?: string;
+  employeeNo?: string;
+}
+
+/** 创建合同请求（字段与后端 ContractCreateDTO 对齐） */
+export interface ContractCreateRequest {
+  employeeId: number;
+  contractNo?: string;
+  contractType: number;
+  startDate?: string;
+  endDate?: string;
+  probationMonth?: number;
+  probationSalaryRatio?: number;
+  attachmentFileId?: number;
+  remark?: string;
+}
+
+/** 更新合同请求（字段与后端 ContractUpdateDTO 对齐） */
+export interface ContractUpdateRequest {
+  contractNo?: string;
+  contractType?: number;
+  startDate?: string;
+  endDate?: string;
+  probationMonth?: number;
+  probationSalaryRatio?: number;
+  attachmentFileId?: number;
+  remark?: string;
 }
 
 // ============ 接口定义 ============
@@ -201,30 +243,54 @@ export async function getFieldPermissions() {
 }
 
 /**
- * 获取合同列表
+ * 获取某个员工的合同列表
  */
-export async function getContractList(params: {
-  keyword?: string;
-  contractStatus?: string;
-  pageNum?: number;
-  pageSize?: number;
-}) {
-  return request.get<PageResult<Contract>>('/api/v1/contracts', {
-    params,
-  });
+export async function getContractsByEmployee(employeeId: number) {
+  return request.get<Contract[]>(
+    `/api/v1/employee-contracts/employee/${employeeId}`,
+  );
 }
 
 /**
- * 创建/更新合同
+ * 获取合同详情
  */
-export async function saveContract(
-  data: Partial<Contract> & { employeeId: number },
-) {
-  if (data.id) {
-    return request.put<{ success: boolean }>(
-      `/api/v1/contracts/${data.id}`,
-      data,
-    );
-  }
-  return request.post<{ id: number }>('/api/v1/contracts', data);
+export async function getContractDetail(id: number) {
+  return request.get<Contract>(`/api/v1/employee-contracts/${id}`);
+}
+
+/**
+ * 创建合同
+ */
+export async function createContract(data: ContractCreateRequest) {
+  return request.post<Contract>('/api/v1/employee-contracts', data);
+}
+
+/**
+ * 更新合同
+ */
+export async function updateContract(id: number, data: ContractUpdateRequest) {
+  return request.put<Contract>(`/api/v1/employee-contracts/${id}`, data);
+}
+
+/**
+ * 删除合同
+ */
+export async function deleteContract(id: number) {
+  return request.delete<void>(`/api/v1/employee-contracts/${id}`);
+}
+
+/**
+ * 查询全部合同列表（通过员工列表遍历聚合，供合同管理页使用）
+ * 注意：后端无全局合同列表接口，此函数仅供兼容，实际页面应通过员工维度查询
+ */
+export async function getContractList(params: {
+  keyword?: string;
+  contractType?: number;
+  pageNum?: number;
+  pageSize?: number;
+}) {
+  // 后端无全局合同分页接口，如果需要全局列表请调用 /api/v1/employees 后按员工查询
+  return request.get<PageResult<Contract>>('/api/v1/employee-contracts/list', {
+    params,
+  });
 }
