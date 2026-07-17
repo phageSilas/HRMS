@@ -46,6 +46,50 @@ export interface AttendanceSummary {
   overtimeHours: number;
 }
 
+export interface AttendanceTrendPoint {
+  date: string | number[];
+  attendanceRate: number | string;
+  actualDays: number;
+  expectedDays: number;
+}
+
+export interface AttendanceDeptDistribution {
+  deptId: number;
+  deptName: string;
+  actualDays: number;
+  expectedDays: number;
+  attendanceRate: number | string;
+}
+
+export interface AttendanceExceptionPie {
+  type: string;
+  count: number;
+}
+
+export interface AttendanceEmployeeRanking {
+  employeeId: number;
+  employeeName: string;
+  employeeNo: string;
+  deptName: string;
+  abnormalCount: number;
+  lateCount: number;
+  earlyLeaveCount: number;
+  absentCount: number;
+}
+
+export interface AttendanceSummaryDashboard {
+  expectedDays: number;
+  actualDays: number;
+  lateCount: number;
+  earlyLeaveCount: number;
+  absentCount: number;
+  leaveCount: number | string;
+  dailyTrend: AttendanceTrendPoint[];
+  deptDistribution: AttendanceDeptDistribution[];
+  exceptionPie: AttendanceExceptionPie[];
+  employeeRanking: AttendanceEmployeeRanking[];
+}
+
 export interface AttendanceQuery extends PageQuery {
   employeeId?: number;
   departmentId?: number;
@@ -256,4 +300,16 @@ export async function getAttendanceSummary(employeeId: number, yearMonth: string
  */
 export async function getAttendanceStatistics(params: { yearMonth: string; departmentId?: number }) {
   return request.get<AttendanceSummary[]>('/attendance/statistics', { params });
+}
+
+/**
+ * 获取HR和主管考勤统计看板。
+ */
+export async function getAttendanceSummaryDashboard(params: {
+  yearMonth: string;
+  deptId?: number;
+}) {
+  return request.get<AttendanceSummaryDashboard>('/api/v1/attendance/summary/dashboard', {
+    params,
+  });
 }
