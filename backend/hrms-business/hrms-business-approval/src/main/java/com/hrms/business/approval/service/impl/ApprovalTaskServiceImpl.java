@@ -59,12 +59,13 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
             return emptyPageResult(query);
         }
 
-        // 2. 分页查询当前用户的待办任务
+        // 2. 分页查询当前用户的待办任务（通过 EXISTS 子查询确保实例未被逻辑删除）
         Page<ApprovalTaskEntity> mpPage = new Page<>(query.getPageNum(), query.getPageSize());
         mpPage = taskMapper.selectPage(mpPage, Wrappers.lambdaQuery(ApprovalTaskEntity.class)
                 .in(ApprovalTaskEntity::getInstanceId, instanceIds)
                 .eq(ApprovalTaskEntity::getApproverUserId, userId)
                 .eq(ApprovalTaskEntity::getTaskStatus, TaskStatusEnum.PENDING.getCode())
+                .apply("EXISTS (SELECT 1 FROM hr_approval_instance i WHERE i.id = instance_id AND i.is_deleted = 0)")
                 .orderByAsc(ApprovalTaskEntity::getCreateTime)
         );
 
@@ -92,6 +93,7 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
                 .in(ApprovalTaskEntity::getInstanceId, instanceIds)
                 .eq(ApprovalTaskEntity::getApproverUserId, userId)
                 .in(ApprovalTaskEntity::getTaskStatus, TaskStatusEnum.PROCESSED.getCode(), TaskStatusEnum.TRANSFERRED.getCode())
+                .apply("EXISTS (SELECT 1 FROM hr_approval_instance i WHERE i.id = instance_id AND i.is_deleted = 0)")
                 .orderByDesc(ApprovalTaskEntity::getApproveTime)
         );
 
@@ -136,8 +138,10 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
 
     @Override
     public ApprovalDetailVO getDetail(Long instanceId, Long currentUserId) {
+        log.debug("查询审批详情: instanceId={}, currentUserId={}", instanceId, currentUserId);
         ApprovalInstanceEntity instance = instanceMapper.selectById(instanceId);
         if (instance == null) {
+            log.warn("审批实例不存在: instanceId={}, userId={}", instanceId, currentUserId);
             throw new GlobalException(ErrorCode.NOT_FOUND, "审批实例不存在");
         }
 
@@ -177,13 +181,24 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
             }
         }
 
+        // 检查是否有待办任务已过期
+        boolean hasExpired = tasks.stream()
+                .anyMatch(t -> t.getDeadlineTime() != null
+                        && t.getDeadlineTime().isBefore(LocalDateTime.now())
+                        && Objects.equals(t.getTaskStatus(), TaskStatusEnum.PENDING.getCode()));
+
         // 构建 VO
         ApprovalDetailVO vo = new ApprovalDetailVO();
         vo.setTitle(instance.getTitle());
         vo.setBusinessType(instance.getApprovalType());
         vo.setBusinessTypeName(getApprovalTypeName(instance.getApprovalType()));
-        vo.setStatus(getStatusStr(instance.getApprovalStatus()));
-        vo.setStatusName(getStatusName(instance.getApprovalStatus()));
+        if (hasExpired) {
+            vo.setStatus("EXPIRED");
+            vo.setStatusName("已过期");
+        } else {
+            vo.setStatus(getStatusStr(instance.getApprovalStatus()));
+            vo.setStatusName(getStatusName(instance.getApprovalStatus()));
+        }
         vo.setApplicantName(getUserName(instance.getApplicantUserId()));
         vo.setCreatedAt(formatTime(instance.getApplyTime()));
         vo.setFormData(formData);
@@ -237,14 +252,37 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
 
     /**
      * 根据筛选条件查询匹配的实例 ID 列表
+     * <p>
+     * 显式添加 is_deleted = 0 条件作为 @TableLogic 的双重保险，
+     * 确保不会返回已被逻辑删除的实例。
+     * </p>
      */
     private List<Long> queryFilteredInstanceIds(PendingTaskQuery query) {
         LambdaQueryWrapper<ApprovalInstanceEntity> wrapper = Wrappers.lambdaQuery();
+        // 显式声明 is_deleted = 0（双重保险，@TableLogic 在某些 MyBatis-Plus 版本中
+        // 对无实体类型的 Wrappers.lambdaQuery() 可能不生效）
+        wrapper.eq(ApprovalInstanceEntity::getIsDeleted, 0);
         if (org.springframework.util.StringUtils.hasText(query.getBusinessType())) {
             wrapper.eq(ApprovalInstanceEntity::getApprovalType, query.getBusinessType());
         }
         if (org.springframework.util.StringUtils.hasText(query.getKeyword())) {
-            wrapper.like(ApprovalInstanceEntity::getTitle, query.getKeyword());
+            // 查询匹配的申请人用户ID（支持按申请人姓名搜索）
+            List<UserEntity> matchedUsers = userMapper.selectList(
+                    Wrappers.lambdaQuery(UserEntity.class)
+                            .like(UserEntity::getRealName, query.getKeyword())
+                            .eq(UserEntity::getIsDeleted, 0)
+            );
+            Set<Long> matchedUserIds = matchedUsers.stream()
+                    .map(UserEntity::getId)
+                    .collect(Collectors.toSet());
+
+            // 标题搜索 OR 申请人姓名搜索
+            wrapper.and(w -> {
+                w.like(ApprovalInstanceEntity::getTitle, query.getKeyword());
+                if (!matchedUserIds.isEmpty()) {
+                    w.or().in(ApprovalInstanceEntity::getApplicantUserId, matchedUserIds);
+                }
+            });
         }
         if (org.springframework.util.StringUtils.hasText(query.getStartDate())) {
             wrapper.ge(ApprovalInstanceEntity::getApplyTime,
@@ -273,11 +311,19 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
         List<PendingTaskVO> voList = mpPage.getRecords().stream()
                 .map(task -> {
                     ApprovalInstanceEntity inst = instanceMap.get(task.getInstanceId());
-                    if (inst == null) return null;
+                    if (inst == null) {
+                        log.warn("待办任务引用的审批实例不存在或已被删除: taskId={}, instanceId={}", task.getId(), task.getInstanceId());
+                        return null;
+                    }
                     return buildTaskVO(task, inst);
                 })
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
+
+        // 如果有任务被过滤掉（实例已被删除），记录总数差异
+        if (voList.size() < mpPage.getRecords().size()) {
+            log.warn("待办列表部分任务因实例不存在被过滤: 原始数={}, 过滤后={}", mpPage.getRecords().size(), voList.size());
+        }
 
         PageResult<PendingTaskVO> result = new PageResult<>();
         result.setTotal(mpPage.getTotal());
@@ -309,7 +355,15 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
         }
         vo.setCreatedAt(formatTime(instance.getApplyTime()));
         vo.setDeadline(formatTime(task.getDeadlineTime()));
-        vo.setStatus(getStatusStr(instance.getApprovalStatus()));
+        // 待办的截止时间已过 → 显示"已过期"
+        if (task.getDeadlineTime() != null && task.getDeadlineTime().isBefore(LocalDateTime.now())
+                && Objects.equals(task.getTaskStatus(), TaskStatusEnum.PENDING.getCode())) {
+            vo.setStatus("EXPIRED");
+            vo.setStatusName("已过期");
+        } else {
+            vo.setStatus(getStatusStr(instance.getApprovalStatus()));
+            vo.setStatusName(getStatusName(instance.getApprovalStatus()));
+        }
         return vo;
     }
 
@@ -382,7 +436,13 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
                 .sorted(Comparator.comparing(ApprovalTaskEntity::getSortNo))
                 .map(task -> {
                     ApprovalDetailVO.ApprovalHistoryVO vo = new ApprovalDetailVO.ApprovalHistoryVO();
-                    vo.setOperatorName(getUserName(task.getApproverUserId()));
+                    // 委托场景下显示 "被委托人 代 委托人 审批"
+                    if (task.getDelegateFlag() == 1) {
+                        vo.setOperatorName(getUserName(task.getApproverUserId()) + " 代 "
+                                + getUserName(task.getOriginalApproverId()));
+                    } else {
+                        vo.setOperatorName(getUserName(task.getApproverUserId()));
+                    }
                     vo.setNodeName(task.getNodeName());
                     vo.setAction(getActionStr(task));
                     vo.setActionName(getActionName(task));

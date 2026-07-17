@@ -9,8 +9,8 @@ export default defineConfig({
   layout: {
     title: 'HRMS 人资管理系统',
   },
-  // Mock 配置（开发环境自动加载）
-  // mock: {},  // 已切换到真实后端（2026-07-10）
+  // Mock 配置（已关闭，请求直接通过 proxy 转发到后端）
+  mock: false,
   // 代理配置（全量转发至后端 /api/v1/* 和其他模块前缀）
   proxy: {
     '/api/v1': {
