@@ -203,6 +203,34 @@ export interface AttendanceGroupRecord {
   statusName?: string;
 }
 
+export interface AttendanceLeaveManageQuery extends Partial<PageQuery> {
+  yearMonth?: string;
+  deptId?: number;
+  keyword?: string;
+  approvalStatus?: number;
+}
+
+export interface AttendanceLeaveManageItem {
+  id: number;
+  employeeId: number;
+  employeeName: string;
+  employeeNo?: string;
+  deptId?: number;
+  deptName?: string;
+  leaveType?: string;
+  leaveTypeDesc?: string;
+  startTime?: string;
+  endTime?: string;
+  totalDays?: number | string;
+  leaveReason?: string;
+  approvalStatus?: number;
+  approvalStatusDesc?: string;
+  approvalInstanceId?: number;
+  currentNodeName?: string;
+  currentApproverName?: string;
+  createTime?: string;
+}
+
 // ============ 考勤组接口 ============
 
 /**
@@ -284,6 +312,15 @@ export async function getLeaveRequestList(params: AttendanceQuery) {
  */
 export async function createLeaveRequest(data: Partial<LeaveRequest>) {
   return request.post<LeaveRequest>('/leave-requests', data);
+}
+
+/**
+ * 获取管理侧请假列表
+ */
+export async function getAttendanceLeaveManageList(params: AttendanceLeaveManageQuery) {
+  return request.get<PageResult<AttendanceLeaveManageItem>>('/api/v1/attendance/leaves', {
+    params,
+  });
 }
 
 // ============ 考勤汇总接口 ============
