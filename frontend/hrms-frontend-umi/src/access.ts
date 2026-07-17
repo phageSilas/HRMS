@@ -21,6 +21,9 @@ export default function access(initialState: { currentUser?: UserInfo }) {
     return permissions.includes(permission)
       || permissions.some(p => p.startsWith(permission + ':'));
   };
+  const isAttendanceManager = ['ADMIN', 'HR', 'MANAGER'].includes(
+    currentUser?.roleCode || '',
+  );
 
   return {
     // 模块权限
@@ -29,6 +32,7 @@ export default function access(initialState: { currentUser?: UserInfo }) {
     employee: hasPermission('employee'),
     process: hasPermission('process'),
     attendance: hasPermission('attendance'),
+    attendanceManage: isAttendanceManager,
     attendancePunch: Boolean(currentUser),
     salary: hasPermission('salary'),
     approval: hasPermission('approval'),

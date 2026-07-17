@@ -14,6 +14,7 @@ import com.hrms.business.attendance.dto.AttendanceClockRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceCorrectionCreateRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupCreateOrUpdateRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupQueryDTO;
+import com.hrms.business.attendance.dto.AttendanceGroupRecordQueryDTO;
 import com.hrms.business.attendance.dto.LeaveCreateRequestDTO;
 import com.hrms.business.attendance.dto.MonthlyStatGenerateRequestDTO;
 import com.hrms.business.attendance.entity.AttendanceCorrectionEntity;
@@ -43,6 +44,7 @@ import com.hrms.business.attendance.vo.AttendanceClockVO;
 import com.hrms.business.attendance.vo.AttendanceCalendarDayVO;
 import com.hrms.business.attendance.vo.AttendanceCalendarVO;
 import com.hrms.business.attendance.vo.AttendanceCorrectionCreateVO;
+import com.hrms.business.attendance.vo.AttendanceGroupRecordPageVO;
 import com.hrms.business.attendance.vo.LeaveTypeVO;
 import com.hrms.business.attendance.vo.LeaveBalanceVO;
 import com.hrms.business.attendance.vo.LeaveCreateVO;
@@ -53,6 +55,8 @@ import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
 import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
+import com.hrms.system.organization.service.DeptService;
+import com.hrms.system.organization.vo.DeptDetailVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
@@ -66,8 +70,12 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.YearMonth;
+import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -96,6 +104,8 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     private static final ErrorCode LEAVE_DAYS_INVALID = new ErrorCode(40057, "请假天数必须大于0且不超过30天");
 
+    private static final long GROUP_RECORD_MAX_DAYS = 31L;
+
     private final AttendanceGroupMapper attendanceGroupMapper;
 
     private final AttendanceGroupMemberMapper attendanceGroupMemberMapper;
@@ -121,6 +131,8 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final AttendanceClockEventHandler attendanceClockEventHandler;
 
     private final ApprovalEngine approvalEngine;
+
+    private final DeptService deptService;
 
     /**
      * 分页查询考勤组。
@@ -170,6 +182,333 @@ public class AttendanceServiceImpl implements AttendanceService {
         attendanceGroupMapper.updateById(entity);
         evictGroupRuleCache(id);
         return AttendanceGroupConvert.toPageVO(entity);
+    }
+
+    /**
+     * 分页查询考勤组打卡记录。
+     *
+     * @param groupId  考勤组ID
+     * @param queryDTO 查询参数
+     * @return 考勤组打卡记录分页结果
+     * 本方法使用的工具类: PageResult(hrms-common),ChronoUnit(JDK),StrUtil(hutool)
+     */
+    @Override
+    public PageResult<AttendanceGroupRecordPageVO> pageGroupAttendanceRecords(Long groupId,
+                                                                              AttendanceGroupRecordQueryDTO queryDTO) {
+        getRequiredAttendanceGroup(groupId);
+        AttendanceDateRange dateRange = resolveGroupRecordDateRange(queryDTO);
+        int pageNum = normalizePageNum(queryDTO == null ? null : queryDTO.getPageNum());
+        int pageSize = normalizePageSize(queryDTO == null ? null : queryDTO.getPageSize());
+
+        List<AttendanceGroupMemberEntity> members = listEffectiveGroupMembers(groupId, dateRange.startDate(), dateRange.endDate());
+        if (members.isEmpty()) {
+            return PageResult.of(List.of(), 0, pageNum, pageSize);
+        }
+        List<Long> employeeIds = members.stream()
+                .map(AttendanceGroupMemberEntity::getEmployeeId)
+                .distinct()
+                .toList();
+        Map<Long, EmployeeSnapshotEntity> employeeMap = employeeSnapshotMapper.selectList(new LambdaQueryWrapper<EmployeeSnapshotEntity>()
+                        .in(EmployeeSnapshotEntity::getId, employeeIds))
+                .stream()
+                .collect(Collectors.toMap(EmployeeSnapshotEntity::getId, employee -> employee, (a, b) -> a));
+        if (employeeMap.isEmpty()) {
+            return PageResult.of(List.of(), 0, pageNum, pageSize);
+        }
+        Map<String, AttendanceRecordEntity> recordMap = attendanceRecordMapper
+                .selectByGroupAndEmployeesAndDateRange(groupId, employeeIds, dateRange.startDate(), dateRange.endDate())
+                .stream()
+                .collect(Collectors.toMap(record -> buildRecordKey(record.getEmployeeId(), record.getRecordDate()),
+                        record -> record, (a, b) -> a));
+        Map<Long, String> deptNameCache = new HashMap<>();
+        List<AttendanceGroupRecordPageVO> allRecords = buildGroupRecordRows(
+                members, employeeMap, recordMap, deptNameCache, dateRange, queryDTO);
+        allRecords.sort(Comparator.comparing(AttendanceGroupRecordPageVO::getRecordDate).reversed()
+                .thenComparing(AttendanceGroupRecordPageVO::getEmployeeId));
+        int fromIndex = Math.min((pageNum - 1) * pageSize, allRecords.size());
+        int toIndex = Math.min(fromIndex + pageSize, allRecords.size());
+        return PageResult.of(allRecords.subList(fromIndex, toIndex), allRecords.size(), pageNum, pageSize);
+    }
+
+    /**
+     * 解析考勤组记录查询日期范围。
+     *
+     * @param queryDTO 查询参数
+     * @return 日期范围
+     * 本方法使用的工具类: YearMonth(JDK),ChronoUnit(JDK),GlobalException(hrms-common)
+     */
+    private AttendanceDateRange resolveGroupRecordDateRange(AttendanceGroupRecordQueryDTO queryDTO) {
+        YearMonth yearMonth = YearMonth.now();
+        if (queryDTO != null && StrUtil.isNotBlank(queryDTO.getYearMonth())) {
+            try {
+                yearMonth = YearMonth.parse(queryDTO.getYearMonth());
+            } catch (DateTimeParseException ex) {
+                throw new GlobalException(ErrorCode.PARAM_FORMAT_ERROR, "yearMonth格式必须为yyyy-MM");
+            }
+        }
+        LocalDate startDate = queryDTO != null && queryDTO.getDateStart() != null
+                ? queryDTO.getDateStart()
+                : yearMonth.atDay(1);
+        LocalDate endDate = queryDTO != null && queryDTO.getDateEnd() != null
+                ? queryDTO.getDateEnd()
+                : yearMonth.atEndOfMonth();
+        if (endDate.isBefore(startDate)) {
+            throw new GlobalException(ErrorCode.PARAM_FORMAT_ERROR, "dateEnd不能早于dateStart");
+        }
+        long days = ChronoUnit.DAYS.between(startDate, endDate) + 1;
+        if (days > GROUP_RECORD_MAX_DAYS) {
+            throw new GlobalException(ErrorCode.PARAM_FORMAT_ERROR, "考勤组打卡记录查询范围不能超过31天");
+        }
+        return new AttendanceDateRange(startDate, endDate);
+    }
+
+    /**
+     * 查询指定日期范围内有效的考勤组成员。
+     *
+     * @param groupId   考勤组ID
+     * @param startDate 开始日期
+     * @param endDate   结束日期
+     * @return 成员关系列表
+     * 本方法使用的工具类: LambdaQueryWrapper(mybatis-plus)
+     */
+    private List<AttendanceGroupMemberEntity> listEffectiveGroupMembers(Long groupId, LocalDate startDate, LocalDate endDate) {
+        return attendanceGroupMemberMapper.selectList(new LambdaQueryWrapper<AttendanceGroupMemberEntity>()
+                .eq(AttendanceGroupMemberEntity::getGroupId, groupId)
+                .eq(AttendanceGroupMemberEntity::getStatus, 1)
+                .le(AttendanceGroupMemberEntity::getEffectiveStartDate, endDate)
+                .and(wrapper -> wrapper.isNull(AttendanceGroupMemberEntity::getEffectiveEndDate)
+                        .or()
+                        .ge(AttendanceGroupMemberEntity::getEffectiveEndDate, startDate))
+                .orderByAsc(AttendanceGroupMemberEntity::getEmployeeId)
+                .orderByDesc(AttendanceGroupMemberEntity::getEffectiveStartDate));
+    }
+
+    /**
+     * 构建考勤组打卡记录行。
+     *
+     * @param members       成员关系
+     * @param employeeMap   员工快照
+     * @param recordMap     打卡记录
+     * @param deptNameCache 部门名称缓存
+     * @param dateRange     日期范围
+     * @param queryDTO      查询参数
+     * @return 打卡记录行
+     * 本方法使用的工具类: IntStream(JDK),StrUtil(hutool)
+     */
+    private List<AttendanceGroupRecordPageVO> buildGroupRecordRows(List<AttendanceGroupMemberEntity> members,
+                                                                   Map<Long, EmployeeSnapshotEntity> employeeMap,
+                                                                   Map<String, AttendanceRecordEntity> recordMap,
+                                                                   Map<Long, String> deptNameCache,
+                                                                   AttendanceDateRange dateRange,
+                                                                   AttendanceGroupRecordQueryDTO queryDTO) {
+        List<LocalDate> dates = IntStream.rangeClosed(0, (int) ChronoUnit.DAYS.between(dateRange.startDate(), dateRange.endDate()))
+                .mapToObj(dateRange.startDate()::plusDays)
+                .toList();
+        List<AttendanceGroupRecordPageVO> rows = new ArrayList<>();
+        List<Long> employeeIds = members.stream()
+                .map(AttendanceGroupMemberEntity::getEmployeeId)
+                .distinct()
+                .toList();
+        for (Long employeeId : employeeIds) {
+            EmployeeSnapshotEntity employee = employeeMap.get(employeeId);
+            if (employee == null || !matchesGroupRecordEmployeeFilter(employee, queryDTO)) {
+                continue;
+            }
+            for (LocalDate date : dates) {
+                if (!isMemberEffectiveOnDate(members, employeeId, date)) {
+                    continue;
+                }
+                AttendanceRecordEntity record = recordMap.get(buildRecordKey(employeeId, date));
+                AttendanceStatusView statusView = resolveGroupRecordStatus(record);
+                if (queryDTO != null && StrUtil.isNotBlank(queryDTO.getStatus())
+                        && !queryDTO.getStatus().equalsIgnoreCase(statusView.status())) {
+                    continue;
+                }
+                rows.add(buildGroupRecordPageVO(employee, record, date, statusView, deptNameCache));
+            }
+        }
+        return rows;
+    }
+
+    /**
+     * 判断员工是否匹配考勤组记录查询过滤条件。
+     *
+     * @param employee 员工快照
+     * @param queryDTO 查询参数
+     * @return 是否匹配
+     * 本方法使用的工具类: StrUtil(hutool)
+     */
+    private boolean matchesGroupRecordEmployeeFilter(EmployeeSnapshotEntity employee, AttendanceGroupRecordQueryDTO queryDTO) {
+        if (queryDTO == null) {
+            return true;
+        }
+        if (queryDTO.getDepartmentId() != null && !queryDTO.getDepartmentId().equals(employee.getDeptId())) {
+            return false;
+        }
+        if (StrUtil.isBlank(queryDTO.getKeyword())) {
+            return true;
+        }
+        String keyword = queryDTO.getKeyword().trim();
+        return StrUtil.contains(employee.getEmployeeName(), keyword)
+                || StrUtil.contains(employee.getEmployeeNo(), keyword);
+    }
+
+    /**
+     * 判断员工在指定日期是否为考勤组有效成员。
+     *
+     * @param members    成员关系列表
+     * @param employeeId 员工ID
+     * @param date       日期
+     * @return 是否有效
+     * 本方法使用的工具类: 无
+     */
+    private boolean isMemberEffectiveOnDate(List<AttendanceGroupMemberEntity> members, Long employeeId, LocalDate date) {
+        return members.stream().anyMatch(member -> employeeId.equals(member.getEmployeeId())
+                && !member.getEffectiveStartDate().isAfter(date)
+                && (member.getEffectiveEndDate() == null || !member.getEffectiveEndDate().isBefore(date)));
+    }
+
+    /**
+     * 构建考勤组打卡记录分页行。
+     *
+     * @param employee      员工快照
+     * @param record        打卡记录
+     * @param recordDate    打卡日期
+     * @param statusView    综合状态
+     * @param deptNameCache 部门名称缓存
+     * @return 打卡记录分页行
+     * 本方法使用的工具类: AttendanceGroupRecordPageVO(本模块vo包)
+     */
+    private AttendanceGroupRecordPageVO buildGroupRecordPageVO(EmployeeSnapshotEntity employee,
+                                                               AttendanceRecordEntity record,
+                                                               LocalDate recordDate,
+                                                               AttendanceStatusView statusView,
+                                                               Map<Long, String> deptNameCache) {
+        return AttendanceGroupRecordPageVO.builder()
+                .recordId(record == null ? null : record.getId())
+                .recordDate(recordDate)
+                .employeeId(employee.getId())
+                .employeeName(employee.getEmployeeName())
+                .employeeNo(employee.getEmployeeNo())
+                .deptId(employee.getDeptId())
+                .deptName(resolveDeptName(employee.getDeptId(), deptNameCache))
+                .clockInTime(record == null || record.getClockInTime() == null ? null : record.getClockInTime().toLocalTime())
+                .clockOutTime(record == null || record.getClockOutTime() == null ? null : record.getClockOutTime().toLocalTime())
+                .clockInStatus(record == null ? null : record.getClockInStatus())
+                .clockOutStatus(record == null ? null : record.getClockOutStatus())
+                .status(statusView.status())
+                .statusName(statusView.statusName())
+                .build();
+    }
+
+    /**
+     * 解析部门名称。
+     *
+     * @param deptId        部门ID
+     * @param deptNameCache 部门名称缓存
+     * @return 部门名称
+     * 本方法使用的工具类: DeptService(hrms-system-organization)
+     */
+    private String resolveDeptName(Long deptId, Map<Long, String> deptNameCache) {
+        if (deptId == null) {
+            return null;
+        }
+        if (deptNameCache.containsKey(deptId)) {
+            return deptNameCache.get(deptId);
+        }
+        try {
+            DeptDetailVO dept = deptService.getDeptById(deptId);
+            String deptName = dept == null ? null : dept.getDeptName();
+            deptNameCache.put(deptId, deptName);
+            return deptName;
+        } catch (Exception ex) {
+            log.warn("resolve attendance record dept name failed, deptId={}", deptId, ex);
+            deptNameCache.put(deptId, null);
+            return null;
+        }
+    }
+
+    /**
+     * 合成考勤组打卡记录综合状态。
+     *
+     * @param record 打卡记录
+     * @return 综合状态
+     * 本方法使用的工具类: 无
+     */
+    private AttendanceStatusView resolveGroupRecordStatus(AttendanceRecordEntity record) {
+        if (record == null || (record.getClockInTime() == null && record.getClockOutTime() == null)) {
+            return new AttendanceStatusView("ABSENCE", "缺勤");
+        }
+        if (record.getClockInTime() == null) {
+            return new AttendanceStatusView("CLOCK_IN_MISSING", "上班缺卡");
+        }
+        if (record.getClockOutTime() == null) {
+            return new AttendanceStatusView("CLOCK_OUT_MISSING", "下班缺卡");
+        }
+        boolean late = "LATE".equals(record.getClockInStatus());
+        boolean earlyLeave = "EARLY_LEAVE".equals(record.getClockOutStatus());
+        if (late && earlyLeave) {
+            return new AttendanceStatusView("ABNORMAL", "异常");
+        }
+        if (late) {
+            return new AttendanceStatusView("LATE", "迟到");
+        }
+        if (earlyLeave) {
+            return new AttendanceStatusView("EARLY_LEAVE", "早退");
+        }
+        return new AttendanceStatusView("NORMAL", "正常");
+    }
+
+    /**
+     * 构建打卡记录 Map Key。
+     *
+     * @param employeeId 员工ID
+     * @param recordDate 打卡日期
+     * @return Map Key
+     * 本方法使用的工具类: StrUtil(hutool)
+     */
+    private String buildRecordKey(Long employeeId, LocalDate recordDate) {
+        return StrUtil.format("{}:{}", employeeId, recordDate);
+    }
+
+    /**
+     * 规范化当前页码。
+     *
+     * @param pageNum 当前页码
+     * @return 当前页码
+     * 本方法使用的工具类: 无
+     */
+    private int normalizePageNum(Integer pageNum) {
+        return pageNum == null || pageNum <= 0 ? 1 : pageNum;
+    }
+
+    /**
+     * 规范化每页大小。
+     *
+     * @param pageSize 每页大小
+     * @return 每页大小
+     * 本方法使用的工具类: 无
+     */
+    private int normalizePageSize(Integer pageSize) {
+        return pageSize == null || pageSize <= 0 ? 10 : pageSize;
+    }
+
+    /**
+     * 考勤组记录查询日期范围。
+     *
+     * @param startDate 开始日期
+     * @param endDate   结束日期
+     */
+    private record AttendanceDateRange(LocalDate startDate, LocalDate endDate) {
+    }
+
+    /**
+     * 考勤综合状态视图。
+     *
+     * @param status     状态编码
+     * @param statusName 状态名称
+     */
+    private record AttendanceStatusView(String status, String statusName) {
     }
 
     /**
@@ -901,6 +1240,8 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .leave(leaveDates.contains(date))
                 .clockInTime(record == null ? null : record.getClockInTime())
                 .clockOutTime(record == null ? null : record.getClockOutTime())
+                .clockInIp(record == null ? null : record.getClockInIp())
+                .clockOutIp(record == null ? null : record.getClockOutIp())
                 .clockInStatus(record == null ? null : record.getClockInStatus())
                 .clockOutStatus(record == null ? null : record.getClockOutStatus())
                 .build();
@@ -909,6 +1250,8 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .leave(day.getLeave())
                 .clockInTime(day.getClockInTime())
                 .clockOutTime(day.getClockOutTime())
+                .clockInIp(day.getClockInIp())
+                .clockOutIp(day.getClockOutIp())
                 .clockInStatus(day.getClockInStatus())
                 .clockOutStatus(day.getClockOutStatus())
                 .dayStatus(resolveDayStatus(day))

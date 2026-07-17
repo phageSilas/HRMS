@@ -198,19 +198,25 @@ export default defineConfig({
         {
           path: '/attendance/record',
           name: '考勤记录',
-          access: 'attendance',
+          access: 'attendanceManage',
           component: '@/pages/attendance/record',
+        },
+        {
+          path: '/attendance/groups',
+          name: '考勤配置',
+          access: 'attendanceManage',
+          component: '@/pages/attendance/groups',
         },
         {
           path: '/attendance/leave',
           name: '请假申请',
-          access: 'attendance',
+          access: 'attendanceManage',
           component: '@/pages/attendance/leave',
         },
         {
           path: '/attendance/summary',
           name: '考勤统计',
-          access: 'attendance',
+          access: 'attendanceManage',
           component: '@/pages/attendance/summary',
         },
       ],
