@@ -183,4 +183,18 @@ public interface AttendanceRecordMapper extends BaseMapper<AttendanceRecordEntit
             WHERE id = #{id}
             """)
     int updateCorrectionStatus(@Param("id") Long id, @Param("correctionStatus") String correctionStatus);
+
+    /**
+     * 统计指定考勤组的打卡记录数量。
+     *
+     * @param groupId 考勤组ID
+     * @return 打卡记录数量
+     * 本方法使用的工具类: 无
+     */
+    @Select("""
+            SELECT COUNT(1)
+            FROM hr_attendance_record
+            WHERE group_id = #{groupId}
+            """)
+    long countByGroupId(@Param("groupId") Long groupId);
 }

@@ -285,6 +285,10 @@ export async function updateAttendanceGroup(id: number, data: AttendanceGroupReq
 /**
  * 获取考勤记录列表
  */
+export async function deleteAttendanceGroup(id: number) {
+  return request.delete<void>(`/api/v1/attendance/groups/${id}`);
+}
+
 export async function getAttendanceGroupRecords(
   groupId: number,
   params: AttendanceGroupRecordQuery,

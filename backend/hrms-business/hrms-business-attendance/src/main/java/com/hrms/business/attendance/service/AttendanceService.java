@@ -58,6 +58,14 @@ public interface AttendanceService {
     AttendanceGroupPageVO updateAttendanceGroup(Long id, AttendanceGroupCreateOrUpdateRequestDTO requestDTO);
 
     /**
+     * 逻辑删除考勤组。
+     *
+     * @param id 考勤组ID
+     * 本方法使用的工具类: 无
+     */
+    void deleteAttendanceGroup(Long id);
+
+    /**
      * 分页查询考勤组打卡记录。
      *
      * @param groupId  考勤组ID
