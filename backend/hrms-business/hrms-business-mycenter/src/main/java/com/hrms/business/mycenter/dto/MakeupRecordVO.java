@@ -30,6 +30,9 @@ public class MakeupRecordVO {
     @Schema(description = "审批状态：0-草稿 1-审批中 2-已通过 3-已拒绝")
     private Integer approvalStatus;
 
+    @Schema(description = "审批实例ID（用于查看审批进度）")
+    private Long approvalInstanceId;
+
     @Schema(description = "创建时间")
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;

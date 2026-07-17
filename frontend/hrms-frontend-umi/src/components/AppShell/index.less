@@ -1,0 +1,394 @@
+.headerContent {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  height: 56px;
+  padding: 0 16px;
+}
+
+.headerDefaultDom {
+  display: inline-flex;
+  width: 42px;
+  height: 56px;
+  flex: 0 0 42px;
+  align-items: center;
+  justify-content: center;
+
+  :global(.ant-pro-global-header-collapsed-button) {
+    position: fixed;
+    left: 13px;
+    bottom: 118px;
+    top: auto;
+    z-index: 40;
+    width: 38px;
+    height: 38px;
+    border: 1px solid #e8edf5;
+    border-radius: 11px;
+    background: #fff;
+    box-shadow: 0 10px 26px rgba(28, 42, 70, 0.12);
+  }
+}
+
+.headerDefaultDom:empty {
+  display: none;
+}
+
+.breadcrumb {
+  min-width: 0;
+  color: #7a8aa0;
+  white-space: nowrap;
+}
+
+.iconButton {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  color: #6f7f95;
+  font-size: 17px;
+
+  &:hover {
+    color: #4b7cff !important;
+    background: #f2f6ff !important;
+  }
+}
+
+.quickPanel {
+  display: grid;
+  width: 180px;
+  gap: 6px;
+
+  :global(.ant-btn) {
+    justify-content: flex-start;
+    height: 36px;
+    border-radius: 8px;
+  }
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 56px;
+  padding-left: 18px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.96) 24px);
+}
+
+.searchTrigger {
+  display: inline-flex;
+  height: 36px;
+  min-width: 190px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid #e7ebf3;
+  border-radius: 10px;
+  background: #fff;
+  color: #8a97aa;
+  cursor: pointer;
+
+  kbd {
+    margin-left: auto;
+    padding: 1px 6px;
+    border: 1px solid #e2e7f0;
+    border-radius: 6px;
+    background: #f8fafc;
+    color: #a0aabc;
+    font-size: 12px;
+    font-family: inherit;
+  }
+}
+
+.searchModal {
+  :global(.ant-modal-content) {
+    overflow: hidden;
+    border-radius: 16px;
+    padding: 18px;
+  }
+}
+
+.searchHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.searchList {
+  max-height: 430px;
+  overflow: auto;
+}
+
+.searchItem {
+  border-radius: 10px;
+  cursor: pointer;
+  padding-inline: 10px !important;
+
+  &:hover {
+    background: #f5f8ff;
+  }
+}
+
+.searchIcon {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: #eef4ff;
+  color: #4b7cff;
+}
+
+.searchTitle {
+  margin-right: 8px;
+  color: #263348;
+  font-weight: 600;
+}
+
+.noticePopover {
+  :global(.ant-popover-inner) {
+    border-radius: 14px;
+    padding: 0;
+    box-shadow: 0 18px 45px rgba(26, 39, 68, 0.16);
+  }
+}
+
+.noticePanel {
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  padding: 14px;
+}
+
+.noticeHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.noticeItem {
+  border-radius: 12px;
+  padding: 12px 10px !important;
+  cursor: pointer;
+
+  &:hover {
+    background: #f7f9fe;
+  }
+}
+
+.noticeIcon {
+  display: inline-flex;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  align-items: center;
+  justify-content: center;
+  margin-right: 12px;
+  border-radius: 11px;
+  font-size: 18px;
+}
+
+.notice {
+  color: #4b7cff;
+  background: #eef4ff;
+}
+
+.message {
+  color: #00b894;
+  background: #e8fbf5;
+}
+
+.mail {
+  color: #f5a623;
+  background: #fff7e8;
+}
+
+.todo {
+  color: #ff6b6b;
+  background: #fff0f0;
+}
+
+.noticeText {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.noticeMore {
+  height: 36px;
+  margin-top: 8px;
+  border-radius: 9px;
+}
+
+.userPopover {
+  :global(.ant-popover-inner) {
+    width: 272px;
+    border-radius: 14px;
+    padding: 14px;
+    box-shadow: 0 18px 45px rgba(26, 39, 68, 0.16);
+  }
+}
+
+.avatarTrigger {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.userPanel {
+  width: 244px;
+}
+
+.userSummary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  > div:last-child {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+  }
+}
+
+.userActions {
+  width: 100%;
+
+  :global(.ant-btn) {
+    width: 100%;
+    justify-content: flex-start;
+    border-radius: 9px;
+  }
+}
+
+.layoutFrame {
+  min-height: 100%;
+  background: #f7f8fb;
+}
+
+.shellHeader {
+  position: sticky;
+  top: 0;
+  z-index: 16;
+  display: flex;
+  height: 56px;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #edf0f6;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(14px);
+}
+
+.shellHeaderRight {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+  height: 56px;
+  padding-right: 18px;
+}
+
+.pageFrame {
+  min-height: calc(100vh - 156px);
+  padding-top: 0;
+}
+
+.workTabs {
+  position: relative;
+  top: auto;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 5px 24px;
+  border-bottom: 1px solid #edf0f6;
+  background: rgba(247, 248, 251, 0.94);
+  backdrop-filter: blur(12px);
+}
+
+.tabScroller {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.workTab {
+  display: inline-flex;
+  height: 34px;
+  flex: 0 0 auto;
+  align-items: center;
+  border: 1px solid #e8edf5;
+  border-radius: 9px;
+  padding: 0 11px;
+  background: #fff;
+  color: #6e7f96;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    color: #4b7cff;
+    border-color: #d9e4ff;
+    background: #f7faff;
+  }
+}
+
+.workTabActive {
+  color: #4b7cff;
+  border-color: #d9e4ff;
+  background: #edf4ff;
+}
+
+.closeTab {
+  color: #a2adbd;
+  font-size: 10px;
+
+  &:hover {
+    color: #4b7cff;
+  }
+}
+
+.tabMenuButton {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+}
+
+@media (max-width: 900px) {
+  .headerContent {
+    padding-right: 8px;
+  }
+
+  .searchTrigger {
+    width: 38px;
+    min-width: 38px;
+    justify-content: center;
+
+    span,
+    kbd {
+      display: none;
+    }
+  }
+
+  .breadcrumb {
+    display: none;
+  }
+
+  .workTabs {
+    padding-inline: 12px;
+  }
+}

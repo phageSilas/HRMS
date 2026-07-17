@@ -41,10 +41,6 @@ export default defineConfig({
       target: 'http://localhost:8080',
       changeOrigin: true,
     },
-    '/attendance': {
-      target: 'http://localhost:8080',
-      changeOrigin: true,
-    },
     '/my': {
       target: 'http://localhost:8080',
       changeOrigin: true,
@@ -186,27 +182,41 @@ export default defineConfig({
       ],
     },
 
-    // 考勤管理（成员 C）- ADMIN, HR, MANAGER 可见
+    // 考勤管理（成员 C）- 打卡所有已登录用户可见，管理类功能 ADMIN, HR, MANAGER 可见
     {
       path: '/attendance',
       name: '考勤管理',
       icon: 'clock-circle',
-      access: 'attendance',
       routes: [
-        { path: '/attendance', redirect: '/attendance/record' },
+        { path: '/attendance', redirect: '/attendance/punch' },
+        {
+          path: '/attendance/punch',
+          name: '员工打卡',
+          access: 'attendancePunch',
+          component: '@/pages/attendance/punch',
+        },
         {
           path: '/attendance/record',
           name: '考勤记录',
+          access: 'attendanceManage',
           component: '@/pages/attendance/record',
+        },
+        {
+          path: '/attendance/groups',
+          name: '考勤配置',
+          access: 'attendanceManage',
+          component: '@/pages/attendance/groups',
         },
         {
           path: '/attendance/leave',
           name: '请假申请',
+          access: 'attendanceManage',
           component: '@/pages/attendance/leave',
         },
         {
           path: '/attendance/summary',
           name: '考勤统计',
+          access: 'attendanceManage',
           component: '@/pages/attendance/summary',
         },
       ],

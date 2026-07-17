@@ -3,11 +3,14 @@
  * https://umijs.org/docs/api/runtime-config
  */
 
+import LayoutFrame from '@/components/AppShell/LayoutFrame';
 import { getCurrentUser } from '@/services/auth';
 import type { UserInfo } from '@/types/user';
 import type { RunTimeLayoutConfig } from '@umijs/max';
 import { history } from '@umijs/max';
 import { message } from 'antd';
+import React from 'react';
+import './global.less';
 
 // 全局状态类型
 export interface InitialState {
@@ -107,45 +110,66 @@ export function onRouteChange({ location }: { location: { pathname: string } }) 
  * Layout 配置
  */
 export const layout: RunTimeLayoutConfig = ({ initialState, setInitialState }) => {
+  const avatarUrl = initialState?.currentUser?.avatar;
+  const displayName =
+    initialState?.currentUser?.nickname ||
+    initialState?.currentUser?.username ||
+    '未登录';
+
+  const handleLogout = async () => {
+    // 调用 logout 服务，同步清除后端 Token 黑名单
+    const { logout } = await import('@/services/auth');
+    await logout();
+    message.success('已退出登录');
+    // 清除全局状态
+    setInitialState?.({ loading: false });
+    history.push('/login');
+  };
+
   return {
-    logo: 'https://img.alicdn.com/tfs/TB1YHEpwUT1gK0jSZFhXXaAtVXa-28-27.svg',
-    title: 'HRMS 人资管理系统',
+    logo: false,
+    title: false,
+    layout: 'side',
+    navTheme: 'light',
+    fixedHeader: true,
+    fixSiderbar: true,
+    className: 'hrms-art-layout',
     menu: {
       locale: false,
     },
-    // 用户信息显示
-    avatar:
-      initialState?.currentUser?.avatar ||
-      'https://gw.alipayobjects.com/zos/antfincdn/efFD%24gQ%24g/LC_ChangX.png',
-    name:
-      initialState?.currentUser?.nickname ||
-      initialState?.currentUser?.username ||
-      '未登录',
-    // 退出登录 - Umi ProLayout 标准配置
-    logout: async () => {
-      // 调用 logout 服务，同步清除后端 Token 黑名单
-      const { logout } = await import('@/services/auth');
-      await logout();
-      message.success('已退出登录');
-      // 清除全局状态
-      setInitialState?.({ loading: false });
-      history.push('/login');
+    menuHeaderRender: () =>
+      React.createElement(
+        'div',
+        { className: 'hrms-art-brand' },
+        React.createElement('span', { className: 'hrms-art-logo' }),
+        React.createElement(
+          'span',
+          { className: 'hrms-art-brand-text' },
+          React.createElement('strong', null, 'HRMS'),
+          React.createElement('small', null, '管理平台')
+        )
+      ),
+    childrenRender: (children) =>
+      React.createElement(
+        LayoutFrame,
+        {
+          currentUser: initialState?.currentUser,
+          avatarUrl,
+          displayName,
+          onLogout: handleLogout,
+        },
+        children
+      ),
+    onMenuClick: ({ key }) => {
+      if (key === 'logout') {
+        handleLogout();
+      }
     },
   };
 };
 
 /**
  * 请求配置
+ * 注意：前端使用自定义 axios 实例（@/utils/request），已在拦截器中统一处理 Result<T> 解包
+ * 因此不再配置 umi 的 request 运行时配置，避免 useRequest 二次解包导致数据丢失
  */
-export const request = {
-  timeout: 10000,
-  errorConfig: {
-    adaptor: (resData: { code: number; message: string }) => {
-      return {
-        success: resData.code === 20000,
-        errorMessage: resData.message,
-        errorCode: resData.code,
-      };
-    },
-  },
-};

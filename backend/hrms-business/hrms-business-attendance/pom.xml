@@ -35,6 +35,11 @@
             <artifactId>hrms-business-approval</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>com.hrms</groupId>
+            <artifactId>hrms-system-organization</artifactId>
+        </dependency>
+
         <!-- Spring Boot Starter Web -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

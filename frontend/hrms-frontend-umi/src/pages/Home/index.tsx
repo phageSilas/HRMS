@@ -7,6 +7,7 @@ import {
   ApartmentOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
+  EnvironmentOutlined,
   PayCircleOutlined,
   RobotOutlined,
   SafetyCertificateOutlined,
@@ -64,7 +65,7 @@ const moduleEntries: ModuleEntry[] = [
   },
   {
     name: '考勤管理',
-    path: '/attendance/record',
+    path: '/attendance/punch',
     description: '打卡、请假、补卡、考勤统计的基础入口。',
     owner: '你负责',
     icon: <ClockCircleOutlined />,
@@ -120,6 +121,44 @@ const HomePage: React.FC = () => {
             {currentUser?.nickname || currentUser?.username || '管理员'}
             。这里是尝试性生成的九大模块基础跳转界面。
           </Text>
+        </Space>
+      </Card>
+
+      <Card
+        hoverable
+        bordered={false}
+        data-testid="home-punch-entry"
+        onClick={() => history.push('/attendance/punch')}
+        style={{
+          marginBottom: 16,
+          borderRadius: 8,
+          background: 'linear-gradient(135deg, #eef6ff 0%, #ffffff 55%, #f4fff8 100%)',
+        }}
+      >
+        <Space align="center" size={16}>
+          <div
+            style={{
+              display: 'grid',
+              width: 52,
+              height: 52,
+              borderRadius: 10,
+              color: '#1677ff',
+              fontSize: 26,
+              background: '#e6f4ff',
+              placeItems: 'center',
+            }}
+          >
+            <EnvironmentOutlined />
+          </div>
+          <Space direction="vertical" size={2}>
+            <Space>
+              <Title level={4} style={{ margin: 0 }}>
+                今日打卡
+              </Title>
+              <Tag color="blue">员工自助</Tag>
+            </Space>
+            <Text type="secondary">进入员工打卡页面，完成上班/下班网页端打卡。</Text>
+          </Space>
         </Space>
       </Card>
 

@@ -10,8 +10,8 @@ import {
   ExclamationCircleOutlined,
   FieldTimeOutlined,
 } from '@ant-design/icons';
+import { history, useRequest } from '@umijs/max';
 import { PageContainer } from '@ant-design/pro-components';
-import { useRequest } from '@umijs/max';
 import {
   Button,
   Card,
@@ -208,6 +208,17 @@ const ProfileAttendancePage: React.FC = () => {
         const item = map[s] || { text: '未知', color: 'default' };
         return <Tag color={item.color}>{item.text}</Tag>;
       },
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 100,
+      render: (_: any, record: any) =>
+        record.approvalInstanceId ? (
+          <Button type="link" size="small" onClick={() => history.push(`/approval/detail/${record.approvalInstanceId}`)}>
+            查看进度
+          </Button>
+        ) : null,
     },
     {
       title: '申请时间',
@@ -431,6 +442,17 @@ const ProfileAttendancePage: React.FC = () => {
             { title: '时长(小时)', dataIndex: 'duration', key: 'duration', width: 100 },
             { title: '事由', dataIndex: 'reason', key: 'reason', ellipsis: true },
             { title: '状态', dataIndex: 'approvalStatusDesc', key: 'approvalStatusDesc', width: 100 },
+            {
+              title: '操作',
+              key: 'action',
+              width: 100,
+              render: (_: any, record: any) =>
+                record.approvalInstanceId ? (
+                  <Button type="link" size="small" onClick={() => history.push(`/approval/detail/${record.approvalInstanceId}`)}>
+                    查看进度
+                  </Button>
+                ) : null,
+            },
             { title: '申请时间', dataIndex: 'createTime', key: 'createTime', width: 170, render: (t: string) => t || '-' },
           ]}
           rowKey="id"
