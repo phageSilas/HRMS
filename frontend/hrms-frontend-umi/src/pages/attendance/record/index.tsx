@@ -1,4 +1,6 @@
 import { usePageAutoRefresh } from '@/hooks/usePageAutoRefresh';
+import type { Department } from '@/services/organization';
+import { getDepartmentList } from '@/services/organization';
 import type {
   AttendanceGroup,
   AttendanceGroupRecord,
@@ -23,7 +25,6 @@ import {
   DatePicker,
   Form,
   Input,
-  InputNumber,
   Select,
   Space,
   Table,
@@ -79,6 +80,7 @@ const statusOptions = Object.entries(statusMeta).map(([value, meta]) => ({
 }));
 
 const RECORD_QUERY_STORAGE_PREFIX = 'attendance-record-query';
+const DEPARTMENT_PAGE_SIZE = 200;
 
 function parseUrlGroupId() {
   const groupId = new URLSearchParams(history.location.search).get('groupId');
@@ -168,7 +170,9 @@ const AttendanceRecordPage: React.FC = () => {
   const [form] = Form.useForm<RecordFilterValues>();
   const storedQuery = getStoredRecordQuery();
   const [groups, setGroups] = useState<AttendanceGroup[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [groupLoading, setGroupLoading] = useState(false);
+  const [departmentLoading, setDepartmentLoading] = useState(false);
   const [recordLoading, setRecordLoading] = useState(false);
   const [recordPageData, setRecordPageData] = useState<
     PageResult<AttendanceGroupRecord>
@@ -184,6 +188,14 @@ const AttendanceRecordPage: React.FC = () => {
     pageNum: storedQuery.pageNum || 1,
     pageSize: storedQuery.pageSize || 10,
   });
+  const departmentOptions = useMemo(
+    () =>
+      departments.map((department) => ({
+        label: department.deptName,
+        value: department.id,
+      })),
+    [departments],
+  );
 
   const loadGroups = async () => {
     setGroupLoading(true);
@@ -199,6 +211,26 @@ const AttendanceRecordPage: React.FC = () => {
       return groups;
     } finally {
       setGroupLoading(false);
+    }
+  };
+
+  const loadDepartments = async () => {
+    setDepartmentLoading(true);
+    try {
+      const page = await getDepartmentList({
+        pageNum: 1,
+        pageSize: DEPARTMENT_PAGE_SIZE,
+      });
+      const nextDepartments = page.records ?? [];
+      setDepartments(nextDepartments);
+      return nextDepartments;
+    } catch (error) {
+      const messageText =
+        error instanceof Error ? error.message : '部门列表加载失败';
+      message.error(messageText);
+      return departments;
+    } finally {
+      setDepartmentLoading(false);
     }
   };
 
@@ -231,6 +263,7 @@ const AttendanceRecordPage: React.FC = () => {
 
   useEffect(() => {
     void loadGroups();
+    void loadDepartments();
   }, []);
 
   useEffect(() => {
@@ -239,6 +272,16 @@ const AttendanceRecordPage: React.FC = () => {
     const firstGroupId = groups[0].id;
     setQuery((previous) => ({ ...previous, groupId: firstGroupId, pageNum: 1 }));
   }, [groups, query.groupId]);
+
+  useEffect(() => {
+    if (!query.departmentId) return;
+    if (departments.some((item) => item.id === query.departmentId)) return;
+    setQuery((previous) => ({
+      ...previous,
+      departmentId: undefined,
+      pageNum: 1,
+    }));
+  }, [departments, query.departmentId]);
 
   useEffect(() => {
     form.setFieldsValue({
@@ -275,25 +318,39 @@ const AttendanceRecordPage: React.FC = () => {
   usePageAutoRefresh(() => {
     void (async () => {
       const nextGroups = await loadGroups();
+      const nextDepartments = await loadDepartments();
       const nextGroupId =
         query.groupId && nextGroups.some((item) => item.id === query.groupId)
           ? query.groupId
           : nextGroups[0]?.id;
+      const nextDepartmentId =
+        query.departmentId &&
+        nextDepartments.some((item) => item.id === query.departmentId)
+          ? query.departmentId
+          : undefined;
 
       if (!nextGroupId) {
         return;
       }
 
-      if (nextGroupId !== query.groupId) {
+      if (
+        nextGroupId !== query.groupId ||
+        nextDepartmentId !== query.departmentId
+      ) {
         setQuery((previous) => ({
           ...previous,
           groupId: nextGroupId,
+          departmentId: nextDepartmentId,
           pageNum: 1,
         }));
         return;
       }
 
-      await loadRecords({ ...query, groupId: nextGroupId });
+      await loadRecords({
+        ...query,
+        groupId: nextGroupId,
+        departmentId: nextDepartmentId,
+      });
     })();
   });
 
@@ -372,6 +429,7 @@ const AttendanceRecordPage: React.FC = () => {
     setQuery({
       groupId: nextGroupId,
       yearMonth: dayjs().format('YYYY-MM'),
+      departmentId: undefined,
       pageNum: 1,
       pageSize: query.pageSize,
     });
@@ -440,8 +498,15 @@ const AttendanceRecordPage: React.FC = () => {
           <Form.Item label="员工" name="keyword">
             <Input allowClear placeholder="姓名/工号" />
           </Form.Item>
-          <Form.Item label="部门ID" name="departmentId">
-            <InputNumber min={1} precision={0} placeholder="部门ID" />
+          <Form.Item label="部门" name="departmentId">
+            <Select
+              showSearch
+              allowClear
+              loading={departmentLoading}
+              placeholder="请选择部门"
+              optionFilterProp="label"
+              options={departmentOptions}
+            />
           </Form.Item>
           <Form.Item label="综合状态" name="status">
             <Select
