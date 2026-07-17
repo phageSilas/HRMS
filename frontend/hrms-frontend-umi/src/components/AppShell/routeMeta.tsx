@@ -109,6 +109,7 @@ export const shellRoutes: ShellRouteMeta[] = [
   },
   { path: '/attendance/leaveManage', title: '请假管理', group: '考勤管理', keywords: ['请假', '请假管理', '审批'] },
   { path: '/attendance/summary', title: '考勤统计', group: '考勤管理', keywords: ['统计'] },
+  { path: '/attendance/leave', title: '我的请假', group: '个人中心', keywords: ['我的请假', '请假', '假期余额'] },
   {
     path: '/salary/account',
     title: '薪资账套',
@@ -125,7 +126,7 @@ export const shellRoutes: ShellRouteMeta[] = [
     icon: <CheckCircleOutlined />,
     keywords: ['审批', '待办'],
   },
-  { path: '/approval/delegation', title: '审批配置', group: '审批中心', keywords: ['审批', '配置'] },
+  { path: '/approval/delegation', title: '委托审批', group: '审批中心', keywords: ['委托', '审批'] },
   {
     path: '/profile/index',
     title: '个人中心',

@@ -231,6 +231,30 @@ export interface AttendanceLeaveManageItem {
   createTime?: string;
 }
 
+export interface AttendanceLeaveType {
+  id: number;
+  label: string;
+  value: string;
+}
+
+export interface AttendanceLeaveCreateRequest {
+  leaveTypeId?: number;
+  leaveType?: string;
+  startDate: string;
+  startPeriod: 'AM' | 'PM';
+  endDate: string;
+  endPeriod: 'AM' | 'PM';
+  reason?: string;
+  attachmentFileId?: number;
+  attachment?: string;
+}
+
+export interface AttendanceLeaveCreateResult {
+  leaveId?: number;
+  approvalInstanceId?: number;
+  approvalStatus?: number;
+}
+
 // ============ 考勤组接口 ============
 
 /**
@@ -323,11 +347,25 @@ export async function getAttendanceLeaveManageList(params: AttendanceLeaveManage
   });
 }
 
+/**
+ * 获取启用的请假类型
+ */
+export async function getAttendanceLeaveTypes() {
+  return request.get<AttendanceLeaveType[]>('/api/v1/leaves/types');
+}
+
 // ============ 考勤汇总接口 ============
 
 /**
  * 获取员工考勤汇总（跨模块接口）
  */
+/**
+ * 提交请假申请
+ */
+export async function createAttendanceLeave(data: AttendanceLeaveCreateRequest) {
+  return request.post<AttendanceLeaveCreateResult>('/api/v1/leaves', data);
+}
+
 export async function getAttendanceSummary(employeeId: number, yearMonth: string) {
   return request.get<AttendanceSummary>(`/attendance/summary/${employeeId}/${yearMonth}`);
 }

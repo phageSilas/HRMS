@@ -220,7 +220,7 @@ const DetailPage: React.FC = () => {
     } finally {
       setOperateLoading(false);
     }
-  }, [id, operateModal.action, operateForm, fetchDetail]);
+  }, [detail, id, operateModal.action, operateForm, fetchDetail]);
 
   /** 打开操作弹窗 */
   const showOperateModal = (action: 'approve' | 'reject' | 'transfer') => {

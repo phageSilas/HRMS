@@ -209,7 +209,9 @@ export default defineConfig({
         },
         {
           path: '/attendance/leave',
-          redirect: '/attendance/leaveManage',
+          name: '我的请假',
+          component: '@/pages/attendance/leave',
+          hideInMenu: true,
         },
         {
           path: '/attendance/leaveManage',
@@ -267,7 +269,7 @@ export default defineConfig({
         },
         {
           path: '/approval/delegation',
-          name: '审批配置',
+          name: '委托审批',
           component: '@/pages/approval/delegation',
         },
         {
@@ -304,7 +306,7 @@ export default defineConfig({
         {
           path: '/profile/leave',
           name: '我的请假',
-          component: '@/pages/profile/leave',
+          redirect: '/attendance/leave',
         },
         {
           path: '/profile/salary',

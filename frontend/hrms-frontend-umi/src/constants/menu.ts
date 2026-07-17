@@ -88,7 +88,7 @@ export const menuConfig: MenuItem[] = [
     access: 'approval',
     children: [
       { key: 'approval-workspace', name: '审批工作台', icon: '', path: '/approval/workspace' },
-      { key: 'approval-delegation', name: '审批配置', icon: '', path: '/approval/delegation' },
+      { key: 'approval-delegation', name: '委托审批', icon: '', path: '/approval/delegation' },
     ],
   },
   {
