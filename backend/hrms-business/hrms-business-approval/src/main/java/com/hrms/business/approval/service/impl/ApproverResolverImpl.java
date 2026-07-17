@@ -80,21 +80,46 @@ public class ApproverResolverImpl implements ApproverResolver {
     /**
      * 解析直接上级：通过 hr_employee.leader_id 链路查询
      * 先根据申请人 userId 查员工，再查其 leader 的 userId
+     * <p>
+     * 若员工未配置直接上级（leader_id 为空），则降级为该员工所在部门的部门负责人。
+     * 这样即使组织架构数据不完整，补卡/加班等审批也能正常流转。
+     * </p>
      */
     private Long resolveSuperiorDeptHead(Long bizId) {
-        // bizId 是审批实例的业务主键 ID，对于 LEAVE_REQUEST 是请假记录ID，对于 CORRECTION 是补卡记录ID。
-        // 但这里无法直接从 bizId 拿到申请人 userId。ApproverResolver 的调用方
-        // createNextTask 只传了 deptId/bizId 但没有传 applicantUserId。
-        // 因此我们通过 SecurityContextHolder 获取当前用户，
-        // 但更可靠的方式：等后续修改调用方传参。
-        //
-        // 当前实现：尝试从当前安全上下文获取用户ID并反查 leader。
         Long currentUserId = com.hrms.common.security.SecurityContextHolder.getUserId();
         if (currentUserId == null) {
             log.warn("解析直接上级失败: 无法获取当前用户ID");
             return null;
         }
-        return findLeaderByUserId(currentUserId);
+
+        // 1. 先尝试通过 leader_id 链路查找直接上级
+        Long leaderUserId = findLeaderByUserId(currentUserId);
+        if (leaderUserId != null) {
+            return leaderUserId;
+        }
+
+        // 2. 直接上级不存在 → 降级为部门负责人审批
+        log.warn("员工无直接上级配置，降级为部门负责人审批, userId={}", currentUserId);
+        EmployeeBriefDTO emp = approvalEmployeeMapper.findByUserId(currentUserId);
+        if (emp != null && emp.getDeptId() != null) {
+            Long deptHeadUserId = resolveDeptHead(emp.getDeptId());
+            if (deptHeadUserId != null) {
+                log.info("降级为部门负责人审批成功: userId={}, deptId={}, deptHeadUserId={}",
+                        currentUserId, emp.getDeptId(), deptHeadUserId);
+                return deptHeadUserId;
+            }
+            log.warn("降级为部门负责人失败: 部门未设置负责人, deptId={}", emp.getDeptId());
+        }
+
+        // 3. 部门负责人也未配置 → 兜底为 HR 负责人
+        log.warn("降级为HR负责人审批, userId={}", currentUserId);
+        Long hrHeadUserId = resolveRoleUser("HR_HEAD");
+        if (hrHeadUserId != null) {
+            log.info("降级为HR负责人审批成功: userId={}, hrHeadUserId={}", currentUserId, hrHeadUserId);
+            return hrHeadUserId;
+        }
+
+        return null;
     }
 
     /**
