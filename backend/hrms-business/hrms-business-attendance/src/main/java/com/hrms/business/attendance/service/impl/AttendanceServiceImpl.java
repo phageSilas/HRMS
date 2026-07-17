@@ -1242,6 +1242,8 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .clockOutTime(record == null ? null : record.getClockOutTime())
                 .clockInIp(record == null ? null : record.getClockInIp())
                 .clockOutIp(record == null ? null : record.getClockOutIp())
+                .clockInGps(record == null ? null : record.getClockInGps())
+                .clockOutGps(record == null ? null : record.getClockOutGps())
                 .clockInStatus(record == null ? null : record.getClockInStatus())
                 .clockOutStatus(record == null ? null : record.getClockOutStatus())
                 .build();
@@ -1252,6 +1254,8 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .clockOutTime(day.getClockOutTime())
                 .clockInIp(day.getClockInIp())
                 .clockOutIp(day.getClockOutIp())
+                .clockInGps(day.getClockInGps())
+                .clockOutGps(day.getClockOutGps())
                 .clockInStatus(day.getClockInStatus())
                 .clockOutStatus(day.getClockOutStatus())
                 .dayStatus(resolveDayStatus(day))
@@ -1611,6 +1615,7 @@ public class AttendanceServiceImpl implements AttendanceService {
      */
     private AttendanceClockVO buildClockVO(AttendanceRecordEntity record, ClockPeriodEnum period, String status, LocalDateTime clockTime) {
         String clientIp = ClockPeriodEnum.CLOCK_IN.equals(period) ? record.getClockInIp() : record.getClockOutIp();
+        String clockGps = ClockPeriodEnum.CLOCK_IN.equals(period) ? record.getClockInGps() : record.getClockOutGps();
         return AttendanceClockVO.builder()
                 .recordId(record.getId())
                 .employeeId(record.getEmployeeId())
@@ -1619,6 +1624,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .period(period.name())
                 .status(status)
                 .clockTime(clockTime)
+                .clockGps(clockGps)
                 .clientIp(clientIp)
                 .build();
     }
