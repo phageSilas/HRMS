@@ -14,6 +14,7 @@ import com.hrms.business.attendance.vo.MonthlyStatGenerateVO;
 import com.hrms.business.attendance.vo.AttendancePayrollSourceVO;
 import com.hrms.business.attendance.vo.AttendanceGroupPageVO;
 import com.hrms.business.attendance.vo.AttendanceGroupRecordPageVO;
+import com.hrms.business.attendance.vo.AttendanceSummaryDashboardVO;
 import com.hrms.common.web.PageResult;
 import com.hrms.common.web.Result;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -122,6 +123,20 @@ public class AttendanceController {
     @GetMapping("/records/my-calendar")
     public Result<AttendanceCalendarVO> getMyCalendar(@RequestParam String yearMonth) {
         return Result.success(attendanceService.getMyCalendar(yearMonth));
+    }
+
+    /**
+     * 查询HR和主管考勤统计看板。
+     *
+     * @param yearMonth 月份，格式yyyy-MM
+     * @param deptId    部门ID
+     * @return 考勤统计看板
+     * 本方法使用的工具类: Result(hrms-common)
+     */
+    @GetMapping("/summary/dashboard")
+    public Result<AttendanceSummaryDashboardVO> getSummaryDashboard(@RequestParam String yearMonth,
+                                                                    @RequestParam(required = false) Long deptId) {
+        return Result.success(attendanceService.getSummaryDashboard(yearMonth, deptId));
     }
 
     /**
