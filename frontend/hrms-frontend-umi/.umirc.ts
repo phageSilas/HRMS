@@ -209,9 +209,13 @@ export default defineConfig({
         },
         {
           path: '/attendance/leave',
-          name: '请假申请',
+          redirect: '/attendance/leaveManage',
+        },
+        {
+          path: '/attendance/leaveManage',
+          name: '请假管理',
           access: 'attendanceManage',
-          component: '@/pages/attendance/leave',
+          component: '@/pages/attendance/leaveManage',
         },
         {
           path: '/attendance/summary',

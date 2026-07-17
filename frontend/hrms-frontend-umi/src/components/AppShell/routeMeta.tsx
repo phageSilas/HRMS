@@ -107,7 +107,7 @@ export const shellRoutes: ShellRouteMeta[] = [
     icon: <ClockCircleOutlined />,
     keywords: ['考勤', '配置', '考勤组', '打卡规则'],
   },
-  { path: '/attendance/leave', title: '请假申请', group: '考勤管理', keywords: ['请假'] },
+  { path: '/attendance/leaveManage', title: '请假管理', group: '考勤管理', keywords: ['请假', '请假管理', '审批'] },
   { path: '/attendance/summary', title: '考勤统计', group: '考勤管理', keywords: ['统计'] },
   {
     path: '/salary/account',
