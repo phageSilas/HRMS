@@ -131,11 +131,22 @@ export interface PhoneBindRequest {
   smsCode: string;
 }
 
-/** 登录日志 VO */
+/** 登录日志 VO（与后端 LoginLogVO 对齐） */
 export interface LoginLogVO {
+  /** 登录IP */
+  ip: string;
+  /** 登录地点 */
+  loginLocation?: string;
+  /** 浏览器 */
+  browser?: string;
+  /** 操作系统 */
+  os?: string;
+  /** 登录状态：1-成功 0-失败 */
+  status: number;
+  /** 错误消息 */
+  errorMsg?: string;
+  /** 登录时间 */
   loginTime: string;
-  ipAddress: string;
-  deviceInfo: string;
 }
 
 // ======================================================================

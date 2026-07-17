@@ -1387,7 +1387,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     @Override
     public List<LeaveTypeVO> listLeaveTypes() {
         return dictDataMapper.selectList(new LambdaQueryWrapper<DictDataEntity>()
-                        .eq(DictDataEntity::getDictType, "leave_type")
+                        .eq(DictDataEntity::getDictType, "hr_leave_type")
                         .eq(DictDataEntity::getStatus, 1)
                         .eq(DictDataEntity::getIsDeleted, 0)
                         .orderByAsc(DictDataEntity::getSort)
