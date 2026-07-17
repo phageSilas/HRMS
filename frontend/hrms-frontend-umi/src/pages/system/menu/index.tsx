@@ -92,55 +92,64 @@ const MenuPage: React.FC = () => {
   // 表格列定义
   const columns: ProColumns<MenuItem>[] = [
     {
+      title: '关键词',
+      dataIndex: 'keyword',
+      hideInTable: true,
+      valueType: 'text',
+      fieldProps: {
+        placeholder: '请输入菜单名称',
+      },
+    },
+    {
       title: '菜单名称',
       dataIndex: 'menuName',
-      width: 180,
+      width: 140,
       fixed: 'left',
       search: false,
     },
     {
       title: '类型',
       dataIndex: 'menuType',
-      width: 100,
+      width: 80,
       search: false,
       render: (_, record) => menuTypeTag(record.menuType),
     },
     {
       title: '路径',
       dataIndex: 'path',
-      width: 200,
+      width: 160,
       search: false,
       ellipsis: true,
     },
     {
       title: '组件',
       dataIndex: 'component',
-      width: 200,
+      width: 160,
       search: false,
       ellipsis: true,
     },
     {
       title: '权限标识',
       dataIndex: 'permission',
-      width: 180,
+      width: 140,
       search: false,
     },
     {
       title: '图标',
       dataIndex: 'icon',
-      width: 100,
+      width: 80,
       search: false,
     },
     {
       title: '排序',
       dataIndex: 'sortNo',
-      width: 80,
+      width: 60,
       search: false,
     },
     {
       title: '状态',
       dataIndex: 'status',
-      width: 80,
+      width: 70,
       search: false,
       render: (_, record) => statusTag(record.status),
     },
@@ -148,23 +157,25 @@ const MenuPage: React.FC = () => {
       title: '操作',
       key: 'action',
       fixed: 'right',
-      width: 260,
+      width: 180,
       search: false,
       render: (_, record) => (
-        <Space size={4} wrap>
+        <Space size={2} wrap>
           <Button
             type="link"
             size="small"
             icon={<PlusOutlined />}
             onClick={() => handleAddChild(record)}
+            style={{ padding: '0 2px' }}
           >
-            新增子项
+            新增
           </Button>
           <Button
             type="link"
             size="small"
             icon={<EditOutlined />}
             onClick={() => handleEdit(record)}
+            style={{ padding: '0 2px' }}
           >
             编辑
           </Button>
@@ -175,7 +186,7 @@ const MenuPage: React.FC = () => {
             okText="确定"
             cancelText="取消"
           >
-            <Button type="link" danger size="small" icon={<DeleteOutlined />}>
+            <Button type="link" danger size="small" icon={<DeleteOutlined />} style={{ padding: '0 2px' }}>
               删除
             </Button>
           </Popconfirm>

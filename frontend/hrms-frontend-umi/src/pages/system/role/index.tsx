@@ -65,67 +65,87 @@ const RolePage: React.FC = () => {
   // 表格列定义
   const columns: ProColumns<RoleItem>[] = [
     {
+      title: '关键词',
+      dataIndex: 'keyword',
+      hideInTable: true,
+      valueType: 'text',
+      fieldProps: {
+        placeholder: '请输入角色名称/编码',
+      },
+    },
+    {
       title: '角色名称',
       dataIndex: 'roleName',
-      width: 150,
+      width: 120,
       fixed: 'left',
       search: false,
     },
     {
       title: '角色编码',
       dataIndex: 'roleCode',
-      width: 150,
+      width: 100,
       search: false,
     },
     {
       title: '数据权限',
       dataIndex: 'dataScope',
-      width: 140,
+      width: 120,
       search: false,
       render: (_, record) => dataScopeTag(record.dataScope),
     },
     {
       title: '排序',
       dataIndex: 'sortNo',
-      width: 80,
+      width: 60,
       search: false,
     },
     {
       title: '状态',
       dataIndex: 'status',
-      width: 80,
+      width: 70,
       valueEnum: {
         0: { text: '禁用', status: 'Error' },
         1: { text: '启用', status: 'Success' },
+      },
+      search: false,
+      render: (_, record) => {
+        const map: Record<number, { text: string; color: string }> = {
+          0: { text: '禁用', color: 'red' },
+          1: { text: '启用', color: 'green' },
+        };
+        const item = map[record.status] || { text: '未知', color: 'default' };
+        return <Tag color={item.color}>{item.text}</Tag>;
       },
     },
     {
       title: '创建时间',
       dataIndex: 'createTime',
-      width: 160,
+      width: 140,
       search: false,
     },
     {
       title: '操作',
       key: 'action',
       fixed: 'right',
-      width: 260,
+      width: 200,
       search: false,
       render: (_, record) => (
-        <Space size={4} wrap>
+        <Space size={2} wrap>
           <Button
             type="link"
             size="small"
             icon={<SettingOutlined />}
             onClick={() => handleAssignMenu(record)}
+            style={{ padding: '0 2px' }}
           >
-            分配权限
+            权限
           </Button>
           <Button
             type="link"
             size="small"
             icon={<EditOutlined />}
             onClick={() => handleEdit(record)}
+            style={{ padding: '0 2px' }}
           >
             编辑
           </Button>
@@ -136,7 +156,7 @@ const RolePage: React.FC = () => {
             okText="确定"
             cancelText="取消"
           >
-            <Button type="link" danger size="small" icon={<DeleteOutlined />}>
+            <Button type="link" danger size="small" icon={<DeleteOutlined />} style={{ padding: '0 2px' }}>
               删除
             </Button>
           </Popconfirm>

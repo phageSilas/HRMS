@@ -89,40 +89,40 @@ const UserPage: React.FC = () => {
     {
       title: '用户名',
       dataIndex: 'username',
-      width: 120,
+      width: 100,
       fixed: 'left',
       search: false,
     },
     {
       title: '真实姓名',
       dataIndex: 'realName',
-      width: 120,
+      width: 100,
       search: false,
     },
     {
       title: '手机号',
       dataIndex: 'phone',
-      width: 140,
+      width: 120,
       search: false,
     },
     {
       title: '邮箱',
       dataIndex: 'email',
-      width: 180,
+      width: 160,
       search: false,
       ellipsis: true,
     },
     {
       title: '角色',
       dataIndex: 'roleNames',
-      width: 200,
+      width: 160,
       search: false,
       render: (_, record) => {
         const roles = record.roleNames || [];
         return (
-          <Space size={4} wrap>
+          <Space size={2} wrap>
             {roles.map((role, index) => (
-              <Tag key={index} color="blue">
+              <Tag key={index} color="blue" style={{ fontSize: 12, padding: '0 4px', margin: 0 }}>
                 {role}
               </Tag>
             ))}
@@ -133,7 +133,7 @@ const UserPage: React.FC = () => {
     {
       title: '状态',
       dataIndex: 'status',
-      width: 80,
+      width: 70,
       valueEnum: {
         0: { text: '禁用', status: 'Error' },
         1: { text: '启用', status: 'Success' },
@@ -142,31 +142,32 @@ const UserPage: React.FC = () => {
       render: (_, record) => statusTag(record.status),
     },
     {
-      title: '最后登录时间',
+      title: '最后登录',
       dataIndex: 'lastLoginTime',
-      width: 160,
+      width: 140,
       search: false,
       render: (text) => (text ? (text as string) : '-'),
     },
     {
       title: '创建时间',
       dataIndex: 'createTime',
-      width: 160,
+      width: 140,
       search: false,
     },
     {
       title: '操作',
       key: 'action',
       fixed: 'right',
-      width: 260,
+      width: 200,
       search: false,
       render: (_, record) => (
-        <Space size={4} wrap>
+        <Space size={2} wrap>
           <Button
             type="link"
             size="small"
             icon={<EyeOutlined />}
             onClick={() => handleViewDetail(record)}
+            style={{ padding: '0 2px' }}
           >
             详情
           </Button>
@@ -175,6 +176,7 @@ const UserPage: React.FC = () => {
             size="small"
             icon={<EditOutlined />}
             onClick={() => handleEdit(record)}
+            style={{ padding: '0 2px' }}
           >
             编辑
           </Button>
@@ -183,8 +185,9 @@ const UserPage: React.FC = () => {
             size="small"
             icon={<KeyOutlined />}
             onClick={() => handleResetPwd(record)}
+            style={{ padding: '0 2px' }}
           >
-            重置密码
+            重置
           </Button>
           <Popconfirm
             title="确认删除"
@@ -193,7 +196,7 @@ const UserPage: React.FC = () => {
             okText="确定"
             cancelText="取消"
           >
-            <Button type="link" danger size="small" icon={<DeleteOutlined />}>
+            <Button type="link" danger size="small" icon={<DeleteOutlined />} style={{ padding: '0 2px' }}>
               删除
             </Button>
           </Popconfirm>
