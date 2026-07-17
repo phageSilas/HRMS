@@ -40,6 +40,9 @@ export default defineConfig({
       changeOrigin: true,
     },
     '/my': {
+      target: 'http://localhost:8080',
+      changeOrigin: true,
+    },
     '/v3/api-docs': {
       target: 'http://localhost:8080',
       changeOrigin: true,

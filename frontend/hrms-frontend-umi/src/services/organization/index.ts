@@ -97,7 +97,6 @@ export interface PostItem {
   createTime: string;
 }
 
-<<<<<<< HEAD
 /**
  * 职位查询参数
  */
@@ -335,4 +334,11 @@ export async function updateDictData(id: number, data: DictDataCreateRequest): P
  */
 export async function deleteDictData(id: number): Promise<void> {
   return request.delete<void>(`/api/v1/dicts/data/${id}`);
+}
+
+/**
+ * 根据字典类型获取字典数据
+ */
+export async function getDictDataByType(typeCode: string): Promise<DictDataItem[]> {
+  return getDictDataList(typeCode);
 }
