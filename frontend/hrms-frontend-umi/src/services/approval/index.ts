@@ -26,15 +26,18 @@ export interface MyApplicationQuery {
 
 export interface ApprovalTask {
   id: number;
+  taskId?: number;
   title: string;
   applicantName: string;
   businessType: string;
   businessTypeName: string;
   createdAt: string;
-  deadline: string;
+  deadline?: string;
   nodeName: string;
   status: string;
-  statusName: string;
+  statusName?: string;
+  delegateFlag?: boolean;
+  delegateMark?: string;
 }
 
 // ============ 审批详情 ============
@@ -100,7 +103,10 @@ export interface DelegationCreateData {
 
 /** 待审批列表 */
 export async function getPendingTasks(params?: PendingQuery) {
-  return request.get<PageResult<ApprovalTask>>('/api/v1/approval/tasks/pending', { params });
+  // 加时间戳防止 Umi 开发服务器缓存 GET 请求导致 304
+  return request.get<PageResult<ApprovalTask>>('/api/v1/approval/tasks/pending', {
+    params: { ...params, _t: Date.now() },
+  });
 }
 
 /** 待审批数量（用于角标） */

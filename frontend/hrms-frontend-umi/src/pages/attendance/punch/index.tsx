@@ -1,11 +1,13 @@
+import { usePageAutoRefresh } from '@/hooks/usePageAutoRefresh';
 import type {
   AttendanceCalendarDayVO,
   AttendanceClockVO,
 } from '@/services/attendance';
 import {
-  clockAttendance,
   getMyAttendanceCalendar,
+  clockAttendance,
 } from '@/services/attendance';
+import type { AttendanceCalendarVO } from '@/services/attendance';
 import type {
   AmapLocationResult,
   AmapLocationStatus,
@@ -19,7 +21,7 @@ import {
   RightOutlined,
   SafetyCertificateFilled,
 } from '@ant-design/icons';
-import { history, useRequest } from '@umijs/max';
+import { history } from '@umijs/max';
 import {
   Button,
   Card,
@@ -66,7 +68,19 @@ interface LocationState {
   location?: AmapLocationResult;
 }
 
-type MergedTodayRecord = AttendanceCalendarDayVO;
+interface LocalTodayRecord {
+  date: string;
+  clockInTime?: string | number[];
+  clockOutTime?: string | number[];
+  clockInGps?: string;
+  clockOutGps?: string;
+  clockInStatus?: string;
+  clockOutStatus?: string;
+  clockInIp?: string;
+  clockOutIp?: string;
+  dayStatus?: string;
+}
+
 type ClockPeriod = 'CLOCK_IN' | 'CLOCK_OUT';
 type BackendDateValue = string | number[] | Date | undefined | null;
 type ClockResponsePayload =
@@ -162,6 +176,7 @@ function normalizeClockResult(
     clockTime:
       normalizeDateTime(data?.clockTime as BackendDateValue) ||
       fallbackNow.format('YYYY-MM-DDTHH:mm:ss'),
+    clockGps: data?.clockGps,
     networkIp: data?.networkIp,
     clientIp: data?.clientIp,
   } satisfies AttendanceClockVO;
@@ -170,6 +185,27 @@ function normalizeClockResult(
 function formatLocationText(location?: AmapLocationResult) {
   if (!location) return '未获取定位，以后端校验结果为准';
   return `经度 ${location.longitude.toFixed(6)}，纬度 ${location.latitude.toFixed(6)}`;
+}
+
+function buildGpsText(location?: AmapLocationResult) {
+  if (!location) return undefined;
+  return `${location.latitude},${location.longitude}`;
+}
+
+function formatGpsText(value?: string) {
+  if (!value) return undefined;
+  const [latitudeText, longitudeText] = value.split(',').map((item) => item.trim());
+  if (!latitudeText || !longitudeText) {
+    return value;
+  }
+
+  const latitude = Number(latitudeText);
+  const longitude = Number(longitudeText);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return value;
+  }
+
+  return `经度 ${longitude.toFixed(6)}，纬度 ${latitude.toFixed(6)}`;
 }
 
 function formatLocationDetail(location?: AmapLocationResult) {
@@ -195,58 +231,59 @@ function getDeviceInfo(location?: AmapLocationResult) {
   return `web:${browser}-${platform};lang:${language}${locationInfo}`;
 }
 
+function findTodayRecord(
+  days: AttendanceCalendarDayVO[] | undefined,
+  currentDate: string,
+) {
+  return days?.find(
+    (item) => normalizeDate(item.date as BackendDateValue) === currentDate,
+  );
+}
+
 const AttendancePunchPage: React.FC = () => {
   const [now, setNow] = useState(dayjs());
   const currentDate = now.format('YYYY-MM-DD');
   const currentMonth = now.format('YYYY-MM');
-  const [localTodayRecord, setLocalTodayRecord] = useState<
-    MergedTodayRecord | undefined
-  >();
   const [clocking, setClocking] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [calendarData, setCalendarData] = useState<AttendanceCalendarVO>();
+  const [localTodayRecord, setLocalTodayRecord] = useState<LocalTodayRecord>();
   const [locationState, setLocationState] = useState<LocationState>({
     status: 'idle',
     text: '点击打卡时获取高德定位',
   });
 
-  const {
-    data: calendar,
-    loading,
-    refresh,
-  } = useRequest(() => getMyAttendanceCalendar(currentMonth), {
-    refreshDeps: [currentMonth],
+  const loadCalendar = async () => {
+    setLoading(true);
+    try {
+      const nextCalendar = await getMyAttendanceCalendar(currentMonth);
+      setCalendarData(nextCalendar);
+      return nextCalendar;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadCalendar();
+  }, [currentMonth]);
+
+  usePageAutoRefresh(() => {
+    void loadCalendar();
   });
 
   const todayRecord = useMemo<AttendanceCalendarDayVO | undefined>(() => {
-    return calendar?.days?.find(
-      (item) => normalizeDate(item.date as BackendDateValue) === currentDate,
-    );
-  }, [calendar?.days, currentDate]);
+    return findTodayRecord(calendarData?.days, currentDate);
+  }, [calendarData?.days, currentDate]);
 
-  const mergedTodayRecord = useMemo<MergedTodayRecord | undefined>(() => {
-    const baseRecord: MergedTodayRecord = todayRecord
-      ? { ...todayRecord }
-      : { date: currentDate };
-
-    if (
-      !localTodayRecord ||
-      normalizeDate(localTodayRecord.date as BackendDateValue) !== currentDate
-    ) {
-      return todayRecord ? baseRecord : undefined;
+  const resolvedTodayRecord = useMemo(() => {
+    if (todayRecord) {
+      return todayRecord;
     }
-
-    return {
-      ...baseRecord,
-      ...localTodayRecord,
-      clockInTime: localTodayRecord.clockInTime ?? baseRecord.clockInTime,
-      clockInStatus:
-        localTodayRecord.clockInStatus ?? baseRecord.clockInStatus,
-      clockInIp: localTodayRecord.clockInIp ?? baseRecord.clockInIp,
-      clockOutTime: localTodayRecord.clockOutTime ?? baseRecord.clockOutTime,
-      clockOutStatus:
-        localTodayRecord.clockOutStatus ?? baseRecord.clockOutStatus,
-      clockOutIp: localTodayRecord.clockOutIp ?? baseRecord.clockOutIp,
-      dayStatus: localTodayRecord.dayStatus ?? baseRecord.dayStatus,
-    };
+    if (localTodayRecord?.date === currentDate) {
+      return localTodayRecord;
+    }
+    return undefined;
   }, [currentDate, localTodayRecord, todayRecord]);
 
   const handleSubmitClock = async (type: ClockPeriod) => {
@@ -293,23 +330,22 @@ const AttendancePunchPage: React.FC = () => {
       );
       const label = getClockLabel(result.period);
       const networkIp = getClockIp(result);
+      const clockGps = result.clockGps || buildGpsText(location);
       const locationDetail = formatLocationDetail(location);
 
       setLocalTodayRecord((previous) => {
-        const todayLocalRecord =
-          normalizeDate(previous?.date as BackendDateValue) === currentDate
+        const baseRecord =
+          previous?.date === currentDate
             ? previous
-            : undefined;
-        const baseRecord: MergedTodayRecord = {
-          date: currentDate,
-          ...(todayRecord || {}),
-          ...(todayLocalRecord || {}),
-        };
+            : {
+                date: currentDate,
+              };
 
         if (result.period === 'CLOCK_OUT') {
           return {
             ...baseRecord,
             clockOutTime: result.clockTime,
+            clockOutGps: clockGps,
             clockOutStatus: result.status,
             clockOutIp: networkIp,
             dayStatus: result.status || baseRecord.dayStatus,
@@ -319,6 +355,7 @@ const AttendancePunchPage: React.FC = () => {
         return {
           ...baseRecord,
           clockInTime: result.clockTime,
+          clockInGps: clockGps,
           clockInStatus: result.status,
           clockInIp: networkIp,
           dayStatus: result.status || baseRecord.dayStatus,
@@ -338,16 +375,20 @@ const AttendancePunchPage: React.FC = () => {
         ),
         okText: '我知道了',
       });
-      refresh();
+      await loadCalendar();
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : '打卡提交失败';
-      Modal.error({
-        title: '打卡提交失败',
-        content: errorMessage,
-        okText: '我知道了',
-      });
-      refresh();
+      await loadCalendar();
+      if (errorMessage.includes('已打卡')) {
+        message.warning(errorMessage);
+      } else {
+        Modal.error({
+          title: '打卡提交失败',
+          content: errorMessage,
+          okText: '我知道了',
+        });
+      }
     } finally {
       setClocking(false);
     }
@@ -359,17 +400,28 @@ const AttendancePunchPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    setLocalTodayRecord(undefined);
-  }, [currentDate]);
+    setLocalTodayRecord((previous) => {
+      if (!previous) {
+        return previous;
+      }
+      if (previous.date !== currentDate) {
+        return undefined;
+      }
+      return resolvedTodayRecord === todayRecord && todayRecord ? undefined : previous;
+    });
+  }, [currentDate, resolvedTodayRecord, todayRecord]);
 
   const latestNetworkIp =
-    mergedTodayRecord?.clockOutIp || mergedTodayRecord?.clockInIp;
-  const clockInDone = Boolean(mergedTodayRecord?.clockInTime);
-  const clockOutDone = Boolean(mergedTodayRecord?.clockOutTime);
+    resolvedTodayRecord?.clockOutIp || resolvedTodayRecord?.clockInIp;
+  const latestGpsText = formatGpsText(
+    resolvedTodayRecord?.clockOutGps || resolvedTodayRecord?.clockInGps,
+  );
+  const clockInDone = Boolean(resolvedTodayRecord?.clockInTime);
+  const clockOutDone = Boolean(resolvedTodayRecord?.clockOutTime);
   const nextClockType: ClockPeriod = clockInDone ? 'CLOCK_OUT' : 'CLOCK_IN';
   const nextClockText = clockInDone ? '下班打卡' : '上班打卡';
   const dayStatus =
-    mergedTodayRecord?.dayStatus ||
+    resolvedTodayRecord?.dayStatus ||
     (clockInDone || clockOutDone ? 'NORMAL' : undefined);
 
   return (
@@ -415,21 +467,21 @@ const AttendancePunchPage: React.FC = () => {
                         }
                       >
                         {formatTime(
-                          mergedTodayRecord?.clockInTime as BackendDateValue,
+                          resolvedTodayRecord?.clockInTime as BackendDateValue,
                         )}
                       </div>
                       <Tag
                         color={
                           clockInDone
                             ? STATUS_COLOR_MAP[
-                                mergedTodayRecord?.clockInStatus || 'NORMAL'
+                                resolvedTodayRecord?.clockInStatus || 'NORMAL'
                               ]
                             : 'default'
                         }
                       >
                         {clockInDone
                           ? getStatusLabel(
-                              mergedTodayRecord?.clockInStatus || 'NORMAL',
+                              resolvedTodayRecord?.clockInStatus || 'NORMAL',
                             )
                           : '待打卡'}
                       </Tag>
@@ -457,21 +509,21 @@ const AttendancePunchPage: React.FC = () => {
                         }
                       >
                         {formatTime(
-                          mergedTodayRecord?.clockOutTime as BackendDateValue,
+                          resolvedTodayRecord?.clockOutTime as BackendDateValue,
                         )}
                       </div>
                       <Tag
                         color={
                           clockOutDone
                             ? STATUS_COLOR_MAP[
-                                mergedTodayRecord?.clockOutStatus || 'NORMAL'
+                                resolvedTodayRecord?.clockOutStatus || 'NORMAL'
                               ]
                             : 'default'
                         }
                       >
                         {clockOutDone
                           ? getStatusLabel(
-                              mergedTodayRecord?.clockOutStatus || 'NORMAL',
+                              resolvedTodayRecord?.clockOutStatus || 'NORMAL',
                             )
                           : '待打卡'}
                       </Tag>
@@ -509,11 +561,13 @@ const AttendancePunchPage: React.FC = () => {
                     >
                       {locationState.text}
                     </Tag>
-                    {locationState.location && (
+                    {latestGpsText ? (
+                      <Text type="secondary">{latestGpsText}</Text>
+                    ) : locationState.location ? (
                       <Text type="secondary">
                         {formatLocationText(locationState.location)}
                       </Text>
-                    )}
+                    ) : null}
                     {locationState.detail && (
                       <Text type="secondary">，{locationState.detail}</Text>
                     )}
@@ -556,7 +610,7 @@ const AttendancePunchPage: React.FC = () => {
                 <div>
                   <div className={styles.recordTime}>
                     {formatTime(
-                      mergedTodayRecord?.clockInTime as BackendDateValue,
+                      resolvedTodayRecord?.clockInTime as BackendDateValue,
                     )}
                   </div>
                   <div className={styles.recordMeta}>
@@ -565,22 +619,20 @@ const AttendancePunchPage: React.FC = () => {
                       color={
                         clockInDone
                           ? STATUS_COLOR_MAP[
-                              mergedTodayRecord?.clockInStatus || 'NORMAL'
+                              resolvedTodayRecord?.clockInStatus || 'NORMAL'
                             ]
                           : 'default'
                       }
                     >
                       {clockInDone
                         ? getStatusLabel(
-                            mergedTodayRecord?.clockInStatus || 'NORMAL',
+                            resolvedTodayRecord?.clockInStatus || 'NORMAL',
                           )
                         : '未打卡'}
                     </Tag>
                   </div>
                 </div>
-                <Text type="secondary">
-                  {mergedTodayRecord?.clockInIp || '--'}
-                </Text>
+                <Text type="secondary">{resolvedTodayRecord?.clockInIp || '--'}</Text>
               </div>
 
               <div className={styles.timelineItem}>
@@ -594,7 +646,7 @@ const AttendancePunchPage: React.FC = () => {
                 <div>
                   <div className={styles.recordTime}>
                     {formatTime(
-                      mergedTodayRecord?.clockOutTime as BackendDateValue,
+                      resolvedTodayRecord?.clockOutTime as BackendDateValue,
                     )}
                   </div>
                   <div className={styles.recordMeta}>
@@ -603,22 +655,20 @@ const AttendancePunchPage: React.FC = () => {
                       color={
                         clockOutDone
                           ? STATUS_COLOR_MAP[
-                              mergedTodayRecord?.clockOutStatus || 'NORMAL'
+                              resolvedTodayRecord?.clockOutStatus || 'NORMAL'
                             ]
                           : 'default'
                       }
                     >
                       {clockOutDone
                         ? getStatusLabel(
-                            mergedTodayRecord?.clockOutStatus || 'NORMAL',
+                            resolvedTodayRecord?.clockOutStatus || 'NORMAL',
                           )
                         : '未打卡'}
                     </Tag>
                   </div>
                 </div>
-                <Text type="secondary">
-                  {mergedTodayRecord?.clockOutIp || '--'}
-                </Text>
+                <Text type="secondary">{resolvedTodayRecord?.clockOutIp || '--'}</Text>
               </div>
             </div>
 

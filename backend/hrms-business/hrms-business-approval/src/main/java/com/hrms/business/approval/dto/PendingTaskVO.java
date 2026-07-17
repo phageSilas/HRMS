@@ -45,4 +45,7 @@ public class PendingTaskVO {
 
     @Schema(description = "状态编码")
     private String status;
+
+    @Schema(description = "状态中文名")
+    private String statusName;
 }
