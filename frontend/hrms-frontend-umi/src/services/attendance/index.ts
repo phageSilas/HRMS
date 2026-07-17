@@ -4,7 +4,7 @@
  */
 
 import request from '@/utils/request';
-import type { Result, PageResult, PageQuery } from '@/types/api';
+import type { PageQuery, PageResult } from '@/types/api';
 
 // ============ 类型定义 ============
 
@@ -68,6 +68,7 @@ export interface AttendanceClockVO {
   period: 'CLOCK_IN' | 'CLOCK_OUT' | string;
   status: string;
   clockTime: string | number[];
+  clockGps?: string;
   networkIp?: string;
   clientIp?: string;
 }
@@ -76,6 +77,8 @@ export interface AttendanceCalendarDayVO {
   date: string | number[];
   clockInTime?: string | number[];
   clockOutTime?: string | number[];
+  clockInGps?: string;
+  clockOutGps?: string;
   clockInStatus?: string;
   clockOutStatus?: string;
   clockInIp?: string;
@@ -197,14 +200,14 @@ export async function getAttendanceGroupRecords(
 }
 
 export async function getAttendanceRecordList(params: AttendanceQuery) {
-  return request.get<Result<PageResult<AttendanceRecord>>>('/attendance/records', { params });
+  return request.get<PageResult<AttendanceRecord>>('/attendance/records', { params });
 }
 
 /**
  * 打卡
  */
 export async function clockIn(data: { type: 'in' | 'out' }) {
-  return request.post<Result<AttendanceRecord>>('/attendance/records/clock', data);
+  return request.post<AttendanceRecord>('/attendance/records/clock', data);
 }
 
 /**
@@ -229,14 +232,14 @@ export async function getMyAttendanceCalendar(yearMonth: string) {
  * 获取请假申请列表
  */
 export async function getLeaveRequestList(params: AttendanceQuery) {
-  return request.get<Result<PageResult<LeaveRequest>>>('/leave-requests', { params });
+  return request.get<PageResult<LeaveRequest>>('/leave-requests', { params });
 }
 
 /**
  * 创建请假申请
  */
 export async function createLeaveRequest(data: Partial<LeaveRequest>) {
-  return request.post<Result<LeaveRequest>>('/leave-requests', data);
+  return request.post<LeaveRequest>('/leave-requests', data);
 }
 
 // ============ 考勤汇总接口 ============
@@ -245,12 +248,12 @@ export async function createLeaveRequest(data: Partial<LeaveRequest>) {
  * 获取员工考勤汇总（跨模块接口）
  */
 export async function getAttendanceSummary(employeeId: number, yearMonth: string) {
-  return request.get<Result<AttendanceSummary>>(`/attendance/summary/${employeeId}/${yearMonth}`);
+  return request.get<AttendanceSummary>(`/attendance/summary/${employeeId}/${yearMonth}`);
 }
 
 /**
  * 获取考勤统计
  */
 export async function getAttendanceStatistics(params: { yearMonth: string; departmentId?: number }) {
-  return request.get<Result<AttendanceSummary[]>>('/attendance/statistics', { params });
+  return request.get<AttendanceSummary[]>('/attendance/statistics', { params });
 }
