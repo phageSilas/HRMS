@@ -1,11 +1,13 @@
 package com.hrms.business.salary.service;
 
 import com.hrms.business.salary.dto.EmployeeSalaryProfileRequestDTO;
+import com.hrms.business.salary.dto.SalaryBatchAdjustmentRequestDTO;
 import com.hrms.business.salary.dto.SalaryBatchCreateRequestDTO;
 import com.hrms.business.salary.dto.SalaryPayslipVerifyRequestDTO;
 import com.hrms.business.salary.dto.SalaryTemplateCreateOrUpdateRequestDTO;
 import com.hrms.business.salary.dto.SalaryTemplateQueryDTO;
 import com.hrms.business.salary.vo.EmployeeSalaryProfileVO;
+import com.hrms.business.salary.vo.SalaryBatchItemVO;
 import com.hrms.business.salary.vo.SalaryBatchPreviewVO;
 import com.hrms.business.salary.vo.SalaryBatchVO;
 import com.hrms.business.salary.vo.SalaryPayslipDetailVO;
@@ -88,6 +90,16 @@ public interface SalaryService {
      * 本方法使用的工具类: 无
      */
     SalaryBatchVO getCurrentBatch(String salaryMonth, String scopeType, String scopeValue);
+
+    /**
+     * 保存薪资批次人工调整。
+     *
+     * @param batchId    薪资批次ID
+     * @param requestDTO 人工调整请求
+     * @return 调整后的员工薪资明细
+     * 本方法使用的工具类: 无
+     */
+    SalaryBatchItemVO saveBatchAdjustments(Long batchId, SalaryBatchAdjustmentRequestDTO requestDTO);
 
     /**
      * 触发薪资核算。

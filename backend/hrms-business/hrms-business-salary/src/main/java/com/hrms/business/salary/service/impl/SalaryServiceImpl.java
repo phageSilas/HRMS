@@ -13,12 +13,14 @@ import com.hrms.business.approval.enums.ApprovalTypeEnum;
 import com.hrms.business.approval.service.ApprovalEngine;
 import com.hrms.business.salary.cache.SalaryCacheKeys;
 import com.hrms.business.salary.dto.EmployeeSalaryProfileRequestDTO;
+import com.hrms.business.salary.dto.SalaryBatchAdjustmentRequestDTO;
 import com.hrms.business.salary.dto.SalaryBatchCreateRequestDTO;
 import com.hrms.business.salary.dto.SalaryPayslipVerifyRequestDTO;
 import com.hrms.business.salary.dto.SalaryTemplateCreateOrUpdateRequestDTO;
 import com.hrms.business.salary.dto.SalaryTemplateItemRequestDTO;
 import com.hrms.business.salary.dto.SalaryTemplateQueryDTO;
 import com.hrms.business.salary.entity.EmployeeSalaryProfileEntity;
+import com.hrms.business.salary.entity.SalaryBatchAdjustmentEntity;
 import com.hrms.business.salary.entity.SalaryBatchEntity;
 import com.hrms.business.salary.entity.SalaryBatchItemEntity;
 import com.hrms.business.salary.entity.SalaryEmployeeSnapshotEntity;
@@ -28,6 +30,7 @@ import com.hrms.business.salary.entity.SalaryTemplateItemEntity;
 import com.hrms.business.salary.enums.SalaryBatchStatusEnum;
 import com.hrms.business.salary.enums.SalaryWarningLevelEnum;
 import com.hrms.business.salary.mapper.EmployeeSalaryProfileMapper;
+import com.hrms.business.salary.mapper.SalaryBatchAdjustmentMapper;
 import com.hrms.business.salary.mapper.SalaryBatchItemMapper;
 import com.hrms.business.salary.mapper.SalaryBatchMapper;
 import com.hrms.business.salary.mapper.SalaryEmployeeSnapshotMapper;
@@ -95,11 +98,23 @@ public class SalaryServiceImpl implements SalaryService {
     private static final Set<String> SALARY_MANAGER_ROLE_CODES = Set.of(
             "FINANCE", "HR", "HR_TEST", "ADMIN", "ROLE_ADMIN"
     );
+    private static final Set<String> SALARY_ADJUST_ITEM_CODES = Set.of(
+            "BASE_SALARY",
+            "ALLOWANCE",
+            "PERFORMANCE_BONUS",
+            "OVERTIME_PAY",
+            "LATE_DEDUCTION",
+            "LEAVE_DEDUCTION",
+            "SOCIAL_INSURANCE",
+            "HOUSING_FUND",
+            "INCOME_TAX"
+    );
 
     private final SalaryTemplateMapper salaryTemplateMapper;
     private final SalaryTemplateItemMapper salaryTemplateItemMapper;
     private final EmployeeSalaryProfileMapper employeeSalaryProfileMapper;
     private final SalaryBatchMapper salaryBatchMapper;
+    private final SalaryBatchAdjustmentMapper salaryBatchAdjustmentMapper;
     private final SalaryBatchItemMapper salaryBatchItemMapper;
     private final SalaryEmployeeSnapshotMapper employeeSnapshotMapper;
     private final SalarySysUserMapper salarySysUserMapper;
@@ -310,6 +325,66 @@ public class SalaryServiceImpl implements SalaryService {
                 .orderByDesc(SalaryBatchEntity::getId)
                 .last("LIMIT 1"));
         return batch == null ? null : toBatchVO(batch);
+    }
+
+    /**
+     * 保存薪资批次人工调整。
+     *
+     * @param batchId    薪资批次ID
+     * @param requestDTO 人工调整请求
+     * @return 调整后的员工薪资明细
+     * 本方法使用的工具类: Wrappers(MyBatis-Plus),Transactional(Spring)
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public SalaryBatchItemVO saveBatchAdjustments(Long batchId, SalaryBatchAdjustmentRequestDTO requestDTO) {
+        assertSalaryManagerRole();
+        SalaryBatchEntity batch = getBatchRequired(batchId);
+        if (!SalaryBatchStatusEnum.PENDING_REVIEW.name().equals(batch.getBatchStatus())) {
+            throw new GlobalException(ErrorCode.BUSINESS_ERROR, "只有待复核批次可以保存人工调整");
+        }
+        SalaryBatchItemEntity item = salaryBatchItemMapper.selectOne(Wrappers.lambdaQuery(SalaryBatchItemEntity.class)
+                .eq(SalaryBatchItemEntity::getBatchId, batchId)
+                .eq(SalaryBatchItemEntity::getEmployeeId, requestDTO.getEmployeeId())
+                .last("LIMIT 1"));
+        if (item == null) {
+            throw new GlobalException(ErrorCode.NOT_FOUND, "批次员工薪资明细不存在");
+        }
+
+        List<String> itemCodes = requestDTO.getAdjustments().stream()
+                .map(adjustment -> normalizeAdjustmentItemCode(adjustment.getItemCode()))
+                .distinct()
+                .toList();
+        List<SalaryBatchAdjustmentEntity> existingAdjustments = salaryBatchAdjustmentMapper.selectList(
+                Wrappers.lambdaQuery(SalaryBatchAdjustmentEntity.class)
+                        .eq(SalaryBatchAdjustmentEntity::getBatchId, batchId)
+                        .eq(SalaryBatchAdjustmentEntity::getEmployeeId, requestDTO.getEmployeeId())
+                        .in(SalaryBatchAdjustmentEntity::getItemCode, itemCodes));
+        for (SalaryBatchAdjustmentEntity existingAdjustment : existingAdjustments) {
+            applyAdjustmentToItem(item, existingAdjustment.getItemCode(), money(existingAdjustment.getAdjustAmount()).negate());
+        }
+        salaryBatchAdjustmentMapper.delete(Wrappers.lambdaQuery(SalaryBatchAdjustmentEntity.class)
+                .eq(SalaryBatchAdjustmentEntity::getBatchId, batchId)
+                .eq(SalaryBatchAdjustmentEntity::getEmployeeId, requestDTO.getEmployeeId())
+                .in(SalaryBatchAdjustmentEntity::getItemCode, itemCodes));
+
+        for (SalaryBatchAdjustmentRequestDTO.AdjustmentItem adjustment : requestDTO.getAdjustments()) {
+            SalaryBatchAdjustmentEntity entity = new SalaryBatchAdjustmentEntity();
+            entity.setBatchId(batchId);
+            entity.setEmployeeId(requestDTO.getEmployeeId());
+            entity.setItemCode(normalizeAdjustmentItemCode(adjustment.getItemCode()));
+            entity.setAdjustAmount(money(adjustment.getAdjustAmount()));
+            entity.setReason(adjustment.getReason());
+            salaryBatchAdjustmentMapper.insert(entity);
+            applyAdjustmentToItem(item, entity.getItemCode(), entity.getAdjustAmount());
+        }
+
+        recalculateItemAmount(item);
+        salaryBatchItemMapper.updateById(item);
+        refreshBatchSummary(batchId);
+        evictBatchCache(batchId);
+        SalaryEmployeeSnapshotEntity employee = employeeSnapshotMapper.selectById(item.getEmployeeId());
+        return toBatchItemVO(item, employee);
     }
 
     /**
@@ -1320,9 +1395,113 @@ public class SalaryServiceImpl implements SalaryService {
     }
 
     /**
+     * 规范化人工调整薪资项目编码。
+     *
+     * @param itemCode 薪资项目编码
+     * @return 规范化后的薪资项目编码
+     * 本方法使用的工具类: StrUtil(hutool)
+     */
+    private String normalizeAdjustmentItemCode(String itemCode) {
+        if (StrUtil.isBlank(itemCode)) {
+            throw new GlobalException(ErrorCode.PARAM_REQUIRED, "薪资项目编码不能为空");
+        }
+        String normalized = itemCode.trim().toUpperCase();
+        if (!SALARY_ADJUST_ITEM_CODES.contains(normalized)) {
+            throw new GlobalException(ErrorCode.PARAM_FORMAT_ERROR, "不支持的薪资调整项目");
+        }
+        return normalized;
+    }
+
+    /**
+     * 将人工调整金额应用到薪资明细。
+     *
+     * @param item         薪资明细
+     * @param itemCode     薪资项目编码
+     * @param adjustAmount 调整金额
+     * 本方法使用的工具类: BigDecimal(JDK)
+     */
+    private void applyAdjustmentToItem(SalaryBatchItemEntity item, String itemCode, BigDecimal adjustAmount) {
+        BigDecimal amount = money(adjustAmount);
+        switch (itemCode) {
+            case "BASE_SALARY" -> item.setBaseSalary(money(item.getBaseSalary()).add(amount));
+            case "ALLOWANCE" -> item.setAllowance(money(item.getAllowance()).add(amount));
+            case "PERFORMANCE_BONUS" -> item.setPerformanceBonus(money(item.getPerformanceBonus()).add(amount));
+            case "OVERTIME_PAY" -> item.setOvertimePay(money(item.getOvertimePay()).add(amount));
+            case "LATE_DEDUCTION" -> item.setLateDeduction(money(item.getLateDeduction()).add(amount));
+            case "LEAVE_DEDUCTION" -> item.setLeaveDeduction(money(item.getLeaveDeduction()).add(amount));
+            case "SOCIAL_INSURANCE" -> item.setSocialInsurance(money(item.getSocialInsurance()).add(amount));
+            case "HOUSING_FUND" -> item.setHousingFund(money(item.getHousingFund()).add(amount));
+            case "INCOME_TAX" -> item.setIncomeTax(money(item.getIncomeTax()).add(amount));
+            default -> throw new GlobalException(ErrorCode.PARAM_FORMAT_ERROR, "不支持的薪资调整项目");
+        }
+    }
+
+    /**
+     * 重新计算员工薪资明细汇总金额。
+     *
+     * @param item 薪资明细
+     * 本方法使用的工具类: BigDecimal(JDK)
+     */
+    private void recalculateItemAmount(SalaryBatchItemEntity item) {
+        BigDecimal gross = money(item.getBaseSalary())
+                .add(money(item.getAllowance()))
+                .add(money(item.getPerformanceBonus()))
+                .add(money(item.getOvertimePay()));
+        BigDecimal deduction = money(item.getLateDeduction())
+                .add(money(item.getLeaveDeduction()))
+                .add(money(item.getSocialInsurance()))
+                .add(money(item.getHousingFund()))
+                .add(money(item.getIncomeTax()));
+        item.setGrossSalary(money(gross));
+        item.setDeductionTotal(money(deduction));
+        item.setNetSalary(money(gross.subtract(deduction)));
+        if (item.getNetSalary().compareTo(BigDecimal.ZERO) <= 0) {
+            item.setWarningLevel(SalaryWarningLevelEnum.BLOCK.name());
+            item.setWarningReason("实发工资小于等于 0");
+        }
+    }
+
+    /**
+     * 刷新薪资批次汇总数据。
+     *
+     * @param batchId 薪资批次ID
+     * 本方法使用的工具类: Wrappers(MyBatis-Plus),BigDecimal(JDK)
+     */
+    private void refreshBatchSummary(Long batchId) {
+        SalaryBatchEntity batch = getBatchRequired(batchId);
+        List<SalaryBatchItemEntity> items = salaryBatchItemMapper.selectList(Wrappers.lambdaQuery(SalaryBatchItemEntity.class)
+                .eq(SalaryBatchItemEntity::getBatchId, batchId));
+        BigDecimal totalGross = ZERO;
+        BigDecimal totalNet = ZERO;
+        int yellow = 0;
+        int red = 0;
+        int block = 0;
+        for (SalaryBatchItemEntity item : items) {
+            totalGross = totalGross.add(money(item.getGrossSalary()));
+            totalNet = totalNet.add(money(item.getNetSalary()));
+            if (SalaryWarningLevelEnum.YELLOW.name().equals(item.getWarningLevel())) {
+                yellow++;
+            } else if (SalaryWarningLevelEnum.RED.name().equals(item.getWarningLevel())) {
+                red++;
+            } else if (SalaryWarningLevelEnum.BLOCK.name().equals(item.getWarningLevel())) {
+                block++;
+            }
+        }
+        batch.setTotalCount(items.size());
+        batch.setTotalGrossSalary(money(totalGross));
+        batch.setTotalNetSalary(money(totalNet));
+        batch.setYellowWarningCount(yellow);
+        batch.setRedWarningCount(red);
+        batch.setBlockCount(block);
+        salaryBatchMapper.updateById(batch);
+    }
+
+    /**
      * 格式化金额。
+     *
      * @param value 值
      * @return 格式化后的金额
+     * 本方法使用的工具类: BigDecimal(JDK),Optional(JDK)
      */
     private BigDecimal money(BigDecimal value) {
         return Optional.ofNullable(value).orElse(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);

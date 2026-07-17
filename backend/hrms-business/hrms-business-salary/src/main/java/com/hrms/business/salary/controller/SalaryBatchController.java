@@ -1,7 +1,9 @@
 package com.hrms.business.salary.controller;
 
 import com.hrms.business.salary.dto.SalaryBatchCreateRequestDTO;
+import com.hrms.business.salary.dto.SalaryBatchAdjustmentRequestDTO;
 import com.hrms.business.salary.service.SalaryService;
+import com.hrms.business.salary.vo.SalaryBatchItemVO;
 import com.hrms.business.salary.vo.SalaryBatchPreviewVO;
 import com.hrms.business.salary.vo.SalaryBatchVO;
 import com.hrms.common.web.Result;
@@ -53,6 +55,20 @@ public class SalaryBatchController {
                                                  @RequestParam(required = false) String scopeType,
                                                  @RequestParam(required = false) String scopeValue) {
         return Result.success(salaryService.getCurrentBatch(salaryMonth, scopeType, scopeValue));
+    }
+
+    /**
+     * 保存薪资批次人工调整。
+     *
+     * @param id         薪资批次ID
+     * @param requestDTO 人工调整请求
+     * @return 调整后的员工薪资明细
+     * 本方法使用的工具类: Result(hrms-common)
+     */
+    @PostMapping("/{id}/adjustments")
+    public Result<SalaryBatchItemVO> saveBatchAdjustments(@PathVariable Long id,
+                                                          @Valid @RequestBody SalaryBatchAdjustmentRequestDTO requestDTO) {
+        return Result.success(salaryService.saveBatchAdjustments(id, requestDTO));
     }
 
     /**
