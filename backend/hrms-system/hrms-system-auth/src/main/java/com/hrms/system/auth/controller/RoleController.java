@@ -1,14 +1,18 @@
 package com.hrms.system.auth.controller;
 
 import com.hrms.common.web.Result;
+import com.hrms.system.auth.dto.RoleCreateDTO;
 import com.hrms.system.auth.dto.RoleMenuAssignDTO;
+import com.hrms.system.auth.dto.RoleUpdateDTO;
 import com.hrms.system.auth.entity.RoleEntity;
 import com.hrms.system.auth.service.RoleService;
 import com.hrms.system.auth.vo.RoleVO;
 import com.hrms.system.log.annotation.OperateLog;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -28,10 +32,11 @@ public class RoleController {
      * 创建角色
      */
     @PostMapping
+    @PreAuthorize("hasAuthority('system:role:create')")
     @Operation(summary = "创建角色", description = "创建新角色")
     @OperateLog(title = "角色管理", businessType = "INSERT")
-    public Result<Long> create(@RequestBody RoleEntity role) {
-        Long id = roleService.create(role);
+    public Result<Long> create(@Valid @RequestBody RoleCreateDTO createDTO) {
+        Long id = roleService.create(createDTO);
         return Result.success(id);
     }
 
@@ -39,11 +44,11 @@ public class RoleController {
      * 更新角色
      */
     @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('system:role:update')")
     @Operation(summary = "更新角色", description = "根据ID更新角色信息")
     @OperateLog(title = "角色管理", businessType = "UPDATE")
-    public Result<Void> update(@PathVariable Long id, @RequestBody RoleEntity role) {
-        role.setId(id);
-        roleService.update(role);
+    public Result<Void> update(@PathVariable Long id, @Valid @RequestBody RoleUpdateDTO updateDTO) {
+        roleService.update(id, updateDTO);
         return Result.success();
     }
 
@@ -72,9 +77,10 @@ public class RoleController {
      * 查询所有角色（返回RoleVO，包含菜单ID）
      */
     @GetMapping
-    @Operation(summary = "查询角色列表", description = "查询所有角色列表，包含关联的菜单ID")
-    public Result<List<RoleVO>> list() {
-        List<RoleVO> roles = roleService.listRoleVOs();
+    @Operation(summary = "查询角色列表", description = "查询所有角色列表，支持按角色名称搜索，包含关联的菜单ID")
+    public Result<List<RoleVO>> list(@RequestParam(required = false) String keyword,
+                                     @RequestParam(required = false) Integer status) {
+        List<RoleVO> roles = roleService.listRoleVOs(keyword, status);
         return Result.success(roles);
     }
 

@@ -89,9 +89,14 @@ public class MenuServiceImpl implements MenuService {
     }
 
     @Override
-    public List<MenuEntity> list() {
+    public List<MenuEntity> list(String keyword, Integer status) {
         LambdaQueryWrapper<MenuEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(MenuEntity::getStatus, 1);
+        if (StringUtils.hasText(keyword)) {
+            wrapper.like(MenuEntity::getMenuName, keyword);
+        }
+        if (status != null) {
+            wrapper.eq(MenuEntity::getStatus, status);
+        }
         wrapper.orderByAsc(MenuEntity::getSortNo);
         return menuMapper.selectList(wrapper);
     }
@@ -153,11 +158,25 @@ public class MenuServiceImpl implements MenuService {
         Map<Long, MenuEntity> menuMap = allMenus.stream()
             .collect(Collectors.toMap(MenuEntity::getId, menu -> menu));
 
-        // 构建树形结构（这里使用 children 字段需要在实体中添加，暂时用排序方式返回）
-        List<MenuEntity> rootMenus = allMenus.stream()
-            .filter(menu -> menu.getParentId() == null || menu.getParentId() == 0)
-            .sorted(Comparator.comparingInt(MenuEntity::getSortNo))
-            .collect(Collectors.toList());
+        // 构建树形结构
+        List<MenuEntity> rootMenus = new ArrayList<>();
+
+        for (MenuEntity menu : allMenus) {
+            if (menu.getParentId() == null || menu.getParentId() == 0) {
+                rootMenus.add(menu);
+            } else {
+                MenuEntity parent = menuMap.get(menu.getParentId());
+                if (parent != null) {
+                    if (parent.getChildren() == null) {
+                        parent.setChildren(new ArrayList<>());
+                    }
+                    parent.getChildren().add(menu);
+                }
+            }
+        }
+
+        // 按 sortNo 排序根节点
+        rootMenus.sort(Comparator.comparingInt(MenuEntity::getSortNo));
 
         return rootMenus;
     }
