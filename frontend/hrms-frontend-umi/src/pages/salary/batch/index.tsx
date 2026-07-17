@@ -229,49 +229,6 @@ function buildCompositionData(items: SalaryBatchItem[]) {
     .filter((item) => item.amount > 0);
 }
 
-function buildCompositionLabelLayout(
-  items: Array<{
-    type: string;
-    percent: number;
-    percentText: string;
-    color: string;
-  }>,
-) {
-  let currentAngle = -Math.PI / 2;
-
-  return items.map((item) => {
-    const sweep = item.percent * Math.PI * 2;
-    const midAngle = currentAngle + sweep / 2;
-    currentAngle += sweep;
-
-    const cos = Math.cos(midAngle);
-    const sin = Math.sin(midAngle);
-    const startX = 50 + cos * 31;
-    const startY = 50 + sin * 31;
-    const bendX = 50 + cos * 39;
-    const bendY = 50 + sin * 39;
-    const side = cos >= 0 ? 1 : -1;
-    const extend = 8 + Math.abs(sin) * 10;
-    const endX = bendX + side * extend;
-    const endY = bendY;
-    const nearVertical = Math.abs(sin) > 0.78;
-
-    return {
-      ...item,
-      startX,
-      startY,
-      bendX,
-      bendY,
-      endX,
-      endY,
-      textX: endX + side * 1.5,
-      textY: endY,
-      textAnchor: side > 0 ? 'start' : 'end',
-      percentBelow: nearVertical,
-    };
-  });
-}
-
 function buildSocialFundData(items: SalaryBatchItem[]) {
   const totals = {
     社保: 0,
@@ -524,10 +481,6 @@ const SalaryBatchPage: React.FC = () => {
   const compositionData = useMemo(
     () => buildCompositionData(previewData?.items || []),
     [previewData?.items],
-  );
-  const compositionLabelLayout = useMemo(
-    () => buildCompositionLabelLayout(compositionData),
-    [compositionData],
   );
   const socialFundData = useMemo(
     () => buildSocialFundData(previewData?.items || []),
@@ -889,68 +842,36 @@ const SalaryBatchPage: React.FC = () => {
                             ))}
                           </Space>
                           <div style={{ position: 'relative', height: 260 }}>
-                            <Pie
-                              height={260}
-                              data={compositionData}
-                              angleField="amount"
-                              colorField="type"
-                              color={compositionData.map((item) => item.color)}
-                              innerRadius={0.68}
-                              radius={0.78}
-                              legend={false}
-                              label={false}
-                              tooltip={{
-                                items: [
-                                  (datum: { type: string; amount: number; percentText: string }) => ({
-                                    name: datum.type,
-                                    value: `${formatCurrency(datum.amount)} (${datum.percentText})`,
-                                  }),
-                                ],
-                              }}
-                            />
-                            <svg
-                              viewBox="0 0 100 100"
-                              preserveAspectRatio="none"
-                              style={{
-                                position: 'absolute',
-                                inset: 0,
-                                width: '100%',
-                                height: '100%',
-                                pointerEvents: 'none',
-                                overflow: 'visible',
-                              }}
-                            >
-                              {compositionLabelLayout.map((item) => (
-                                <g key={item.type}>
-                                  <polyline
-                                    points={`${item.startX},${item.startY} ${item.bendX},${item.bendY} ${item.endX},${item.endY}`}
-                                    fill="none"
-                                    stroke="#bfbfbf"
-                                    strokeWidth="0.6"
-                                  />
-                                  <text
-                                    x={item.textX}
-                                    y={item.textY}
-                                    textAnchor={item.textAnchor}
-                                    dominantBaseline="middle"
-                                    fontSize="4"
-                                    fontWeight="600"
-                                    fill="#595959"
-                                  >
-                                    <tspan x={item.textX} dy="0">
-                                      {item.type}
-                                    </tspan>
-                                    {item.percentBelow ? (
-                                      <tspan x={item.textX} dy="4.6">
-                                        {item.percentText}
-                                      </tspan>
-                                    ) : (
-                                      <tspan dx="1.4">{item.percentText}</tspan>
-                                    )}
-                                  </text>
-                                </g>
-                              ))}
-                            </svg>
+                          <Pie
+                            height={260}
+                            data={compositionData}
+                            angleField="amount"
+                            colorField="type"
+                            color={compositionData.map((item) => item.color)}
+                            innerRadius={0.68}
+                            radius={0.78}
+                            legend={false}
+                            label={{
+                              text: 'labelText',
+                              position: 'spider',
+                              connectorDistance: (datum: { percent: number }) =>
+                                datum.percent < 0.06 ? 28 : datum.percent < 0.12 ? 20 : 12,
+                              transform: [{ type: 'overlapDodgeY' }],
+                              style: {
+                                fontWeight: 600,
+                                fontSize: 12,
+                                lineHeight: 14,
+                              },
+                            }}
+                            tooltip={{
+                              items: [
+                                (datum: { type: string; amount: number; percentText: string }) => ({
+                                  name: datum.type,
+                                  value: `${formatCurrency(datum.amount)} (${datum.percentText})`,
+                                }),
+                              ],
+                            }}
+                          />
                           </div>
                         </Space>
                       ) : (
