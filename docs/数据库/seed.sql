@@ -310,3 +310,50 @@ UPDATE hr_salary_batch_item SET employee_id = 6 WHERE id IN (1,3) AND employee_i
 -- ============================================================
 INSERT IGNORE INTO `hr_attendance_overtime` (`id`, `employee_id`, `overtime_date`, `duration`, `reason`, `approval_status`, `create_time`, `update_time`, `is_deleted`, `version`) VALUES
     (1, 5, '2026-07-10 18:00:00', 3.0, '项目上线紧急支持', 2, NOW(), NOW(), 0, 0);
+
+# 新增用户职级字段
+START TRANSACTION;
+
+INSERT INTO sys_dict_type (
+    dict_name,
+    dict_type,
+    status,
+    remark,
+    create_by,
+    update_by,
+    is_deleted
+) VALUES (
+             '职级',
+             'job_level',
+             1,
+             '薪资账套适用范围-职级',
+             1,
+             1,
+             0
+         );
+
+INSERT INTO sys_dict_data (
+    dict_type,
+    dict_label,
+    dict_value,
+    css_class,
+    sort,
+    status,
+    remark,
+    create_by,
+    update_by,
+    is_deleted
+) VALUES
+      ('job_level', 'P1', 'P1', NULL, 1, 1, '职级', 1, 1, 0),
+      ('job_level', 'P2', 'P2', NULL, 2, 1, '职级', 1, 1, 0),
+      ('job_level', 'P3', 'P3', NULL, 3, 1, '职级', 1, 1, 0),
+      ('job_level', 'P4', 'P4', NULL, 4, 1, '职级', 1, 1, 0),
+      ('job_level', 'P5', 'P5', NULL, 5, 1, '职级', 1, 1, 0),
+      ('job_level', 'P6', 'P6', NULL, 6, 1, '职级', 1, 1, 0),
+      ('job_level', 'P7', 'P7', NULL, 7, 1, '职级', 1, 1, 0),
+      ('job_level', 'P8', 'P8', NULL, 8, 1, '职级', 1, 1, 0),
+      ('job_level', 'M1', 'M1', NULL, 9, 1, '职级', 1, 1, 0),
+      ('job_level', 'M2', 'M2', NULL, 10, 1, '职级', 1, 1, 0),
+      ('job_level', 'M3', 'M3', NULL, 11, 1, '职级', 1, 1, 0);
+
+COMMIT;
