@@ -5,6 +5,7 @@ import type {
 } from '@/services/attendance';
 import {
   createAttendanceGroup,
+  deleteAttendanceGroup,
   getAttendanceGroups,
   updateAttendanceGroup,
 } from '@/services/attendance';
@@ -28,6 +29,7 @@ import {
   Form,
   Input,
   InputNumber,
+  Modal,
   Row,
   Select,
   Space,
@@ -108,6 +110,7 @@ const AttendanceGroupsPage: React.FC = () => {
   const [groups, setGroups] = useState<AttendanceGroup[]>([]);
   const [groupPageData, setGroupPageData] = useState<PageResult<AttendanceGroup>>();
   const [loading, setLoading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const loadGroups = async () => {
     setLoading(true);
@@ -180,6 +183,13 @@ const AttendanceGroupsPage: React.FC = () => {
     setDrawerOpen(true);
   };
 
+  const closeDrawer = () => {
+    setDrawerOpen(false);
+    setEditingGroup(undefined);
+    setDeleting(false);
+    form.resetFields();
+  };
+
   const handleSubmit = async () => {
     const values = await form.validateFields();
     const payload: AttendanceGroupRequest = {
@@ -212,8 +222,37 @@ const AttendanceGroupsPage: React.FC = () => {
       message.success('考勤组已新增');
     }
 
-    setDrawerOpen(false);
+    closeDrawer();
     await loadGroups();
+  };
+
+  const handleDeleteGroup = () => {
+    if (!editingGroup?.id) {
+      return;
+    }
+
+    Modal.confirm({
+      title: '是否确认删除该考勤组？',
+      content: '删除后不可恢复。',
+      okText: '确认删除',
+      cancelText: '取消',
+      okButtonProps: { danger: true, loading: deleting },
+      onOk: async () => {
+        try {
+          setDeleting(true);
+          await deleteAttendanceGroup(editingGroup.id);
+          message.success('考勤组已删除');
+          closeDrawer();
+          await loadGroups();
+        } catch (error) {
+          const messageText =
+            error instanceof Error ? error.message : '考勤组删除失败';
+          message.error(messageText);
+        } finally {
+          setDeleting(false);
+        }
+      },
+    });
   };
 
   return (
@@ -351,7 +390,7 @@ const AttendanceGroupsPage: React.FC = () => {
         open={drawerOpen}
         width={560}
         destroyOnClose
-        onClose={() => setDrawerOpen(false)}
+        onClose={closeDrawer}
         extra={
           <Space>
             <Button onClick={() => setDrawerOpen(false)}>取消</Button>
@@ -481,6 +520,13 @@ const AttendanceGroupsPage: React.FC = () => {
               <Input placeholder="如：杭州总部 A 座" />
             </Form.Item>
           </Card>
+          {editingGroup ? (
+            <div style={{ marginTop: 24 }}>
+              <Button danger loading={deleting} onClick={handleDeleteGroup}>
+                删除考勤配置
+              </Button>
+            </div>
+          ) : null}
         </Form>
       </Drawer>
     </PageContainer>
