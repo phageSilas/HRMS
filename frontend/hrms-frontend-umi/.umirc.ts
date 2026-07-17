@@ -37,10 +37,6 @@ export default defineConfig({
       target: 'http://localhost:8080',
       changeOrigin: true,
     },
-    '/salary': {
-      target: 'http://localhost:8080',
-      changeOrigin: true,
-    },
     '/my': {
       target: 'http://localhost:8080',
       changeOrigin: true,

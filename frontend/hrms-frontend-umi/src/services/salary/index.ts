@@ -122,7 +122,7 @@ export async function getEmployeeSalaryAccount(employeeId: number) {
     salaryAccountName: string;
     baseSalary: number;
     probationSalaryRatio: number;
-  }>(`/salary/account/${employeeId}`);
+  }>(`/api/v1/salary/employees/${employeeId}/profile`);
 }
 
 // ============ 薪资核算接口 ============
