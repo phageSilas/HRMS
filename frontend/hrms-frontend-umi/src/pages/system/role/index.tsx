@@ -107,10 +107,10 @@ const RolePage: React.FC = () => {
       title: '操作',
       key: 'action',
       fixed: 'right',
-      width: 200,
+      width: 260,
       search: false,
       render: (_, record) => (
-        <Space size={8}>
+        <Space size={4} wrap>
           <Button
             type="link"
             size="small"

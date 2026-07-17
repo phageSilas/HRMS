@@ -82,11 +82,13 @@ const UserPage: React.FC = () => {
       dataIndex: 'username',
       width: 120,
       fixed: 'left',
+      search: false,
     },
     {
       title: '真实姓名',
       dataIndex: 'realName',
       width: 120,
+      search: false,
     },
     {
       title: '手机号',
@@ -146,10 +148,10 @@ const UserPage: React.FC = () => {
       title: '操作',
       key: 'action',
       fixed: 'right',
-      width: 200,
+      width: 260,
       search: false,
       render: (_, record) => (
-        <Space size={8}>
+        <Space size={4} wrap>
           <Button
             type="link"
             size="small"
@@ -274,16 +276,18 @@ const UserPage: React.FC = () => {
         rowKey="id"
         search={{
           labelWidth: 'auto',
+          filterType: 'light',
+          searchText: '搜索',
+          resetText: '重置',
         }}
         cardBordered
         request={async (params) => {
-          const { current: pageNum, pageSize, keyword, status, deptId } = params;
+          const { current: pageNum, pageSize, keyword, status } = params;
           const res = await getUserList({
             pageNum: pageNum || 1,
             pageSize: pageSize || 10,
             keyword,
             status,
-            deptId,
           });
           return {
             data: res.records || [],
