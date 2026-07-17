@@ -40,9 +40,6 @@ export const shellRoutes: ShellRouteMeta[] = [
   },
   { path: '/system/role', title: '角色管理', group: '权限体系', keywords: ['角色', '权限'] },
   { path: '/system/menu', title: '菜单管理', group: '权限体系', keywords: ['菜单'] },
-  { path: '/system/dept', title: '部门管理', group: '权限体系', keywords: ['部门'] },
-  { path: '/system/post', title: '职位管理', group: '权限体系', keywords: ['职位'] },
-  { path: '/system/dict', title: '字典管理', group: '权限体系', keywords: ['字典'] },
   {
     path: '/organization',
     title: '组织架构',
@@ -50,6 +47,9 @@ export const shellRoutes: ShellRouteMeta[] = [
     icon: <ApartmentOutlined />,
     keywords: ['组织', '架构', '部门'],
   },
+  { path: '/organization/dept', title: '部门管理', group: '组织架构', keywords: ['部门'] },
+  { path: '/organization/post', title: '职位管理', group: '组织架构', keywords: ['职位'] },
+  { path: '/organization/dict', title: '字典管理', group: '组织架构', keywords: ['字典'] },
   {
     path: '/employee/list',
     title: '员工列表',
