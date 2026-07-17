@@ -56,6 +56,8 @@ import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
 import com.hrms.system.auth.entity.RoleEntity;
 import com.hrms.system.auth.service.RoleService;
+import com.hrms.system.organization.service.DeptService;
+import com.hrms.system.organization.vo.DeptDetailVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
@@ -124,6 +126,7 @@ public class SalaryServiceImpl implements SalaryService {
     private final SalaryBatchCalculateProducer salaryBatchCalculateProducer;
     private final ApprovalEngine approvalEngine;
     private final RoleService roleService;
+    private final DeptService deptService;
 
     /**
      * 分页查询薪资账套。
@@ -1189,6 +1192,7 @@ public class SalaryServiceImpl implements SalaryService {
                 .employeeId(item.getEmployeeId())
                 .employeeNo(employee == null ? null : employee.getEmployeeNo())
                 .employeeName(employee == null ? null : employee.getEmployeeName())
+                .deptName(resolveDeptName(employee))
                 .baseSalary(item.getBaseSalary())
                 .allowance(item.getAllowance())
                 .performanceBonus(item.getPerformanceBonus())
@@ -1594,6 +1598,21 @@ public class SalaryServiceImpl implements SalaryService {
      * 删除薪资账套缓存。
      * @param templateId 薪资账套ID
      */
+    /**
+     * 解析员工部门名称。
+     *
+     * @param employee 员工快照
+     * @return 部门名称
+     * 本方法使用的工具类: DeptService(hrms-system-organization)
+     */
+    private String resolveDeptName(SalaryEmployeeSnapshotEntity employee) {
+        if (employee == null || employee.getDeptId() == null) {
+            return null;
+        }
+        DeptDetailVO dept = deptService.getDeptById(employee.getDeptId());
+        return dept == null ? null : dept.getDeptName();
+    }
+
     private void evictTemplateCache(Long templateId) {
         StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
         if (redisTemplate != null) {

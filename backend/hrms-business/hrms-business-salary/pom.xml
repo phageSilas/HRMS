@@ -46,6 +46,11 @@
         </dependency>
 
         <dependency>
+            <groupId>com.hrms</groupId>
+            <artifactId>hrms-system-organization</artifactId>
+        </dependency>
+
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
