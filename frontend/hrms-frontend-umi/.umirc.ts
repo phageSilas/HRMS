@@ -267,7 +267,7 @@ export default defineConfig({
         },
         {
           path: '/approval/delegation',
-          name: '审批配置',
+          name: '委托审批',
           component: '@/pages/approval/delegation',
         },
         {

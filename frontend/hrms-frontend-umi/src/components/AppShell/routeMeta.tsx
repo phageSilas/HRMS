@@ -125,7 +125,7 @@ export const shellRoutes: ShellRouteMeta[] = [
     icon: <CheckCircleOutlined />,
     keywords: ['审批', '待办'],
   },
-  { path: '/approval/delegation', title: '审批配置', group: '审批中心', keywords: ['审批', '配置'] },
+  { path: '/approval/delegation', title: '委托审批', group: '审批中心', keywords: ['委托', '审批'] },
   {
     path: '/profile/index',
     title: '个人中心',
