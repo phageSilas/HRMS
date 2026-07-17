@@ -26,9 +26,18 @@ export const menuConfig: MenuItem[] = [
       { key: 'system-user', name: '用户管理', icon: '', path: '/system/user' },
       { key: 'system-role', name: '角色管理', icon: '', path: '/system/role' },
       { key: 'system-menu', name: '菜单管理', icon: '', path: '/system/menu' },
-      { key: 'system-dept', name: '部门管理', icon: '', path: '/system/dept' },
-      { key: 'system-post', name: '职位管理', icon: '', path: '/system/post' },
-      { key: 'system-dict', name: '字典管理', icon: '', path: '/system/dict' },
+    ],
+  },
+  {
+    key: 'organization',
+    name: '组织架构',
+    icon: 'ApartmentOutlined',
+    path: '/organization',
+    access: 'organization',
+    children: [
+      { key: 'organization-dept', name: '部门管理', icon: '', path: '/organization/dept' },
+      { key: 'organization-post', name: '职位管理', icon: '', path: '/organization/post' },
+      { key: 'organization-dict', name: '字典管理', icon: '', path: '/organization/dict' },
     ],
   },
   {

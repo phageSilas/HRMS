@@ -16,6 +16,12 @@ export const PERMISSION = {
   SYSTEM_POST: 'system:post',
   SYSTEM_DICT: 'system:dict',
 
+  // 组织架构
+  ORGANIZATION: 'organization',
+  ORGANIZATION_DEPT: 'organization:dept',
+  ORGANIZATION_POST: 'organization:post',
+  ORGANIZATION_DICT: 'organization:dict',
+
   // 员工档案
   EMPLOYEE: 'employee',
   EMPLOYEE_LIST: 'employee:list',
@@ -63,6 +69,7 @@ export const PERMISSION = {
 export const ROLE_PERMISSIONS: Record<string, string[]> = {
   ADMIN: [
     PERMISSION.SYSTEM,
+    PERMISSION.ORGANIZATION,
     PERMISSION.EMPLOYEE,
     PERMISSION.PROCESS,
     PERMISSION.ATTENDANCE,
