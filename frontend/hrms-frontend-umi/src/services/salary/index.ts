@@ -137,112 +137,44 @@ export interface SalaryBatchAdjustmentRequest {
   adjustments: SalaryBatchAdjustmentItem[];
 }
 
-// ============ 账套接口 ============
+// ============ 工资条类型 ============
 
-/**
- * 获取薪资账套列表
- */
-export async function getSalaryTemplateList(params: SalaryTemplateQuery) {
-  return request.get<{
-    records: SalaryTemplate[];
-    total: number;
-    pageNum: number;
-    pageSize: number;
-  }>('/api/v1/salary/templates', { params });
+export interface SalaryPayslipVerifyResult {
+  success?: boolean;
+  token?: string;
+  expireTime?: string;
 }
 
-/**
- * 创建薪资账套
- */
-export async function createSalaryTemplate(data: SalaryTemplateCreateOrUpdateRequest) {
-  return request.post<SalaryTemplate>('/api/v1/salary/templates', data);
+export interface SalaryManagePayslipQuery {
+  keyword?: string;
+  month?: string;
+  deptId?: number;
+  viewStatus?: 'VIEWED' | 'UNVIEWED' | 'UNPUBLISHED';
+  pageNum?: number;
+  pageSize?: number;
 }
 
-/**
- * 更新薪资账套
- */
-export async function updateSalaryTemplate(
-  id: number,
-  data: SalaryTemplateCreateOrUpdateRequest,
-) {
-  return request.put<SalaryTemplate>(`/api/v1/salary/templates/${id}`, data);
+export interface SalaryManagePayslip {
+  id: number;
+  batchId: number;
+  employeeId: number;
+  employeeName?: string;
+  employeeNo?: string;
+  deptId?: number;
+  deptName?: string;
+  salaryMonth?: string;
+  grossSalary?: number | string;
+  deductionTotal?: number | string;
+  netSalary?: number | string;
+  batchStatus?: string;
+  publishStatus?: string;
+  viewStatus?: 'VIEWED' | 'UNVIEWED' | 'UNPUBLISHED' | string;
+  verified?: boolean;
 }
 
-/**
- * 获取员工薪资档案
- */
-export async function getEmployeeSalaryAccount(employeeId: number) {
-  return request.get<{
-    employeeId: number;
-    salaryAccountId: number;
-    salaryAccountName: string;
-    baseSalary: number;
-    probationSalaryRatio: number;
-  }>(`/api/v1/salary/employees/${employeeId}/profile`);
+export interface SalaryManagePayslipVerifyRequest {
+  password: string;
 }
-
-// ============ 薪资核算接口 ============
-
-/**
- * 创建薪资核算批次
- */
-export async function createSalaryBatch(data: SalaryBatchCreateRequest) {
-  return request.post<SalaryBatch>('/api/v1/salary/batches', data);
-}
-
-/**
- * 查询当前月份批次
- */
-export async function getCurrentSalaryBatch(params: SalaryBatchCurrentQuery) {
-  return request.get<SalaryBatch | null>('/api/v1/salary/batches/current', { params });
-}
-
-/**
- * 查询月度薪资趋势
- */
-export async function getSalaryBatchTrend(params: SalaryBatchTrendQuery) {
-  return request.get<SalaryBatchTrendItem[]>('/api/v1/salary/batches/trend', { params });
-}
-
-/**
- * 触发薪资核算
- */
-export async function calculateSalaryBatch(batchId: number) {
-  return request.post<SalaryBatch>(`/api/v1/salary/batches/${batchId}/calculate`);
-}
-
-/**
- * 预览薪资批次
- */
-export async function previewSalaryBatch(batchId: number) {
-  return request.get<SalaryBatchPreview>(`/api/v1/salary/batches/${batchId}/preview`);
-}
-
-/**
- * 保存人工调整
- */
-export async function saveSalaryBatchAdjustments(
-  batchId: number,
-  data: SalaryBatchAdjustmentRequest,
-) {
-  return request.post<SalaryBatchItem>(`/api/v1/salary/batches/${batchId}/adjustments`, data);
-}
-
-/**
- * 重新计算薪资批次
- */
-export async function recalculateSalaryBatch(batchId: number) {
-  return request.post<SalaryBatch>(`/api/v1/salary/batches/${batchId}/recalculate`);
-}
-
-/**
- * 提交审批
- */
-export async function submitSalaryBatch(batchId: number) {
-  return request.post<SalaryBatch>(`/api/v1/salary/batches/${batchId}/submit`);
-}
-
-// ============ 工资条接口 ============
 
 export interface SalaryPayslipListItem {
   id: number;
@@ -256,18 +188,107 @@ export interface SalaryPayslipListItem {
 
 export interface SalaryPayslipDetail extends SalaryBatchItem {
   salaryMonth?: string;
+  batchNo?: string;
 }
 
-/**
- * 获取工资条列表
- */
+// ============ 账套接口 ============
+
+export async function getSalaryTemplateList(params: SalaryTemplateQuery) {
+  return request.get<{
+    records: SalaryTemplate[];
+    total: number;
+    pageNum: number;
+    pageSize: number;
+  }>('/api/v1/salary/templates', { params });
+}
+
+export async function createSalaryTemplate(data: SalaryTemplateCreateOrUpdateRequest) {
+  return request.post<SalaryTemplate>('/api/v1/salary/templates', data);
+}
+
+export async function updateSalaryTemplate(
+  id: number,
+  data: SalaryTemplateCreateOrUpdateRequest,
+) {
+  return request.put<SalaryTemplate>(`/api/v1/salary/templates/${id}`, data);
+}
+
+export async function getEmployeeSalaryAccount(employeeId: number) {
+  return request.get<{
+    employeeId: number;
+    salaryAccountId: number;
+    salaryAccountName: string;
+    baseSalary: number;
+    probationSalaryRatio: number;
+  }>(`/api/v1/salary/employees/${employeeId}/profile`);
+}
+
+// ============ 薪资核算接口 ============
+
+export async function createSalaryBatch(data: SalaryBatchCreateRequest) {
+  return request.post<SalaryBatch>('/api/v1/salary/batches', data);
+}
+
+export async function getCurrentSalaryBatch(params: SalaryBatchCurrentQuery) {
+  return request.get<SalaryBatch | null>('/api/v1/salary/batches/current', { params });
+}
+
+export async function getSalaryBatchTrend(params: SalaryBatchTrendQuery) {
+  return request.get<SalaryBatchTrendItem[]>('/api/v1/salary/batches/trend', { params });
+}
+
+export async function calculateSalaryBatch(batchId: number) {
+  return request.post<SalaryBatch>(`/api/v1/salary/batches/${batchId}/calculate`);
+}
+
+export async function previewSalaryBatch(batchId: number) {
+  return request.get<SalaryBatchPreview>(`/api/v1/salary/batches/${batchId}/preview`);
+}
+
+export async function saveSalaryBatchAdjustments(
+  batchId: number,
+  data: SalaryBatchAdjustmentRequest,
+) {
+  return request.post<SalaryBatchItem>(`/api/v1/salary/batches/${batchId}/adjustments`, data);
+}
+
+export async function recalculateSalaryBatch(batchId: number) {
+  return request.post<SalaryBatch>(`/api/v1/salary/batches/${batchId}/recalculate`);
+}
+
+export async function submitSalaryBatch(batchId: number) {
+  return request.post<SalaryBatch>(`/api/v1/salary/batches/${batchId}/submit`);
+}
+
+// ============ 员工端工资条接口 ============
+
 export async function getPayslipList(params: { month?: string }) {
   return request.get<SalaryPayslipListItem[]>('/api/v1/salary/payslips', { params });
 }
 
-/**
- * 获取工资条详情
- */
+export async function verifyPayslip(data: { month: string; password: string }) {
+  return request.post<SalaryPayslipVerifyResult>('/api/v1/salary/payslip/verify', data);
+}
+
 export async function getPayslipDetail(id: number) {
   return request.get<SalaryPayslipDetail>(`/api/v1/salary/payslip/${id}`);
+}
+
+// ============ 管理端工资条接口 ============
+
+export async function verifyManagePayslip(data: SalaryManagePayslipVerifyRequest) {
+  return request.post<SalaryPayslipVerifyResult>('/api/v1/salary/manage/payslip/verify', data);
+}
+
+export async function getManagePayslipList(params: SalaryManagePayslipQuery) {
+  return request.get<{
+    records: SalaryManagePayslip[];
+    total: number;
+    pageNum: number;
+    pageSize: number;
+  }>('/api/v1/salary/manage/payslips', { params });
+}
+
+export async function getManagePayslipDetail(id: number) {
+  return request.get<SalaryPayslipDetail>(`/api/v1/salary/manage/payslip/${id}`);
 }
