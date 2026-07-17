@@ -7,6 +7,8 @@ import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hrms.business.approval.enums.ApprovalTypeEnum;
+import com.hrms.business.approval.dto.ApprovalDetailVO;
+import com.hrms.business.approval.service.ApprovalTaskService;
 import com.hrms.business.approval.service.ApprovalEngine;
 import com.hrms.business.attendance.cache.AttendanceCacheKeys;
 import com.hrms.business.attendance.convert.AttendanceGroupConvert;
@@ -15,6 +17,7 @@ import com.hrms.business.attendance.dto.AttendanceCorrectionCreateRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupCreateOrUpdateRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupQueryDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupRecordQueryDTO;
+import com.hrms.business.attendance.dto.AttendanceLeaveManageQueryDTO;
 import com.hrms.business.attendance.dto.LeaveCreateRequestDTO;
 import com.hrms.business.attendance.dto.MonthlyStatGenerateRequestDTO;
 import com.hrms.business.attendance.entity.AttendanceCorrectionEntity;
@@ -45,6 +48,7 @@ import com.hrms.business.attendance.vo.AttendanceCalendarDayVO;
 import com.hrms.business.attendance.vo.AttendanceCalendarVO;
 import com.hrms.business.attendance.vo.AttendanceCorrectionCreateVO;
 import com.hrms.business.attendance.vo.AttendanceGroupRecordPageVO;
+import com.hrms.business.attendance.vo.AttendanceLeaveManageItemVO;
 import com.hrms.business.attendance.vo.AttendanceDeptDistributionVO;
 import com.hrms.business.attendance.vo.AttendanceEmployeeRankingVO;
 import com.hrms.business.attendance.vo.AttendanceExceptionPieVO;
@@ -119,6 +123,10 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     private static final Set<String> DASHBOARD_FULL_SCOPE_ROLE_CODES = Set.of("HR", "HR_TEST", "ADMIN", "ROLE_ADMIN");
 
+    private static final Set<String> LEAVE_MANAGE_FULL_SCOPE_ROLE_CODES = Set.of("HR", "HR_TEST", "ADMIN", "ROLE_ADMIN");
+
+    private static final String LEAVE_MANAGE_MANAGER_ROLE_CODE = "MANAGER";
+
     private final AttendanceGroupMapper attendanceGroupMapper;
 
     private final AttendanceGroupMemberMapper attendanceGroupMemberMapper;
@@ -144,6 +152,8 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final AttendanceClockEventHandler attendanceClockEventHandler;
 
     private final ApprovalEngine approvalEngine;
+
+    private final ApprovalTaskService approvalTaskService;
 
     private final DeptService deptService;
 
@@ -923,6 +933,239 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     /**
+     * 解析请假管理查询月份。
+     *
+     * @param yearMonth 月份
+     * @return 年月
+     * 本方法使用的工具类: YearMonth(JDK),GlobalException(hrms-common)
+     */
+    private YearMonth parseLeaveManageYearMonth(String yearMonth) {
+        if (StrUtil.isBlank(yearMonth)) {
+            return YearMonth.now();
+        }
+        try {
+            return YearMonth.parse(yearMonth);
+        } catch (DateTimeParseException ex) {
+            throw new GlobalException(ErrorCode.PARAM_FORMAT_ERROR, "yearMonth格式必须为yyyy-MM");
+        }
+    }
+
+    /**
+     * 解析请假管理数据范围。
+     *
+     * @param requestedDeptId 请求部门ID
+     * @return 请假管理范围
+     * 本方法使用的工具类: SecurityContextHolder(hrms-common),RoleService(hrms-system-auth)
+     */
+    private LeaveManageScope resolveLeaveManageScope(Long requestedDeptId) {
+        Long currentUserId = SecurityContextHolder.getUserId();
+        List<RoleEntity> roles = roleService.getRolesByUserId(currentUserId);
+        if (hasLeaveManageFullScope(roles)) {
+            return new LeaveManageScope(requestedDeptId == null ? null : Set.of(requestedDeptId));
+        }
+        if (!hasLeaveManageManagerScope(roles)) {
+            throw new GlobalException(ErrorCode.FORBIDDEN, "无权查看请假管理列表");
+        }
+        Long currentDeptId = SecurityContextHolder.getDeptId();
+        if (currentDeptId == null) {
+            currentDeptId = getCurrentEmployeeSnapshot().getDeptId();
+        }
+        if (currentDeptId == null) {
+            throw new GlobalException(ErrorCode.FORBIDDEN, "当前用户未配置部门，无法查看请假管理列表");
+        }
+        if (requestedDeptId != null && !requestedDeptId.equals(currentDeptId)) {
+            throw new GlobalException(ErrorCode.FORBIDDEN, "无权查看该部门请假记录");
+        }
+        return new LeaveManageScope(Set.of(currentDeptId));
+    }
+
+    /**
+     * 判断是否拥有请假管理全量权限。
+     *
+     * @param roles 角色列表
+     * @return 是否拥有全量权限
+     * 本方法使用的工具类: StrUtil(hutool)
+     */
+    private boolean hasLeaveManageFullScope(List<RoleEntity> roles) {
+        if (roles == null || roles.isEmpty()) {
+            return false;
+        }
+        return roles.stream().anyMatch(role -> role != null
+                && StrUtil.isNotBlank(role.getRoleCode())
+                && LEAVE_MANAGE_FULL_SCOPE_ROLE_CODES.contains(role.getRoleCode().toUpperCase()));
+    }
+
+    /**
+     * 判断是否拥有请假管理主管权限。
+     *
+     * @param roles 角色列表
+     * @return 是否拥有主管权限
+     * 本方法使用的工具类: StrUtil(hutool)
+     */
+    private boolean hasLeaveManageManagerScope(List<RoleEntity> roles) {
+        if (roles == null || roles.isEmpty()) {
+            return false;
+        }
+        return roles.stream().anyMatch(role -> role != null
+                && StrUtil.isNotBlank(role.getRoleCode())
+                && LEAVE_MANAGE_MANAGER_ROLE_CODE.equals(role.getRoleCode().toUpperCase()));
+    }
+
+    /**
+     * 查询请假管理员工范围。
+     *
+     * @param targetDeptIds 目标部门ID集合，null表示全量
+     * @param keyword       员工关键字
+     * @return 员工快照列表
+     * 本方法使用的工具类: LambdaQueryWrapper(mybatis-plus),StrUtil(hutool),Collections(JDK)
+     */
+    private List<EmployeeSnapshotEntity> listLeaveManageEmployees(Set<Long> targetDeptIds, String keyword) {
+        if (targetDeptIds != null && targetDeptIds.isEmpty()) {
+            return List.of();
+        }
+        LambdaQueryWrapper<EmployeeSnapshotEntity> wrapper = new LambdaQueryWrapper<EmployeeSnapshotEntity>()
+                .ne(EmployeeSnapshotEntity::getEmploymentStatus, 4)
+                .and(StrUtil.isNotBlank(keyword), query -> query
+                        .like(EmployeeSnapshotEntity::getEmployeeName, keyword.trim())
+                        .or()
+                        .like(EmployeeSnapshotEntity::getEmployeeNo, keyword.trim()));
+        if (targetDeptIds != null) {
+            wrapper.in(EmployeeSnapshotEntity::getDeptId, targetDeptIds);
+        }
+        List<EmployeeSnapshotEntity> employees = employeeSnapshotMapper.selectList(wrapper);
+        return employees == null ? Collections.emptyList() : employees;
+    }
+
+    /**
+     * 加载请假类型描述映射。
+     *
+     * @return 请假类型描述映射
+     * 本方法使用的工具类: LambdaQueryWrapper(mybatis-plus),Collectors(JDK)
+     */
+    private Map<String, String> loadLeaveTypeDescMap() {
+        List<DictDataEntity> dictList = dictDataMapper.selectList(new LambdaQueryWrapper<DictDataEntity>()
+                .eq(DictDataEntity::getDictType, "leave_type")
+                .eq(DictDataEntity::getStatus, 1)
+                .eq(DictDataEntity::getIsDeleted, 0));
+        if (dictList == null || dictList.isEmpty()) {
+            return Map.of();
+        }
+        return dictList.stream()
+                .collect(Collectors.toMap(DictDataEntity::getDictValue, DictDataEntity::getDictLabel, (a, b) -> a));
+    }
+
+    /**
+     * 构建请假管理列表项。
+     *
+     * @param leave              请假记录
+     * @param employee           员工快照
+     * @param deptNameCache      部门名称缓存
+     * @param leaveTypeDescMap   请假类型描述映射
+     * @param approvalBriefCache 审批摘要缓存
+     * @param currentUserId      当前用户ID
+     * @return 请假管理列表项
+     * 本方法使用的工具类: AttendanceLeaveManageItemVO(本模块vo包)
+     */
+    private AttendanceLeaveManageItemVO buildLeaveManageItemVO(LeaveRequestEntity leave,
+                                                               EmployeeSnapshotEntity employee,
+                                                               Map<Long, String> deptNameCache,
+                                                               Map<String, String> leaveTypeDescMap,
+                                                               Map<Long, ApprovalBrief> approvalBriefCache,
+                                                               Long currentUserId) {
+        ApprovalBrief approvalBrief = resolveApprovalBrief(leave.getApprovalInstanceId(), approvalBriefCache, currentUserId);
+        Long deptId = employee == null ? null : employee.getDeptId();
+        String leaveTypeDesc = leaveTypeDescMap.getOrDefault(leave.getLeaveType(), leave.getLeaveType());
+        return AttendanceLeaveManageItemVO.builder()
+                .id(leave.getId())
+                .employeeId(leave.getEmployeeId())
+                .employeeName(employee == null ? null : employee.getEmployeeName())
+                .employeeNo(employee == null ? null : employee.getEmployeeNo())
+                .deptId(deptId)
+                .deptName(resolveDeptName(deptId, deptNameCache))
+                .leaveType(leave.getLeaveType())
+                .leaveTypeDesc(leaveTypeDesc)
+                .startTime(leave.getStartTime())
+                .endTime(leave.getEndTime())
+                .totalDays(leave.getTotalDays())
+                .leaveReason(leave.getLeaveReason())
+                .approvalStatus(leave.getApprovalStatus())
+                .approvalStatusDesc(resolveLeaveApprovalStatusDesc(leave.getApprovalStatus()))
+                .approvalInstanceId(leave.getApprovalInstanceId())
+                .currentNodeName(approvalBrief.currentNodeName())
+                .currentApproverName(approvalBrief.currentApproverName())
+                .createTime(leave.getCreateTime())
+                .build();
+    }
+
+    /**
+     * 解析审批摘要。
+     *
+     * @param approvalInstanceId 审批实例ID
+     * @param cache              审批摘要缓存
+     * @param currentUserId      当前用户ID
+     * @return 审批摘要
+     * 本方法使用的工具类: ApprovalTaskService(hrms-business-approval)
+     */
+    private ApprovalBrief resolveApprovalBrief(Long approvalInstanceId, Map<Long, ApprovalBrief> cache, Long currentUserId) {
+        if (approvalInstanceId == null) {
+            return ApprovalBrief.empty();
+        }
+        if (cache.containsKey(approvalInstanceId)) {
+            return cache.get(approvalInstanceId);
+        }
+        try {
+            ApprovalDetailVO detail = approvalTaskService.getDetail(approvalInstanceId, currentUserId);
+            ApprovalBrief brief = extractApprovalBrief(detail);
+            cache.put(approvalInstanceId, brief);
+            return brief;
+        } catch (Exception ex) {
+            log.warn("resolve leave approval brief failed, approvalInstanceId={}", approvalInstanceId, ex);
+            ApprovalBrief brief = ApprovalBrief.empty();
+            cache.put(approvalInstanceId, brief);
+            return brief;
+        }
+    }
+
+    /**
+     * 从审批详情提取当前节点摘要。
+     *
+     * @param detail 审批详情
+     * @return 审批摘要
+     * 本方法使用的工具类: ApprovalDetailVO(hrms-business-approval)
+     */
+    private ApprovalBrief extractApprovalBrief(ApprovalDetailVO detail) {
+        if (detail == null || detail.getApprovalNodes() == null) {
+            return ApprovalBrief.empty();
+        }
+        return detail.getApprovalNodes().stream()
+                .filter(node -> "current".equals(node.getStatus()))
+                .findFirst()
+                .map(node -> new ApprovalBrief(node.getNodeName(), node.getOperatorName()))
+                .orElse(ApprovalBrief.empty());
+    }
+
+    /**
+     * 解析请假审批状态描述。
+     *
+     * @param approvalStatus 审批状态
+     * @return 状态描述
+     * 本方法使用的工具类: 无
+     */
+    private String resolveLeaveApprovalStatusDesc(Integer approvalStatus) {
+        if (approvalStatus == null) {
+            return "未知";
+        }
+        return switch (approvalStatus) {
+            case 0 -> "草稿";
+            case 1 -> "审批中";
+            case 2 -> "已通过";
+            case 3 -> "已拒绝";
+            case 4 -> "已撤回";
+            default -> "未知";
+        };
+    }
+
+    /**
      * 规范化当前页码。
      *
      * @param pageNum 当前页码
@@ -1052,6 +1295,48 @@ public class AttendanceServiceImpl implements AttendanceService {
         AttendanceDashboardAccumulator accumulator = buildDashboardAccumulator(
                 statEmployees, members, recordMap, leaveDateKeys, workdays);
         return buildDashboardVO(accumulator, leaveCount, deptNameCache);
+    }
+
+    /**
+     * 分页查询管理侧请假记录。
+     *
+     * @param queryDTO 查询参数
+     * @return 请假管理分页列表
+     * 本方法使用的工具类: Page(mybatis-plus),PageResult(hrms-common),YearMonth(JDK)
+     */
+    @Override
+    public PageResult<AttendanceLeaveManageItemVO> pageLeaveManageList(AttendanceLeaveManageQueryDTO queryDTO) {
+        AttendanceLeaveManageQueryDTO safeQuery = queryDTO == null ? new AttendanceLeaveManageQueryDTO() : queryDTO;
+        YearMonth yearMonth = parseLeaveManageYearMonth(safeQuery.getYearMonth());
+        LocalDate monthStart = yearMonth.atDay(1);
+        LocalDate monthEnd = yearMonth.atEndOfMonth();
+        LeaveManageScope scope = resolveLeaveManageScope(safeQuery.getDeptId());
+        List<EmployeeSnapshotEntity> employees = listLeaveManageEmployees(scope.targetDeptIds(), safeQuery.getKeyword());
+        int pageNum = normalizePageNum(safeQuery.getPageNum());
+        int pageSize = normalizePageSize(safeQuery.getPageSize());
+        if (employees.isEmpty()) {
+            return PageResult.of(List.of(), 0, pageNum, pageSize);
+        }
+        Map<Long, EmployeeSnapshotEntity> employeeMap = employees.stream()
+                .collect(Collectors.toMap(EmployeeSnapshotEntity::getId, employee -> employee, (a, b) -> a));
+        Page<LeaveRequestEntity> page = Page.of(pageNum, pageSize);
+        LambdaQueryWrapper<LeaveRequestEntity> wrapper = new LambdaQueryWrapper<LeaveRequestEntity>()
+                .in(LeaveRequestEntity::getEmployeeId, employeeMap.keySet())
+                .le(LeaveRequestEntity::getStartTime, monthEnd.atTime(LocalTime.MAX))
+                .ge(LeaveRequestEntity::getEndTime, monthStart.atStartOfDay())
+                .eq(safeQuery.getApprovalStatus() != null, LeaveRequestEntity::getApprovalStatus, safeQuery.getApprovalStatus())
+                .orderByDesc(LeaveRequestEntity::getCreateTime)
+                .orderByDesc(LeaveRequestEntity::getId);
+        Page<LeaveRequestEntity> resultPage = leaveRequestMapper.selectPage(page, wrapper);
+        Map<Long, String> deptNameCache = new HashMap<>();
+        Map<String, String> leaveTypeDescMap = loadLeaveTypeDescMap();
+        Map<Long, ApprovalBrief> approvalBriefCache = new HashMap<>();
+        Long currentUserId = SecurityContextHolder.getUserId();
+        List<AttendanceLeaveManageItemVO> records = resultPage.getRecords().stream()
+                .map(leave -> buildLeaveManageItemVO(leave, employeeMap.get(leave.getEmployeeId()),
+                        deptNameCache, leaveTypeDescMap, approvalBriefCache, currentUserId))
+                .toList();
+        return PageResult.of(records, resultPage.getTotal(), pageNum, pageSize);
     }
     /**
      * 创建补卡申请。
@@ -2165,6 +2450,33 @@ public class AttendanceServiceImpl implements AttendanceService {
      * @param targetDeptIds 目标部门ID集合，null表示全量
      */
     private record AttendanceDashboardScope(Set<Long> targetDeptIds) {
+    }
+
+    /**
+     * 请假管理部门范围。
+     *
+     * @param targetDeptIds 目标部门ID集合，null表示全量
+     */
+    private record LeaveManageScope(Set<Long> targetDeptIds) {
+    }
+
+    /**
+     * 审批摘要。
+     *
+     * @param currentNodeName     当前节点名称
+     * @param currentApproverName 当前审批人名称
+     */
+    private record ApprovalBrief(String currentNodeName, String currentApproverName) {
+
+        /**
+         * 创建空审批摘要。
+         *
+         * @return 空审批摘要
+         * 本方法使用的工具类: 无
+         */
+        private static ApprovalBrief empty() {
+            return new ApprovalBrief(null, null);
+        }
     }
 
     /**

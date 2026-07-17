@@ -5,6 +5,7 @@ import com.hrms.business.attendance.dto.AttendanceGroupCreateOrUpdateRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceClockRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceCorrectionCreateRequestDTO;
 import com.hrms.business.attendance.dto.LeaveCreateRequestDTO;
+import com.hrms.business.attendance.dto.AttendanceLeaveManageQueryDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupRecordQueryDTO;
 import com.hrms.business.attendance.dto.MonthlyStatGenerateRequestDTO;
 import com.hrms.business.attendance.vo.AttendanceGroupPageVO;
@@ -18,6 +19,7 @@ import com.hrms.business.attendance.vo.LeaveCreateVO;
 import com.hrms.business.attendance.vo.MonthlyStatGenerateVO;
 import com.hrms.business.attendance.vo.AttendancePayrollSourceVO;
 import com.hrms.business.attendance.vo.AttendanceSummaryDashboardVO;
+import com.hrms.business.attendance.vo.AttendanceLeaveManageItemVO;
 
 import java.util.List;
 import com.hrms.common.web.PageResult;
@@ -94,6 +96,15 @@ public interface AttendanceService {
      * 本方法使用的工具类: 无
      */
     AttendanceSummaryDashboardVO getSummaryDashboard(String yearMonth, Long deptId);
+
+    /**
+     * 分页查询管理侧请假记录。
+     *
+     * @param queryDTO 查询参数
+     * @return 请假管理分页列表
+     * 本方法使用的工具类: PageResult(hrms-common)
+     */
+    PageResult<AttendanceLeaveManageItemVO> pageLeaveManageList(AttendanceLeaveManageQueryDTO queryDTO);
 
     /**
      * 创建补卡申请。
