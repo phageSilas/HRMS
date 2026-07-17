@@ -4,9 +4,10 @@ import type {
   AttendanceClockVO,
 } from '@/services/attendance';
 import {
-  clockAttendance,
   getMyAttendanceCalendar,
+  clockAttendance,
 } from '@/services/attendance';
+import type { AttendanceCalendarVO } from '@/services/attendance';
 import type {
   AmapLocationResult,
   AmapLocationStatus,
@@ -20,7 +21,7 @@ import {
   RightOutlined,
   SafetyCertificateFilled,
 } from '@ant-design/icons';
-import { history, useRequest } from '@umijs/max';
+import { history } from '@umijs/max';
 import {
   Button,
   Card,
@@ -206,39 +207,49 @@ function getDeviceInfo(location?: AmapLocationResult) {
   return `web:${browser}-${platform};lang:${language}${locationInfo}`;
 }
 
+function findTodayRecord(
+  days: AttendanceCalendarDayVO[] | undefined,
+  currentDate: string,
+) {
+  return days?.find(
+    (item) => normalizeDate(item.date as BackendDateValue) === currentDate,
+  );
+}
+
 const AttendancePunchPage: React.FC = () => {
   const [now, setNow] = useState(dayjs());
   const currentDate = now.format('YYYY-MM-DD');
   const currentMonth = now.format('YYYY-MM');
   const [clocking, setClocking] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [calendarData, setCalendarData] = useState<AttendanceCalendarVO>();
   const [localTodayRecord, setLocalTodayRecord] = useState<LocalTodayRecord>();
   const [locationState, setLocationState] = useState<LocationState>({
     status: 'idle',
     text: '点击打卡时获取高德定位',
   });
 
-  const {
-    data: calendar,
-    loading,
-    refresh,
-  } = useRequest(() => getMyAttendanceCalendar(currentMonth), {
-    refreshDeps: [currentMonth],
-  });
+  const loadCalendar = async () => {
+    setLoading(true);
+    try {
+      const nextCalendar = await getMyAttendanceCalendar(currentMonth);
+      setCalendarData(nextCalendar);
+      return nextCalendar;
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const calendarData = calendar as
-    | {
-        days?: AttendanceCalendarDayVO[];
-      }
-    | undefined;
+  useEffect(() => {
+    void loadCalendar();
+  }, [currentMonth]);
 
   usePageAutoRefresh(() => {
-    refresh();
+    void loadCalendar();
   });
 
   const todayRecord = useMemo<AttendanceCalendarDayVO | undefined>(() => {
-    return calendarData?.days?.find(
-      (item) => normalizeDate(item.date as BackendDateValue) === currentDate,
-    );
+    return findTodayRecord(calendarData?.days, currentDate);
   }, [calendarData?.days, currentDate]);
 
   const resolvedTodayRecord = useMemo(() => {
@@ -337,11 +348,11 @@ const AttendancePunchPage: React.FC = () => {
         ),
         okText: '我知道了',
       });
-      await refresh();
+      await loadCalendar();
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : '打卡提交失败';
-      await refresh();
+      await loadCalendar();
       if (errorMessage.includes('已打卡')) {
         message.warning(errorMessage);
       } else {
@@ -369,9 +380,9 @@ const AttendancePunchPage: React.FC = () => {
       if (previous.date !== currentDate) {
         return undefined;
       }
-      return todayRecord ? undefined : previous;
+      return resolvedTodayRecord === todayRecord && todayRecord ? undefined : previous;
     });
-  }, [currentDate, todayRecord]);
+  }, [currentDate, resolvedTodayRecord, todayRecord]);
 
   const latestNetworkIp =
     resolvedTodayRecord?.clockOutIp || resolvedTodayRecord?.clockInIp;
