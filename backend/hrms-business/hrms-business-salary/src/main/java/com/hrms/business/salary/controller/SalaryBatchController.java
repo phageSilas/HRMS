@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -36,6 +37,22 @@ public class SalaryBatchController {
     @PostMapping
     public Result<SalaryBatchVO> createBatch(@Valid @RequestBody SalaryBatchCreateRequestDTO requestDTO) {
         return Result.success(salaryService.createBatch(requestDTO));
+    }
+
+    /**
+     * 按月份和核算范围查询当前薪资批次。
+     *
+     * @param salaryMonth 薪资月份
+     * @param scopeType   核算范围类型
+     * @param scopeValue  核算范围值
+     * @return 当前薪资批次，未找到时为 null
+     * 本方法使用的工具类: Result(hrms-common)
+     */
+    @GetMapping("/current")
+    public Result<SalaryBatchVO> getCurrentBatch(@RequestParam String salaryMonth,
+                                                 @RequestParam(required = false) String scopeType,
+                                                 @RequestParam(required = false) String scopeValue) {
+        return Result.success(salaryService.getCurrentBatch(salaryMonth, scopeType, scopeValue));
     }
 
     /**

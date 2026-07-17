@@ -79,6 +79,17 @@ public interface SalaryService {
     SalaryBatchVO createBatch(SalaryBatchCreateRequestDTO requestDTO);
 
     /**
+     * 按月份和核算范围查询当前薪资批次。
+     *
+     * @param salaryMonth 薪资月份
+     * @param scopeType   核算范围类型
+     * @param scopeValue  核算范围值
+     * @return 当前薪资批次，未找到时返回 null
+     * 本方法使用的工具类: 无
+     */
+    SalaryBatchVO getCurrentBatch(String salaryMonth, String scopeType, String scopeValue);
+
+    /**
      * 触发薪资核算。
      *
      * @param batchId 批次ID

@@ -51,6 +51,8 @@ import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
 import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
+import com.hrms.system.auth.entity.RoleEntity;
+import com.hrms.system.auth.service.RoleService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
@@ -90,6 +92,9 @@ public class SalaryServiceImpl implements SalaryService {
             SalaryBatchStatusEnum.RELEASED.name(),
             SalaryBatchStatusEnum.ARCHIVED.name()
     );
+    private static final Set<String> SALARY_MANAGER_ROLE_CODES = Set.of(
+            "FINANCE", "HR", "HR_TEST", "ADMIN", "ROLE_ADMIN"
+    );
 
     private final SalaryTemplateMapper salaryTemplateMapper;
     private final SalaryTemplateItemMapper salaryTemplateItemMapper;
@@ -103,6 +108,7 @@ public class SalaryServiceImpl implements SalaryService {
     private final ObjectProvider<PasswordEncoder> passwordEncoderProvider;
     private final SalaryBatchCalculateProducer salaryBatchCalculateProducer;
     private final ApprovalEngine approvalEngine;
+    private final RoleService roleService;
 
     /**
      * 分页查询薪资账套。
@@ -278,6 +284,32 @@ public class SalaryServiceImpl implements SalaryService {
         batch.setBlockCount(0);
         salaryBatchMapper.insert(batch);
         return toBatchVO(batch);
+    }
+
+    /**
+     * 按月份和核算范围查询当前薪资批次。
+     *
+     * @param salaryMonth 薪资月份
+     * @param scopeType   核算范围类型
+     * @param scopeValue  核算范围值
+     * @return 当前薪资批次，未找到时返回 null
+     * 本方法使用的工具类: StrUtil(hutool),Wrappers(MyBatis-Plus)
+     */
+    @Override
+    public SalaryBatchVO getCurrentBatch(String salaryMonth, String scopeType, String scopeValue) {
+        assertSalaryManagerRole();
+        String month = normalizeMonth(salaryMonth);
+        String normalizedScopeType = normalizeScopeType(scopeType);
+        String normalizedScopeValue = normalizeBatchScopeValue(normalizedScopeType, scopeValue);
+        SalaryBatchEntity batch = salaryBatchMapper.selectOne(Wrappers.lambdaQuery(SalaryBatchEntity.class)
+                .eq(SalaryBatchEntity::getSalaryMonth, month)
+                .eq(SalaryBatchEntity::getScopeType, normalizedScopeType)
+                .eq(StrUtil.isNotBlank(normalizedScopeValue), SalaryBatchEntity::getScopeValue, normalizedScopeValue)
+                .notIn(SalaryBatchEntity::getBatchStatus, SalaryBatchStatusEnum.ARCHIVED.name())
+                .orderByDesc(SalaryBatchEntity::getCreateTime)
+                .orderByDesc(SalaryBatchEntity::getId)
+                .last("LIMIT 1"));
+        return batch == null ? null : toBatchVO(batch);
     }
 
     /**
@@ -1217,9 +1249,50 @@ public class SalaryServiceImpl implements SalaryService {
     }
 
     /**
+     * 规范化薪资批次查询范围值。
+     *
+     * @param scopeType  范围类型
+     * @param scopeValue 范围值
+     * @return 规范化后的范围值
+     * 本方法使用的工具类: StrUtil(hutool)
+     */
+    private String normalizeBatchScopeValue(String scopeType, String scopeValue) {
+        if ("ALL".equals(scopeType)) {
+            return null;
+        }
+        if (StrUtil.isBlank(scopeValue)) {
+            throw new GlobalException(ErrorCode.PARAM_REQUIRED, "非 ALL 范围必须传入 scopeValue");
+        }
+        return scopeValue.trim();
+    }
+
+    /**
+     * 校验当前用户是否具备薪资管理操作角色。
+     *
+     * @return 无返回值
+     * 本方法使用的工具类: SecurityContextHolder(hrms-common),RoleService(hrms-system-auth),StrUtil(hutool)
+     */
+    private void assertSalaryManagerRole() {
+        Long userId = SecurityContextHolder.getUserId();
+        if (userId == null) {
+            throw new GlobalException(ErrorCode.FORBIDDEN, "无薪资管理权限");
+        }
+        boolean allowed = roleService.getRolesByUserId(userId).stream()
+                .map(RoleEntity::getRoleCode)
+                .filter(StrUtil::isNotBlank)
+                .map(roleCode -> roleCode.trim().toUpperCase())
+                .anyMatch(SALARY_MANAGER_ROLE_CODES::contains);
+        if (!allowed) {
+            throw new GlobalException(ErrorCode.FORBIDDEN, "无薪资管理权限");
+        }
+    }
+
+    /**
      * 规范化薪资月份。
+     *
      * @param month 薪资月份
      * @return 规范化后的薪资月份
+     * 本方法使用的工具类: StrUtil(hutool),YearMonth(JDK)
      */
     private String normalizeMonth(String month) {
         if (StrUtil.isBlank(month)) {
