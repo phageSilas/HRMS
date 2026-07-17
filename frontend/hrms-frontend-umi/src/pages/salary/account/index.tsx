@@ -339,6 +339,8 @@ const SalaryAccountPage: React.FC = () => {
         (value, index) => ({
           id: index + 1,
           dictType: JOB_LEVEL_DICT_TYPE,
+          dictLabel: value,
+          dictValue: value,
           label: value,
           value,
           sort: index + 1,
@@ -565,8 +567,8 @@ const SalaryAccountPage: React.FC = () => {
   const jobLevelSelectOptions = useMemo(
     () =>
       jobLevelOptions.map((item) => ({
-        label: item.label,
-        value: item.value,
+        label: item.dictLabel || item.label || item.dictValue || item.value || '--',
+        value: item.dictValue || item.value || item.dictLabel || item.label || '',
       })),
     [jobLevelOptions],
   );

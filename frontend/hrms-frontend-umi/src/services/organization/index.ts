@@ -38,10 +38,12 @@ export interface Post {
 }
 
 export interface DictData {
-  id: number;
+  id?: number;
   dictType: string;
-  label: string;
-  value: string;
+  dictLabel?: string;
+  dictValue?: string;
+  label?: string;
+  value?: string;
   sort: number;
   status: number;
 }
