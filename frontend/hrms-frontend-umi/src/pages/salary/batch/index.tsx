@@ -76,6 +76,8 @@ const BATCH_STATUS_STEPS = [
   { key: 'RELEASED', title: '已发放' },
 ];
 
+const COMPOSITION_COLORS = ['#1677ff', '#13c2c2', '#fa8c16', '#b37feb'];
+
 interface AdjustmentFormValues {
   adjustments: SalaryBatchAdjustmentItem[];
 }
@@ -213,7 +215,7 @@ function buildCompositionData(items: SalaryBatchItem[]) {
   const totalAmount = Object.values(totals).reduce((sum, amount) => sum + amount, 0);
 
   return Object.entries(totals)
-    .map(([type, amount]) => {
+    .map(([type, amount], index) => {
       const percent = totalAmount > 0 ? amount / totalAmount : 0;
       return {
         type,
@@ -221,9 +223,53 @@ function buildCompositionData(items: SalaryBatchItem[]) {
         percent,
         percentText: `${(percent * 100).toFixed(1)}%`,
         labelText: `${type} ${`${(percent * 100).toFixed(1)}%`}`,
+        color: COMPOSITION_COLORS[index % COMPOSITION_COLORS.length],
       };
     })
     .filter((item) => item.amount > 0);
+}
+
+function buildCompositionLabelLayout(
+  items: Array<{
+    type: string;
+    percent: number;
+    percentText: string;
+    color: string;
+  }>,
+) {
+  let currentAngle = -Math.PI / 2;
+
+  return items.map((item) => {
+    const sweep = item.percent * Math.PI * 2;
+    const midAngle = currentAngle + sweep / 2;
+    currentAngle += sweep;
+
+    const cos = Math.cos(midAngle);
+    const sin = Math.sin(midAngle);
+    const startX = 50 + cos * 31;
+    const startY = 50 + sin * 31;
+    const bendX = 50 + cos * 39;
+    const bendY = 50 + sin * 39;
+    const side = cos >= 0 ? 1 : -1;
+    const extend = 8 + Math.abs(sin) * 10;
+    const endX = bendX + side * extend;
+    const endY = bendY;
+    const nearVertical = Math.abs(sin) > 0.78;
+
+    return {
+      ...item,
+      startX,
+      startY,
+      bendX,
+      bendY,
+      endX,
+      endY,
+      textX: endX + side * 1.5,
+      textY: endY,
+      textAnchor: side > 0 ? 'start' : 'end',
+      percentBelow: nearVertical,
+    };
+  });
 }
 
 function buildSocialFundData(items: SalaryBatchItem[]) {
@@ -478,6 +524,10 @@ const SalaryBatchPage: React.FC = () => {
   const compositionData = useMemo(
     () => buildCompositionData(previewData?.items || []),
     [previewData?.items],
+  );
+  const compositionLabelLayout = useMemo(
+    () => buildCompositionLabelLayout(compositionData),
+    [compositionData],
   );
   const socialFundData = useMemo(
     () => buildSocialFundData(previewData?.items || []),
@@ -823,7 +873,7 @@ const SalaryBatchPage: React.FC = () => {
                       {compositionData.length > 0 ? (
                         <Space direction="vertical" size={12} style={{ width: '100%' }}>
                           <Space wrap size={[16, 8]} style={{ paddingTop: 4 }}>
-                            {compositionData.map((item, index) => (
+                            {compositionData.map((item) => (
                               <Space key={item.type} size={8}>
                                 <span
                                   style={{
@@ -831,39 +881,77 @@ const SalaryBatchPage: React.FC = () => {
                                     height: 10,
                                     borderRadius: 2,
                                     display: 'inline-block',
-                                    background:
-                                      ['#1677ff', '#13c2c2', '#fa8c16', '#b37feb'][index % 4],
+                                    background: item.color,
                                   }}
                                 />
                                 <Text>{item.type}</Text>
                               </Space>
                             ))}
                           </Space>
-                          <Pie
-                            height={230}
-                            data={compositionData}
-                            angleField="amount"
-                            colorField="type"
-                            innerRadius={0.68}
-                            radius={0.78}
-                            legend={false}
-                            label={{
-                              text: 'labelText',
-                              position: 'outside',
-                              style: {
-                                fontWeight: 600,
-                                fontSize: 12,
-                              },
-                            }}
-                            tooltip={{
-                              items: [
-                                (datum: { type: string; amount: number; percentText: string }) => ({
-                                  name: datum.type,
-                                  value: `${formatCurrency(datum.amount)} (${datum.percentText})`,
-                                }),
-                              ],
-                            }}
-                          />
+                          <div style={{ position: 'relative', height: 260 }}>
+                            <Pie
+                              height={260}
+                              data={compositionData}
+                              angleField="amount"
+                              colorField="type"
+                              color={compositionData.map((item) => item.color)}
+                              innerRadius={0.68}
+                              radius={0.78}
+                              legend={false}
+                              label={false}
+                              tooltip={{
+                                items: [
+                                  (datum: { type: string; amount: number; percentText: string }) => ({
+                                    name: datum.type,
+                                    value: `${formatCurrency(datum.amount)} (${datum.percentText})`,
+                                  }),
+                                ],
+                              }}
+                            />
+                            <svg
+                              viewBox="0 0 100 100"
+                              preserveAspectRatio="none"
+                              style={{
+                                position: 'absolute',
+                                inset: 0,
+                                width: '100%',
+                                height: '100%',
+                                pointerEvents: 'none',
+                                overflow: 'visible',
+                              }}
+                            >
+                              {compositionLabelLayout.map((item) => (
+                                <g key={item.type}>
+                                  <polyline
+                                    points={`${item.startX},${item.startY} ${item.bendX},${item.bendY} ${item.endX},${item.endY}`}
+                                    fill="none"
+                                    stroke="#bfbfbf"
+                                    strokeWidth="0.6"
+                                  />
+                                  <text
+                                    x={item.textX}
+                                    y={item.textY}
+                                    textAnchor={item.textAnchor}
+                                    dominantBaseline="middle"
+                                    fontSize="4"
+                                    fontWeight="600"
+                                    fill="#595959"
+                                  >
+                                    <tspan x={item.textX} dy="0">
+                                      {item.type}
+                                    </tspan>
+                                    {item.percentBelow ? (
+                                      <tspan x={item.textX} dy="4.6">
+                                        {item.percentText}
+                                      </tspan>
+                                    ) : (
+                                      <tspan dx="1.4">{item.percentText}</tspan>
+                                    )}
+                                  </text>
+                                </g>
+                              ))}
+                            </svg>
+                          </div>
                         </Space>
                       ) : (
                         <Empty description="暂无薪资构成数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
