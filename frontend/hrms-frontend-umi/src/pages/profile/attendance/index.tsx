@@ -3,6 +3,7 @@
  * 考勤日历月视图 + 打卡 + 补卡申请 + 加班申请
  */
 
+import { usePageAutoRefresh } from '@/hooks/usePageAutoRefresh';
 import {
   CheckCircleOutlined,
   ClockCircleOutlined,
@@ -42,7 +43,14 @@ import {
   getMakeupRecords,
   getOvertimeRecords,
 } from '@/services/profile';
-import type { MakeupRequest, OvertimeRequest } from '@/services/profile';
+import type {
+  AttendanceCalendarVO,
+  AttendanceDayVO,
+  MakeupRecordVO,
+  MakeupRequest,
+  OvertimeRecordVO,
+  OvertimeRequest,
+} from '@/services/profile';
 
 const { Text, Title } = Typography;
 
@@ -76,25 +84,38 @@ const ProfileAttendancePage: React.FC = () => {
   const [makeupForm] = Form.useForm();
 
   // 考勤日历
-  const { data: calendarData, loading: calendarLoading, refresh: refreshCalendar } = useRequest(
-    () => getAttendanceCalendar(currentMonth),
-  );
+  const {
+    data: calendarData,
+    loading: calendarLoading,
+    refresh: refreshCalendar,
+  } = useRequest<AttendanceCalendarVO>(() => getAttendanceCalendar(currentMonth));
 
   // 补卡记录
-  const { data: makeupData, loading: makeupLoading, refresh: refreshMakeup } = useRequest(
-    getMakeupRecords,
-  );
+  const {
+    data: makeupData,
+    loading: makeupLoading,
+    refresh: refreshMakeup,
+  } = useRequest<MakeupRecordVO[]>(getMakeupRecords);
 
   // 加班记录
   const [overtimeModalOpen, setOvertimeModalOpen] = useState(false);
   const [overtimeForm] = Form.useForm();
 
-  const { data: overtimeData, loading: overtimeLoading, refresh: refreshOvertime } = useRequest(
-    getOvertimeRecords,
-  );
+  const {
+    data: overtimeData,
+    loading: overtimeLoading,
+    refresh: refreshOvertime,
+  } = useRequest<OvertimeRecordVO[]>(getOvertimeRecords);
 
-  const calendar = calendarData;
-  const makeupRecords = makeupData || [];
+  usePageAutoRefresh(() => {
+    refreshCalendar();
+    refreshMakeup();
+    refreshOvertime();
+  });
+
+  const calendar = calendarData as AttendanceCalendarVO | undefined;
+  const makeupRecords = (makeupData as MakeupRecordVO[] | undefined) || [];
+  const overtimeRecords = (overtimeData as OvertimeRecordVO[] | undefined) || [];
 
   // ============ 打卡 ============
 
@@ -151,7 +172,7 @@ const ProfileAttendancePage: React.FC = () => {
 
   // ============ 日历渲染 ============
 
-  const calendarDays = useMemo(() => {
+  const calendarDays = useMemo<AttendanceDayVO[]>(() => {
     if (!calendar?.days) return [];
     return calendar.days;
   }, [calendar]);
@@ -436,7 +457,7 @@ const ProfileAttendancePage: React.FC = () => {
         style={{ marginTop: 16 }}
       >
         <Table
-          dataSource={overtimeData || []}
+          dataSource={overtimeRecords}
           columns={[
             { title: '加班日期', dataIndex: 'overtimeDate', key: 'overtimeDate', width: 170, render: (t: string) => t || '-' },
             { title: '时长(小时)', dataIndex: 'duration', key: 'duration', width: 100 },

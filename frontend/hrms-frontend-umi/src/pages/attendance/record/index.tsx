@@ -1,3 +1,4 @@
+import { usePageAutoRefresh } from '@/hooks/usePageAutoRefresh';
 import type {
   AttendanceGroup,
   AttendanceGroupRecord,
@@ -15,6 +16,7 @@ import {
 } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
 import { history, useRequest } from '@umijs/max';
+import type { PageResult } from '@/types/api';
 import {
   Button,
   Card,
@@ -67,6 +69,8 @@ interface RecordQueryState {
   pageSize: number;
 }
 
+interface StoredRecordQueryState extends Partial<RecordQueryState> {}
+
 const statusMeta: Record<string, { label: string; color: string; desc: string }> = {
   NORMAL: { label: '正常', color: 'success', desc: '上下班均正常' },
   LATE: { label: '迟到', color: 'warning', desc: '上班状态为迟到' },
@@ -82,11 +86,20 @@ const statusOptions = Object.entries(statusMeta).map(([value, meta]) => ({
   value,
 }));
 
+const RECORD_QUERY_STORAGE_PREFIX = 'attendance-record-query';
+
 function normalizeGroups(pageData: AttendanceGroupPageLike) {
   if (Array.isArray(pageData)) return pageData;
-  if (Array.isArray(pageData?.records)) return pageData.records;
-  if (Array.isArray(pageData?.data)) return pageData.data;
-  if (Array.isArray(pageData?.data?.records)) return pageData.data.records;
+  if (!pageData) return [];
+  if (Array.isArray(pageData.records)) return pageData.records;
+  if (Array.isArray(pageData.data)) return pageData.data;
+  if (
+    pageData.data &&
+    !Array.isArray(pageData.data) &&
+    Array.isArray(pageData.data.records)
+  ) {
+    return pageData.data.records;
+  }
   return [];
 }
 
@@ -94,6 +107,40 @@ function parseUrlGroupId() {
   const groupId = new URLSearchParams(history.location.search).get('groupId');
   const parsed = Number(groupId);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function resolveRecordQueryStorageKey() {
+  const userInfoText = localStorage.getItem('userInfo');
+  if (!userInfoText) {
+    return `${RECORD_QUERY_STORAGE_PREFIX}:anonymous`;
+  }
+
+  try {
+    const userInfo = JSON.parse(userInfoText) as {
+      userId?: number | string;
+      id?: number | string;
+      username?: string;
+    };
+    const identity = userInfo.userId || userInfo.id || userInfo.username || 'anonymous';
+    return `${RECORD_QUERY_STORAGE_PREFIX}:${identity}`;
+  } catch {
+    return `${RECORD_QUERY_STORAGE_PREFIX}:anonymous`;
+  }
+}
+
+function getStoredRecordQuery(): StoredRecordQueryState {
+  const storageKey = resolveRecordQueryStorageKey();
+  const storedText = sessionStorage.getItem(storageKey);
+  if (!storedText) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(storedText) as StoredRecordQueryState;
+  } catch {
+    sessionStorage.removeItem(storageKey);
+    return {};
+  }
 }
 
 function formatBackendDate(value?: string | number[]) {
@@ -142,14 +189,24 @@ function buildRecordQuery(query: RecordQueryState): AttendanceGroupRecordQuery {
 
 const AttendanceRecordPage: React.FC = () => {
   const [form] = Form.useForm<RecordFilterValues>();
+  const storedQuery = getStoredRecordQuery();
   const [query, setQuery] = useState<RecordQueryState>({
-    groupId: parseUrlGroupId(),
-    yearMonth: dayjs().format('YYYY-MM'),
-    pageNum: 1,
-    pageSize: 10,
+    groupId: parseUrlGroupId() ?? storedQuery.groupId,
+    yearMonth: storedQuery.yearMonth || dayjs().format('YYYY-MM'),
+    dateStart: storedQuery.dateStart,
+    dateEnd: storedQuery.dateEnd,
+    keyword: storedQuery.keyword,
+    departmentId: storedQuery.departmentId,
+    status: storedQuery.status,
+    pageNum: storedQuery.pageNum || 1,
+    pageSize: storedQuery.pageSize || 10,
   });
 
-  const { data: groupData, loading: groupLoading } = useRequest(
+  const {
+    data: groupData,
+    loading: groupLoading,
+    refresh: refreshGroups,
+  } = useRequest(
     () => getAttendanceGroups({ pageNum: 1, pageSize: 100 }),
     {
       onError: (error) => {
@@ -163,21 +220,40 @@ const AttendanceRecordPage: React.FC = () => {
   }, [groupData]);
 
   useEffect(() => {
-    if (query.groupId || groups.length === 0) return;
+    if (groups.length === 0) return;
+    if (query.groupId && groups.some((item) => item.id === query.groupId)) return;
     const firstGroupId = groups[0].id;
-    setQuery((previous) => ({ ...previous, groupId: firstGroupId }));
-    form.setFieldsValue({ groupId: firstGroupId });
-  }, [form, groups, query.groupId]);
+    setQuery((previous) => ({ ...previous, groupId: firstGroupId, pageNum: 1 }));
+  }, [groups, query.groupId]);
 
   useEffect(() => {
-    if (!query.groupId) return;
     form.setFieldsValue({
       groupId: query.groupId,
-      yearMonth: dayjs(query.yearMonth),
+      yearMonth: dayjs(query.yearMonth, 'YYYY-MM'),
+      dateRange:
+        query.dateStart && query.dateEnd
+          ? [dayjs(query.dateStart, 'YYYY-MM-DD'), dayjs(query.dateEnd, 'YYYY-MM-DD')]
+          : undefined,
+      keyword: query.keyword,
+      departmentId: query.departmentId,
+      status: query.status,
     });
-  }, [form, query.groupId, query.yearMonth]);
+  }, [
+    form,
+    query.dateEnd,
+    query.dateStart,
+    query.departmentId,
+    query.groupId,
+    query.keyword,
+    query.status,
+    query.yearMonth,
+  ]);
 
-  const { data: recordData, loading: recordLoading } = useRequest(
+  const {
+    data: recordData,
+    loading: recordLoading,
+    refresh: refreshRecords,
+  } = useRequest(
     () => {
       if (!query.groupId) {
         return Promise.resolve({
@@ -196,6 +272,20 @@ const AttendanceRecordPage: React.FC = () => {
       },
     },
   );
+
+  useEffect(() => {
+    const storageKey = resolveRecordQueryStorageKey();
+    sessionStorage.setItem(storageKey, JSON.stringify(query));
+  }, [query]);
+
+  usePageAutoRefresh(() => {
+    refreshGroups();
+    if (query.groupId) {
+      refreshRecords();
+    }
+  });
+
+  const tablePageData = recordData as PageResult<AttendanceGroupRecord> | undefined;
 
   const selectedGroup = groups.find((item) => item.id === query.groupId);
 
@@ -269,14 +359,6 @@ const AttendanceRecordPage: React.FC = () => {
 
   const handleReset = () => {
     const nextGroupId = query.groupId || groups[0]?.id;
-    form.setFieldsValue({
-      groupId: nextGroupId,
-      yearMonth: dayjs(),
-      dateRange: undefined,
-      keyword: undefined,
-      departmentId: undefined,
-      status: undefined,
-    });
     setQuery({
       groupId: nextGroupId,
       yearMonth: dayjs().format('YYYY-MM'),
@@ -398,13 +480,13 @@ const AttendanceRecordPage: React.FC = () => {
             String(record.recordId || `${record.employeeId}-${formatBackendDate(record.recordDate)}`)
           }
           columns={columns}
-          dataSource={recordData?.records || []}
+          dataSource={tablePageData?.records || []}
           loading={recordLoading || groupLoading}
           scroll={{ x: 1180 }}
           pagination={{
-            current: recordData?.pageNum || query.pageNum,
-            pageSize: recordData?.pageSize || query.pageSize,
-            total: recordData?.total || 0,
+            current: tablePageData?.pageNum || query.pageNum,
+            pageSize: tablePageData?.pageSize || query.pageSize,
+            total: tablePageData?.total || 0,
             showSizeChanger: true,
             showTotal: (total) => `共 ${total} 条`,
             onChange: (pageNum, pageSize) => {

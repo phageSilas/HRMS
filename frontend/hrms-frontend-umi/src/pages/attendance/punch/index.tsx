@@ -1,3 +1,4 @@
+import { usePageAutoRefresh } from '@/hooks/usePageAutoRefresh';
 import type {
   AttendanceCalendarDayVO,
   AttendanceClockVO,
@@ -66,7 +67,6 @@ interface LocationState {
   location?: AmapLocationResult;
 }
 
-type MergedTodayRecord = AttendanceCalendarDayVO;
 type ClockPeriod = 'CLOCK_IN' | 'CLOCK_OUT';
 type BackendDateValue = string | number[] | Date | undefined | null;
 type ClockResponsePayload =
@@ -199,9 +199,6 @@ const AttendancePunchPage: React.FC = () => {
   const [now, setNow] = useState(dayjs());
   const currentDate = now.format('YYYY-MM-DD');
   const currentMonth = now.format('YYYY-MM');
-  const [localTodayRecord, setLocalTodayRecord] = useState<
-    MergedTodayRecord | undefined
-  >();
   const [clocking, setClocking] = useState(false);
   const [locationState, setLocationState] = useState<LocationState>({
     status: 'idle',
@@ -216,38 +213,21 @@ const AttendancePunchPage: React.FC = () => {
     refreshDeps: [currentMonth],
   });
 
+  const calendarData = calendar as
+    | {
+        days?: AttendanceCalendarDayVO[];
+      }
+    | undefined;
+
+  usePageAutoRefresh(() => {
+    refresh();
+  });
+
   const todayRecord = useMemo<AttendanceCalendarDayVO | undefined>(() => {
-    return calendar?.days?.find(
+    return calendarData?.days?.find(
       (item) => normalizeDate(item.date as BackendDateValue) === currentDate,
     );
-  }, [calendar?.days, currentDate]);
-
-  const mergedTodayRecord = useMemo<MergedTodayRecord | undefined>(() => {
-    const baseRecord: MergedTodayRecord = todayRecord
-      ? { ...todayRecord }
-      : { date: currentDate };
-
-    if (
-      !localTodayRecord ||
-      normalizeDate(localTodayRecord.date as BackendDateValue) !== currentDate
-    ) {
-      return todayRecord ? baseRecord : undefined;
-    }
-
-    return {
-      ...baseRecord,
-      ...localTodayRecord,
-      clockInTime: localTodayRecord.clockInTime ?? baseRecord.clockInTime,
-      clockInStatus:
-        localTodayRecord.clockInStatus ?? baseRecord.clockInStatus,
-      clockInIp: localTodayRecord.clockInIp ?? baseRecord.clockInIp,
-      clockOutTime: localTodayRecord.clockOutTime ?? baseRecord.clockOutTime,
-      clockOutStatus:
-        localTodayRecord.clockOutStatus ?? baseRecord.clockOutStatus,
-      clockOutIp: localTodayRecord.clockOutIp ?? baseRecord.clockOutIp,
-      dayStatus: localTodayRecord.dayStatus ?? baseRecord.dayStatus,
-    };
-  }, [currentDate, localTodayRecord, todayRecord]);
+  }, [calendarData?.days, currentDate]);
 
   const handleSubmitClock = async (type: ClockPeriod) => {
     if (clocking) return;
@@ -295,36 +275,6 @@ const AttendancePunchPage: React.FC = () => {
       const networkIp = getClockIp(result);
       const locationDetail = formatLocationDetail(location);
 
-      setLocalTodayRecord((previous) => {
-        const todayLocalRecord =
-          normalizeDate(previous?.date as BackendDateValue) === currentDate
-            ? previous
-            : undefined;
-        const baseRecord: MergedTodayRecord = {
-          date: currentDate,
-          ...(todayRecord || {}),
-          ...(todayLocalRecord || {}),
-        };
-
-        if (result.period === 'CLOCK_OUT') {
-          return {
-            ...baseRecord,
-            clockOutTime: result.clockTime,
-            clockOutStatus: result.status,
-            clockOutIp: networkIp,
-            dayStatus: result.status || baseRecord.dayStatus,
-          };
-        }
-
-        return {
-          ...baseRecord,
-          clockInTime: result.clockTime,
-          clockInStatus: result.status,
-          clockInIp: networkIp,
-          dayStatus: result.status || baseRecord.dayStatus,
-        };
-      });
-
       Modal.success({
         title: `${label}成功`,
         content: (
@@ -358,19 +308,14 @@ const AttendancePunchPage: React.FC = () => {
     return () => window.clearInterval(timer);
   }, []);
 
-  useEffect(() => {
-    setLocalTodayRecord(undefined);
-  }, [currentDate]);
-
   const latestNetworkIp =
-    mergedTodayRecord?.clockOutIp || mergedTodayRecord?.clockInIp;
-  const clockInDone = Boolean(mergedTodayRecord?.clockInTime);
-  const clockOutDone = Boolean(mergedTodayRecord?.clockOutTime);
+    todayRecord?.clockOutIp || todayRecord?.clockInIp;
+  const clockInDone = Boolean(todayRecord?.clockInTime);
+  const clockOutDone = Boolean(todayRecord?.clockOutTime);
   const nextClockType: ClockPeriod = clockInDone ? 'CLOCK_OUT' : 'CLOCK_IN';
   const nextClockText = clockInDone ? '下班打卡' : '上班打卡';
   const dayStatus =
-    mergedTodayRecord?.dayStatus ||
-    (clockInDone || clockOutDone ? 'NORMAL' : undefined);
+    todayRecord?.dayStatus || (clockInDone || clockOutDone ? 'NORMAL' : undefined);
 
   return (
     <div className={styles.punchPage}>
@@ -415,22 +360,18 @@ const AttendancePunchPage: React.FC = () => {
                         }
                       >
                         {formatTime(
-                          mergedTodayRecord?.clockInTime as BackendDateValue,
+                          todayRecord?.clockInTime as BackendDateValue,
                         )}
                       </div>
                       <Tag
                         color={
                           clockInDone
-                            ? STATUS_COLOR_MAP[
-                                mergedTodayRecord?.clockInStatus || 'NORMAL'
-                              ]
+                            ? STATUS_COLOR_MAP[todayRecord?.clockInStatus || 'NORMAL']
                             : 'default'
                         }
                       >
                         {clockInDone
-                          ? getStatusLabel(
-                              mergedTodayRecord?.clockInStatus || 'NORMAL',
-                            )
+                          ? getStatusLabel(todayRecord?.clockInStatus || 'NORMAL')
                           : '待打卡'}
                       </Tag>
                     </div>
@@ -457,22 +398,18 @@ const AttendancePunchPage: React.FC = () => {
                         }
                       >
                         {formatTime(
-                          mergedTodayRecord?.clockOutTime as BackendDateValue,
+                          todayRecord?.clockOutTime as BackendDateValue,
                         )}
                       </div>
                       <Tag
                         color={
                           clockOutDone
-                            ? STATUS_COLOR_MAP[
-                                mergedTodayRecord?.clockOutStatus || 'NORMAL'
-                              ]
+                            ? STATUS_COLOR_MAP[todayRecord?.clockOutStatus || 'NORMAL']
                             : 'default'
                         }
                       >
                         {clockOutDone
-                          ? getStatusLabel(
-                              mergedTodayRecord?.clockOutStatus || 'NORMAL',
-                            )
+                          ? getStatusLabel(todayRecord?.clockOutStatus || 'NORMAL')
                           : '待打卡'}
                       </Tag>
                     </div>
@@ -556,7 +493,7 @@ const AttendancePunchPage: React.FC = () => {
                 <div>
                   <div className={styles.recordTime}>
                     {formatTime(
-                      mergedTodayRecord?.clockInTime as BackendDateValue,
+                      todayRecord?.clockInTime as BackendDateValue,
                     )}
                   </div>
                   <div className={styles.recordMeta}>
@@ -564,23 +501,17 @@ const AttendancePunchPage: React.FC = () => {
                     <Tag
                       color={
                         clockInDone
-                          ? STATUS_COLOR_MAP[
-                              mergedTodayRecord?.clockInStatus || 'NORMAL'
-                            ]
+                          ? STATUS_COLOR_MAP[todayRecord?.clockInStatus || 'NORMAL']
                           : 'default'
                       }
                     >
                       {clockInDone
-                        ? getStatusLabel(
-                            mergedTodayRecord?.clockInStatus || 'NORMAL',
-                          )
+                        ? getStatusLabel(todayRecord?.clockInStatus || 'NORMAL')
                         : '未打卡'}
                     </Tag>
                   </div>
                 </div>
-                <Text type="secondary">
-                  {mergedTodayRecord?.clockInIp || '--'}
-                </Text>
+                <Text type="secondary">{todayRecord?.clockInIp || '--'}</Text>
               </div>
 
               <div className={styles.timelineItem}>
@@ -594,7 +525,7 @@ const AttendancePunchPage: React.FC = () => {
                 <div>
                   <div className={styles.recordTime}>
                     {formatTime(
-                      mergedTodayRecord?.clockOutTime as BackendDateValue,
+                      todayRecord?.clockOutTime as BackendDateValue,
                     )}
                   </div>
                   <div className={styles.recordMeta}>
@@ -602,23 +533,17 @@ const AttendancePunchPage: React.FC = () => {
                     <Tag
                       color={
                         clockOutDone
-                          ? STATUS_COLOR_MAP[
-                              mergedTodayRecord?.clockOutStatus || 'NORMAL'
-                            ]
+                          ? STATUS_COLOR_MAP[todayRecord?.clockOutStatus || 'NORMAL']
                           : 'default'
                       }
                     >
                       {clockOutDone
-                        ? getStatusLabel(
-                            mergedTodayRecord?.clockOutStatus || 'NORMAL',
-                          )
+                        ? getStatusLabel(todayRecord?.clockOutStatus || 'NORMAL')
                         : '未打卡'}
                     </Tag>
                   </div>
                 </div>
-                <Text type="secondary">
-                  {mergedTodayRecord?.clockOutIp || '--'}
-                </Text>
+                <Text type="secondary">{todayRecord?.clockOutIp || '--'}</Text>
               </div>
             </div>
 

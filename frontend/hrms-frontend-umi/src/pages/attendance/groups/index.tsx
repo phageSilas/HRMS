@@ -1,3 +1,4 @@
+import { usePageAutoRefresh } from '@/hooks/usePageAutoRefresh';
 import type {
   AttendanceGroup,
   AttendanceGroupRequest,
@@ -108,9 +109,16 @@ function getShiftMeta(type?: string) {
 
 function normalizeGroups(pageData: AttendanceGroupPageLike) {
   if (Array.isArray(pageData)) return pageData;
-  if (Array.isArray(pageData?.records)) return pageData.records;
-  if (Array.isArray(pageData?.data)) return pageData.data;
-  if (Array.isArray(pageData?.data?.records)) return pageData.data.records;
+  if (!pageData) return [];
+  if (Array.isArray(pageData.records)) return pageData.records;
+  if (Array.isArray(pageData.data)) return pageData.data;
+  if (
+    pageData.data &&
+    !Array.isArray(pageData.data) &&
+    Array.isArray(pageData.data.records)
+  ) {
+    return pageData.data.records;
+  }
   return [];
 }
 
@@ -124,6 +132,10 @@ const AttendanceGroupsPage: React.FC = () => {
     () => getAttendanceGroups(query),
     { refreshDeps: [query] },
   );
+
+  usePageAutoRefresh(() => {
+    refresh();
+  });
 
   const groups = useMemo(() => {
     return normalizeGroups(data as AttendanceGroupPageLike);
