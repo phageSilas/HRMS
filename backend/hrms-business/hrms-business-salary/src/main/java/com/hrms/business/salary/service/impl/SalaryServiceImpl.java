@@ -1684,8 +1684,16 @@ public class SalaryServiceImpl implements SalaryService {
         if (employee == null || employee.getDeptId() == null) {
             return null;
         }
-        DeptDetailVO dept = deptService.getDeptById(employee.getDeptId());
-        return dept == null ? null : dept.getDeptName();
+        try {
+            DeptDetailVO dept = deptService.getDeptById(employee.getDeptId());
+            return dept == null ? null : dept.getDeptName();
+        } catch (GlobalException ex) {
+            if (ex.getErrorCode() != null && ex.getErrorCode().getCode() == ErrorCode.NOT_FOUND.getCode()) {
+                log.warn("Salary preview dept missing, employeeId={}, deptId={}", employee.getId(), employee.getDeptId());
+                return "未知部门";
+            }
+            throw ex;
+        }
     }
 
     private void evictTemplateCache(Long templateId) {
