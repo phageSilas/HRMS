@@ -9,6 +9,7 @@ import com.hrms.business.salary.dto.SalaryTemplateQueryDTO;
 import com.hrms.business.salary.vo.EmployeeSalaryProfileVO;
 import com.hrms.business.salary.vo.SalaryBatchItemVO;
 import com.hrms.business.salary.vo.SalaryBatchPreviewVO;
+import com.hrms.business.salary.vo.SalaryBatchTrendVO;
 import com.hrms.business.salary.vo.SalaryBatchVO;
 import com.hrms.business.salary.vo.SalaryPayslipDetailVO;
 import com.hrms.business.salary.vo.SalaryPayslipListVO;
@@ -90,6 +91,18 @@ public interface SalaryService {
      * 本方法使用的工具类: 无
      */
     SalaryBatchVO getCurrentBatch(String salaryMonth, String scopeType, String scopeValue);
+
+    /**
+     * 查询管理端跨月份薪资趋势。
+     *
+     * @param anchorMonth 统计截止月份
+     * @param months      向前统计月数
+     * @param scopeType   核算范围类型
+     * @param scopeValue  核算范围值
+     * @return 薪资趋势列表
+     * 本方法使用的工具类: List(JDK)
+     */
+    List<SalaryBatchTrendVO> listBatchTrend(String anchorMonth, Integer months, String scopeType, String scopeValue);
 
     /**
      * 保存薪资批次人工调整。

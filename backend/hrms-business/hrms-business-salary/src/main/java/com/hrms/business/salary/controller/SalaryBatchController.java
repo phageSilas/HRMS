@@ -5,6 +5,7 @@ import com.hrms.business.salary.dto.SalaryBatchAdjustmentRequestDTO;
 import com.hrms.business.salary.service.SalaryService;
 import com.hrms.business.salary.vo.SalaryBatchItemVO;
 import com.hrms.business.salary.vo.SalaryBatchPreviewVO;
+import com.hrms.business.salary.vo.SalaryBatchTrendVO;
 import com.hrms.business.salary.vo.SalaryBatchVO;
 import com.hrms.common.web.Result;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -17,6 +18,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /**
  * 薪资核算批次控制器。
@@ -55,6 +58,24 @@ public class SalaryBatchController {
                                                  @RequestParam(required = false) String scopeType,
                                                  @RequestParam(required = false) String scopeValue) {
         return Result.success(salaryService.getCurrentBatch(salaryMonth, scopeType, scopeValue));
+    }
+
+    /**
+     * 查询管理端跨月份薪资趋势。
+     *
+     * @param anchorMonth 统计截止月份
+     * @param months      向前统计月数
+     * @param scopeType   核算范围类型
+     * @param scopeValue  核算范围值
+     * @return 薪资趋势列表
+     * 本方法使用的工具类: Result(hrms-common),List(JDK)
+     */
+    @GetMapping("/trend")
+    public Result<List<SalaryBatchTrendVO>> listBatchTrend(@RequestParam String anchorMonth,
+                                                           @RequestParam(required = false) Integer months,
+                                                           @RequestParam(required = false) String scopeType,
+                                                           @RequestParam(required = false) String scopeValue) {
+        return Result.success(salaryService.listBatchTrend(anchorMonth, months, scopeType, scopeValue));
     }
 
     /**

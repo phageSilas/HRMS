@@ -43,6 +43,7 @@ import com.hrms.business.salary.service.SalaryService;
 import com.hrms.business.salary.vo.EmployeeSalaryProfileVO;
 import com.hrms.business.salary.vo.SalaryBatchItemVO;
 import com.hrms.business.salary.vo.SalaryBatchPreviewVO;
+import com.hrms.business.salary.vo.SalaryBatchTrendVO;
 import com.hrms.business.salary.vo.SalaryBatchVO;
 import com.hrms.business.salary.vo.SalaryPayslipDetailVO;
 import com.hrms.business.salary.vo.SalaryPayslipListVO;
@@ -328,6 +329,40 @@ public class SalaryServiceImpl implements SalaryService {
                 .orderByDesc(SalaryBatchEntity::getId)
                 .last("LIMIT 1"));
         return batch == null ? null : toBatchVO(batch);
+    }
+
+    /**
+     * 查询管理端跨月份薪资趋势。
+     *
+     * @param anchorMonth 统计截止月份
+     * @param months      向前统计月数
+     * @param scopeType   核算范围类型
+     * @param scopeValue  核算范围值
+     * @return 薪资趋势列表
+     * 本方法使用的工具类: YearMonth(JDK),Wrappers(MyBatis-Plus),Collectors(JDK)
+     */
+    @Override
+    public List<SalaryBatchTrendVO> listBatchTrend(String anchorMonth, Integer months, String scopeType, String scopeValue) {
+        assertSalaryManagerRole();
+        YearMonth endMonth = YearMonth.parse(normalizeMonth(anchorMonth));
+        int monthCount = normalizeTrendMonths(months);
+        YearMonth startMonth = endMonth.minusMonths(monthCount - 1L);
+        String normalizedScopeType = normalizeScopeType(scopeType);
+        String normalizedScopeValue = normalizeBatchScopeValue(normalizedScopeType, scopeValue);
+        List<SalaryBatchEntity> batches = salaryBatchMapper.selectList(Wrappers.lambdaQuery(SalaryBatchEntity.class)
+                .ge(SalaryBatchEntity::getSalaryMonth, startMonth.toString())
+                .le(SalaryBatchEntity::getSalaryMonth, endMonth.toString())
+                .eq(SalaryBatchEntity::getScopeType, normalizedScopeType)
+                .eq(StrUtil.isNotBlank(normalizedScopeValue), SalaryBatchEntity::getScopeValue, normalizedScopeValue)
+                .notIn(SalaryBatchEntity::getBatchStatus, SalaryBatchStatusEnum.ARCHIVED.name()));
+        Map<String, List<SalaryBatchEntity>> monthBatchMap = batches.stream()
+                .collect(Collectors.groupingBy(SalaryBatchEntity::getSalaryMonth));
+        List<SalaryBatchTrendVO> trends = new ArrayList<>();
+        for (int index = 0; index < monthCount; index++) {
+            String trendMonth = startMonth.plusMonths(index).toString();
+            trends.add(buildBatchTrend(trendMonth, monthBatchMap.getOrDefault(trendMonth, List.of())));
+        }
+        return trends;
     }
 
     /**
@@ -1400,6 +1435,46 @@ public class SalaryServiceImpl implements SalaryService {
         if (!allowed) {
             throw new GlobalException(ErrorCode.FORBIDDEN, "无薪资管理权限");
         }
+    }
+
+    /**
+     * 规范化薪资趋势月份数量。
+     *
+     * @param months 月份数量
+     * @return 规范化后的月份数量
+     * 本方法使用的工具类: 无
+     */
+    private int normalizeTrendMonths(Integer months) {
+        int value = Optional.ofNullable(months).orElse(6);
+        if (value < 1 || value > 24) {
+            throw new GlobalException(ErrorCode.PARAM_FORMAT_ERROR, "趋势月份数量必须在 1 到 24 之间");
+        }
+        return value;
+    }
+
+    /**
+     * 构建单月薪资趋势。
+     *
+     * @param month   薪资月份
+     * @param batches 当月薪资批次
+     * @return 单月薪资趋势
+     * 本方法使用的工具类: BigDecimal(JDK)
+     */
+    private SalaryBatchTrendVO buildBatchTrend(String month, List<SalaryBatchEntity> batches) {
+        BigDecimal grossSalary = ZERO;
+        BigDecimal netSalary = ZERO;
+        int employeeCount = 0;
+        for (SalaryBatchEntity batch : batches) {
+            grossSalary = grossSalary.add(money(batch.getTotalGrossSalary()));
+            netSalary = netSalary.add(money(batch.getTotalNetSalary()));
+            employeeCount += Optional.ofNullable(batch.getTotalCount()).orElse(0);
+        }
+        return SalaryBatchTrendVO.builder()
+                .month(month)
+                .grossSalary(money(grossSalary))
+                .netSalary(money(netSalary))
+                .employeeCount(employeeCount)
+                .build();
     }
 
     /**
