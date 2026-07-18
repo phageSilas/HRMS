@@ -5,6 +5,7 @@ import com.hrms.business.salary.dto.SalaryBatchAdjustmentRequestDTO;
 import com.hrms.business.salary.dto.SalaryBatchCreateRequestDTO;
 import com.hrms.business.salary.dto.SalaryManagePayslipQueryDTO;
 import com.hrms.business.salary.dto.SalaryManagePayslipVerifyRequestDTO;
+import com.hrms.business.salary.dto.SalaryPayslipPageQueryDTO;
 import com.hrms.business.salary.dto.SalaryPayslipVerifyRequestDTO;
 import com.hrms.business.salary.dto.SalaryTemplateCreateOrUpdateRequestDTO;
 import com.hrms.business.salary.dto.SalaryTemplateQueryDTO;
@@ -161,6 +162,15 @@ public interface SalaryService {
      * 本方法使用的工具类: List(JDK)
      */
     List<SalaryPayslipListVO> listPayslips(String month);
+
+    /**
+     * 分页查询当前员工工资条列表。
+     *
+     * @param queryDTO 查询参数
+     * @return 工资条分页结果
+     * 本方法使用的工具类: PageResult(hrms-common)
+     */
+    PageResult<SalaryPayslipListVO> pagePayslips(SalaryPayslipPageQueryDTO queryDTO);
 
     /**
      * 工资条二次验证。
