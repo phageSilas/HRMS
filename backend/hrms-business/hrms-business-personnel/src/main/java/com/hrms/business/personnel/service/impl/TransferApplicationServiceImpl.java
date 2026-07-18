@@ -20,7 +20,7 @@ import com.hrms.business.personnel.entity.TransferApplicationEntity;
 import com.hrms.business.personnel.enums.ApplicationStatusEnum;
 import com.hrms.business.personnel.mapper.EmployeeSnapshotMapper;
 import com.hrms.business.personnel.mapper.TransferApplicationMapper;
-import com.hrms.business.personnel.service.PersonnelDisplayEnricher;
+import com.hrms.business.personnel.convert.PersonnelDisplayEnricher;
 import com.hrms.business.personnel.service.TransferApplicationService;
 import com.hrms.business.personnel.vo.TransferApplicationCreateVO;
 import com.hrms.business.personnel.vo.TransferApplicationPageVO;

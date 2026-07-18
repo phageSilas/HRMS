@@ -29,7 +29,6 @@ import { useSearchParams } from '@umijs/max';
 import { Button, Card, Col, Row, Space, Tag, Typography, message } from 'antd';
 import React, { useEffect, useRef, useState } from 'react';
 import { formatProcessDateTime } from '../utils';
-import React, { useRef, useState } from 'react';
 
 const { Text } = Typography;
 

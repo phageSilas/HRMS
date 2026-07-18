@@ -22,7 +22,7 @@ import com.hrms.business.personnel.enums.LeaveTypeEnum;
 import com.hrms.business.personnel.mapper.EmployeeSnapshotMapper;
 import com.hrms.business.personnel.mapper.LeaveApplicationMapper;
 import com.hrms.business.personnel.service.LeaveApplicationService;
-import com.hrms.business.personnel.service.PersonnelDisplayEnricher;
+import com.hrms.business.personnel.convert.PersonnelDisplayEnricher;
 import com.hrms.business.personnel.vo.LeaveApplicationCreateVO;
 import com.hrms.business.personnel.vo.LeaveApplicationPageVO;
 import com.hrms.common.exception.ErrorCode;
