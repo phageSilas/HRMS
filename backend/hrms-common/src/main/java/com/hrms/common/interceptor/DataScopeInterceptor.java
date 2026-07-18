@@ -143,8 +143,8 @@ public class DataScopeInterceptor implements InnerInterceptor {
 
         try {
             // 使用 SqlSession 直接查询角色的 data_scope
-            // 取最小值（最严格的权限）
-            String sql = "SELECT MIN(data_scope) FROM sys_role WHERE id IN " +
+            // 取最大值（权限合并原则：多角色时继承最宽权限）
+            String sql = "SELECT MAX(data_scope) FROM sys_role WHERE id IN " +
                          "(" + String.join(",", java.util.Collections.nCopies(roleIds.size(), "?")) + ")" +
                          " AND status = 1 AND is_deleted = 0";
 
