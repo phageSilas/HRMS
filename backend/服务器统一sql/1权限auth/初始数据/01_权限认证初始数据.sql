@@ -17,10 +17,7 @@ INSERT INTO `sys_role` (`id`, `role_name`, `role_code`, `data_scope`, `status`, 
 (2, 'HR专员', 'HR', 3, 1, 2, 1, 1, 0, 0, '负责人力资源管理，可查看本部门及下属部门数据'),
 (3, '部门主管', 'MANAGER', 3, 1, 3, 1, 1, 0, 0, '负责部门管理和审批，可查看本部门及下属部门数据'),
 (4, '财务专员', 'FINANCE', 2, 1, 4, 1, 1, 0, 0, '负责薪资核算和财务相关业务，可查看本部门数据'),
-(5, '普通员工', 'EMPLOYEE', 1, 1, 5, 1, 1, 0, 0, '普通员工角色，仅可查看本人数据'),
-(10, 'HR负责人', 'HR_HEAD', 3, 1, 10, 1, 1, 0, 0, 'HR部门负责人，审批权限'),
-(11, '财务负责人', 'FINANCE_HEAD', 3, 1, 11, 1, 1, 0, 0, '财务部门负责人，审批权限'),
-(12, '老板', 'BOSS', 4, 1, 12, 1, 1, 0, 0, '公司最高管理者，全部权限')
+(5, '普通员工', 'EMPLOYEE', 1, 1, 5, 1, 1, 0, 0, '普通员工角色，仅可查看本人数据')
 ON DUPLICATE KEY UPDATE `role_name` = VALUES(`role_name`), `data_scope` = VALUES(`data_scope`), `status` = VALUES(`status`), `remark` = VALUES(`remark`), `update_by` = VALUES(`update_by`), `is_deleted` = VALUES(`is_deleted`);
 
 INSERT INTO `sys_menu` (`id`, `parent_id`, `menu_name`, `menu_type`, `path`, `component`, `permission`, `icon`, `sort_no`, `visible`, `status`, `create_by`, `update_by`, `is_deleted`, `version`, `remark`) VALUES
@@ -100,39 +97,21 @@ ON DUPLICATE KEY UPDATE `nickname` = VALUES(`nickname`), `real_name` = VALUES(`r
 
 INSERT INTO `sys_user_role` (`id`, `user_id`, `role_id`, `create_by`, `update_by`, `is_deleted`, `version`) VALUES
 (50001, 1, 1, 1, 1, 0, 0),
-(50006, 1, 12, 1, 1, 0, 0),
 (50007, 11001, 2, 1, 1, 0, 0),
-(50008, 11001, 5, 1, 1, 0, 0),
-(50009, 11001, 10, 1, 1, 0, 0),
 (50010, 11002, 2, 1, 1, 0, 0),
-(50011, 11002, 5, 1, 1, 0, 0),
 (50012, 11003, 2, 1, 1, 0, 0),
-(50013, 11003, 5, 1, 1, 0, 0),
 (50014, 11004, 2, 1, 1, 0, 0),
-(50015, 11004, 5, 1, 1, 0, 0),
 (50016, 11005, 2, 1, 1, 0, 0),
-(50017, 11005, 5, 1, 1, 0, 0),
 (50018, 12001, 3, 1, 1, 0, 0),
-(50019, 12001, 5, 1, 1, 0, 0),
 (50020, 12002, 3, 1, 1, 0, 0),
-(50021, 12002, 5, 1, 1, 0, 0),
 (50022, 12003, 3, 1, 1, 0, 0),
-(50023, 12003, 5, 1, 1, 0, 0),
 (50024, 12004, 3, 1, 1, 0, 0),
-(50025, 12004, 5, 1, 1, 0, 0),
 (50026, 12005, 3, 1, 1, 0, 0),
-(50027, 12005, 5, 1, 1, 0, 0),
 (50028, 13001, 4, 1, 1, 0, 0),
-(50029, 13001, 5, 1, 1, 0, 0),
-(50030, 13001, 11, 1, 1, 0, 0),
 (50031, 13002, 4, 1, 1, 0, 0),
-(50032, 13002, 5, 1, 1, 0, 0),
 (50033, 13003, 4, 1, 1, 0, 0),
-(50034, 13003, 5, 1, 1, 0, 0),
 (50035, 13004, 4, 1, 1, 0, 0),
-(50036, 13004, 5, 1, 1, 0, 0),
 (50037, 13005, 4, 1, 1, 0, 0),
-(50038, 13005, 5, 1, 1, 0, 0),
 (50039, 14001, 5, 1, 1, 0, 0),
 (50040, 14002, 5, 1, 1, 0, 0),
 (50041, 14003, 5, 1, 1, 0, 0),
@@ -145,76 +124,53 @@ INSERT INTO `sys_user_role` (`id`, `user_id`, `role_id`, `create_by`, `update_by
 (50048, 14010, 5, 1, 1, 0, 0)
 ON DUPLICATE KEY UPDATE `role_id` = VALUES(`role_id`), `update_by` = VALUES(`update_by`), `is_deleted` = VALUES(`is_deleted`);
 
-INSERT INTO `sys_role_menu` (`id`, `role_id`, `menu_id`, `create_by`, `update_by`, `is_deleted`, `version`) VALUES
-(98001, 1, 1, 1, 1, 0, 0),
-(98002, 1, 2, 1, 1, 0, 0),
-(98003, 1, 3, 1, 1, 0, 0),
-(98004, 1, 4, 1, 1, 0, 0),
-(98005, 1, 5, 1, 1, 0, 0),
-(98006, 1, 6, 1, 1, 0, 0),
-(98007, 1, 101, 1, 1, 0, 0),
-(98008, 1, 102, 1, 1, 0, 0),
-(98009, 1, 201, 1, 1, 0, 0),
-(98010, 1, 202, 1, 1, 0, 0),
-(98011, 1, 401, 1, 1, 0, 0),
-(98012, 1, 402, 1, 1, 0, 0),
-(98013, 1, 501, 1, 1, 0, 0),
-(98014, 1, 502, 1, 1, 0, 0),
-(98015, 1, 503, 1, 1, 0, 0),
-(98016, 1, 601, 1, 1, 0, 0),
-(98017, 1, 602, 1, 1, 0, 0),
-(98018, 2, 2, 1, 1, 0, 0),
-(98019, 2, 3, 1, 1, 0, 0),
-(98020, 2, 4, 1, 1, 0, 0),
-(98021, 2, 5, 1, 1, 0, 0),
-(98022, 2, 6, 1, 1, 0, 0),
-(98023, 2, 201, 1, 1, 0, 0),
-(98024, 2, 202, 1, 1, 0, 0),
-(98025, 2, 401, 1, 1, 0, 0),
-(98026, 2, 402, 1, 1, 0, 0),
-(98027, 2, 501, 1, 1, 0, 0),
-(98028, 2, 502, 1, 1, 0, 0),
-(98029, 2, 503, 1, 1, 0, 0),
-(98030, 2, 601, 1, 1, 0, 0),
-(98031, 2, 602, 1, 1, 0, 0),
-(98032, 3, 2, 1, 1, 0, 0),
-(98033, 3, 3, 1, 1, 0, 0),
-(98034, 3, 4, 1, 1, 0, 0),
-(98035, 3, 5, 1, 1, 0, 0),
-(98036, 3, 6, 1, 1, 0, 0),
-(98037, 3, 201, 1, 1, 0, 0),
-(98038, 3, 202, 1, 1, 0, 0),
-(98039, 3, 401, 1, 1, 0, 0),
-(98040, 3, 402, 1, 1, 0, 0),
-(98041, 3, 501, 1, 1, 0, 0),
-(98042, 3, 502, 1, 1, 0, 0),
-(98043, 3, 503, 1, 1, 0, 0),
-(98044, 3, 601, 1, 1, 0, 0),
-(98045, 3, 602, 1, 1, 0, 0),
-(98046, 4, 2, 1, 1, 0, 0),
-(98047, 4, 3, 1, 1, 0, 0),
-(98048, 4, 4, 1, 1, 0, 0),
-(98049, 4, 5, 1, 1, 0, 0),
-(98050, 4, 6, 1, 1, 0, 0),
-(98051, 4, 201, 1, 1, 0, 0),
-(98052, 4, 202, 1, 1, 0, 0),
-(98053, 4, 401, 1, 1, 0, 0),
-(98054, 4, 402, 1, 1, 0, 0),
-(98055, 4, 501, 1, 1, 0, 0),
-(98056, 4, 502, 1, 1, 0, 0),
-(98057, 4, 503, 1, 1, 0, 0),
-(98058, 4, 601, 1, 1, 0, 0),
-(98059, 4, 602, 1, 1, 0, 0),
-(98060, 5, 2, 1, 1, 0, 0),
-(98061, 5, 3, 1, 1, 0, 0),
-(98062, 5, 5, 1, 1, 0, 0),
-(98063, 5, 6, 1, 1, 0, 0),
-(98064, 5, 201, 1, 1, 0, 0),
-(98065, 5, 202, 1, 1, 0, 0),
-(98066, 5, 502, 1, 1, 0, 0),
-(98067, 5, 503, 1, 1, 0, 0),
-(98068, 5, 602, 1, 1, 0, 0)
-ON DUPLICATE KEY UPDATE `menu_id` = VALUES(`menu_id`), `update_by` = VALUES(`update_by`), `is_deleted` = VALUES(`is_deleted`);
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`, `create_by`, `update_by`, `is_deleted`, `version`)
+SELECT 1, id, 1, 1, 0, 0 FROM `sys_menu`
+ON DUPLICATE KEY UPDATE `update_by` = VALUES(`update_by`), `is_deleted` = VALUES(`is_deleted`);
+
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`, `create_by`, `update_by`, `is_deleted`, `version`)
+SELECT 2, id, 1, 1, 0, 0 FROM `sys_menu` WHERE id IN (
+    1,
+    3, 301, 302, 303,
+    4, 401, 402, 403, 404, 405,
+    5, 501, 502, 503, 504,
+    6, 601, 602, 603, 604, 605, 606,
+    8, 801, 802, 803,
+    9, 901, 902, 903, 904, 905, 906,
+    10
+)
+ON DUPLICATE KEY UPDATE `update_by` = VALUES(`update_by`), `is_deleted` = VALUES(`is_deleted`);
+
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`, `create_by`, `update_by`, `is_deleted`, `version`)
+SELECT 3, id, 1, 1, 0, 0 FROM `sys_menu` WHERE id IN (
+    1,
+    4, 401, 402, 403, 404, 405,
+    5, 501, 502, 503, 504,
+    6, 601, 602, 603, 604, 605, 606,
+    8, 801, 802, 803,
+    9, 901, 902, 903, 904, 905, 906,
+    10
+)
+ON DUPLICATE KEY UPDATE `update_by` = VALUES(`update_by`), `is_deleted` = VALUES(`is_deleted`);
+
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`, `create_by`, `update_by`, `is_deleted`, `version`)
+SELECT 4, id, 1, 1, 0, 0 FROM `sys_menu` WHERE id IN (
+    1,
+    7, 701, 702, 703,
+    8, 801, 802, 803,
+    9, 901, 902, 903, 904, 905, 906,
+    10
+)
+ON DUPLICATE KEY UPDATE `update_by` = VALUES(`update_by`), `is_deleted` = VALUES(`is_deleted`);
+
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`, `create_by`, `update_by`, `is_deleted`, `version`)
+SELECT 5, id, 1, 1, 0, 0 FROM `sys_menu` WHERE id IN (
+    1,
+    6, 601, 604,
+    9, 901, 902, 903, 904, 905, 906,
+    10
+)
+ON DUPLICATE KEY UPDATE `update_by` = VALUES(`update_by`), `is_deleted` = VALUES(`is_deleted`);
 
 INSERT INTO `sys_field_permission` (`id`, `biz_type`, `field_name`, `field_desc`, `role_id`, `viewable`, `editable`, `flow_required`, `create_time`, `update_time`) VALUES
 (1, 'employee', 'employee_name', '员工姓名', 1, 1, 1, 0, '2026-01-01 09:00:00', '2026-01-01 09:00:00'),
