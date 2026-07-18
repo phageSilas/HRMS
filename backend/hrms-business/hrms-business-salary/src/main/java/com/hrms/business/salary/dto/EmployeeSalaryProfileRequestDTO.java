@@ -31,6 +31,21 @@ public class EmployeeSalaryProfileRequestDTO {
 
     private BigDecimal socialInsuranceBase;
 
+    private BigDecimal pensionInsuranceBase;
+
+    @DecimalMin("0.0000")
+    private BigDecimal pensionInsuranceRate;
+
+    private BigDecimal medicalInsuranceBase;
+
+    @DecimalMin("0.0000")
+    private BigDecimal medicalInsuranceRate;
+
+    private BigDecimal unemploymentInsuranceBase;
+
+    @DecimalMin("0.0000")
+    private BigDecimal unemploymentInsuranceRate;
+
     private BigDecimal housingFundBase;
 
     private String bankName;

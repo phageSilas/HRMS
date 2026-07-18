@@ -28,6 +28,18 @@ public class EmployeeSalaryProfileEntity extends BaseEntity {
 
     private BigDecimal socialInsuranceBase;
 
+    private BigDecimal pensionInsuranceBase;
+
+    private BigDecimal pensionInsuranceRate;
+
+    private BigDecimal medicalInsuranceBase;
+
+    private BigDecimal medicalInsuranceRate;
+
+    private BigDecimal unemploymentInsuranceBase;
+
+    private BigDecimal unemploymentInsuranceRate;
+
     private BigDecimal housingFundBase;
 
     private String bankName;
