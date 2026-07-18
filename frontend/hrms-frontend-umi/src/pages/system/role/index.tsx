@@ -38,6 +38,7 @@ import {
   getMenuTree,
 } from '@/services/system';
 import type { RoleItem, MenuItem } from '@/types/system';
+import dayjs from 'dayjs';
 
 const RolePage: React.FC = () => {
   const [createModalVisible, setCreateModalVisible] = useState(false);
@@ -50,6 +51,14 @@ const RolePage: React.FC = () => {
   const [createForm] = Form.useForm();
   const [editForm] = Form.useForm();
   const actionRef = useRef<any>();
+
+  // 格式化时间
+  const formatDateTime = (value?: string) => {
+    if (!value) return '-';
+    const date = dayjs(value);
+    if (!date.isValid()) return value;
+    return date.format('YYYY-MM-DD HH:mm');
+  };
 
   // 数据权限范围标签
   const dataScopeTag = (scope: number) => {
@@ -118,12 +127,13 @@ const RolePage: React.FC = () => {
         return <Tag color={item.color}>{item.text}</Tag>;
       },
     },
-    {
-      title: '创建时间',
-      dataIndex: 'createTime',
-      width: 140,
-      search: false,
-    },
+    // {
+    //   title: '创建时间',
+    //   dataIndex: 'createTime',
+    //   width: 140,
+    //   search: false,
+    //   render: (value) => formatDateTime(value),
+    // },
     {
       title: '操作',
       key: 'action',

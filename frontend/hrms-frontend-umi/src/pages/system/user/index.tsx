@@ -148,26 +148,25 @@ const UserPage: React.FC = () => {
       search: false,
       render: (text) => (text ? (text as string) : '-'),
     },
-    {
-      title: '创建时间',
-      dataIndex: 'createTime',
-      width: 140,
-      search: false,
-    },
+    // {
+    //   title: '创建时间',
+    //   dataIndex: 'createTime',
+    //   width: 140,
+    //   search: false,
+    // },
     {
       title: '操作',
       key: 'action',
       fixed: 'right',
-      width: 200,
+      width: 220,
       search: false,
       render: (_, record) => (
-        <Space size={2} wrap>
+        <Space size={0}>
           <Button
             type="link"
             size="small"
             icon={<EyeOutlined />}
             onClick={() => handleViewDetail(record)}
-            style={{ padding: '0 2px' }}
           >
             详情
           </Button>
@@ -176,7 +175,6 @@ const UserPage: React.FC = () => {
             size="small"
             icon={<EditOutlined />}
             onClick={() => handleEdit(record)}
-            style={{ padding: '0 2px' }}
           >
             编辑
           </Button>
@@ -185,7 +183,6 @@ const UserPage: React.FC = () => {
             size="small"
             icon={<KeyOutlined />}
             onClick={() => handleResetPwd(record)}
-            style={{ padding: '0 2px' }}
           >
             重置
           </Button>
@@ -196,7 +193,7 @@ const UserPage: React.FC = () => {
             okText="确定"
             cancelText="取消"
           >
-            <Button type="link" danger size="small" icon={<DeleteOutlined />} style={{ padding: '0 2px' }}>
+            <Button type="link" danger size="small" icon={<DeleteOutlined />}>
               删除
             </Button>
           </Popconfirm>

@@ -278,6 +278,13 @@ export async function deletePost(id: number): Promise<void> {
   return request.delete<void>(`/api/v1/posts/${id}`);
 }
 
+/**
+ * 统计各序列职位数量
+ */
+export async function getPostStatsBySequence(): Promise<Record<string, number>> {
+  return request.get<Record<string, number>>('/api/v1/posts/stats/sequence');
+}
+
 // ============ 字典接口 ============
 
 /**

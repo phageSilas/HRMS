@@ -318,11 +318,12 @@ public class UserServiceImpl implements UserService {
 
     /**
      * 校验用户名唯一性
+     * 注意：检查所有用户（包括已删除的），因为数据库唯一约束不区分 is_deleted
      */
     private void checkUsernameUnique(String username, Long excludeId) {
         LambdaQueryWrapper<UserEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(UserEntity::getUsername, username);
-        wrapper.eq(UserEntity::getIsDeleted, 0);
+        // 不限制 is_deleted，因为数据库唯一约束是全局的
         if (excludeId != null) {
             wrapper.ne(UserEntity::getId, excludeId);
         }
@@ -335,6 +336,7 @@ public class UserServiceImpl implements UserService {
 
     /**
      * 校验手机号唯一性
+     * 注意：检查所有用户（包括已删除的），因为数据库唯一约束不区分 is_deleted
      */
     private void checkPhoneUnique(String phone, Long excludeId) {
         if (!StringUtils.hasText(phone)) {
@@ -342,7 +344,7 @@ public class UserServiceImpl implements UserService {
         }
         LambdaQueryWrapper<UserEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(UserEntity::getPhone, phone);
-        wrapper.eq(UserEntity::getIsDeleted, 0);
+        // 不限制 is_deleted，因为数据库唯一约束是全局的
         if (excludeId != null) {
             wrapper.ne(UserEntity::getId, excludeId);
         }
