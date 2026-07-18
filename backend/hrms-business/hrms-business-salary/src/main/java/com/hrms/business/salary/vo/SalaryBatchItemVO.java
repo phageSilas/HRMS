@@ -42,6 +42,12 @@ public class SalaryBatchItemVO {
 
     private BigDecimal socialInsurance;
 
+    private BigDecimal pensionInsurance;
+
+    private BigDecimal medicalInsurance;
+
+    private BigDecimal unemploymentInsurance;
+
     private BigDecimal housingFund;
 
     private BigDecimal incomeTax;

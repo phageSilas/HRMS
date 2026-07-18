@@ -1,0 +1,117 @@
+-- 入转调离建表
+USE `hrms`;
+
+-- hr_entry_application（入职申请表）
+CREATE TABLE `hr_entry_application` (
+   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+   `candidate_name` VARCHAR(64) NOT NULL COMMENT '候选人姓名',
+   `gender` TINYINT DEFAULT NULL COMMENT '性别',
+   `phone` VARCHAR(20) NOT NULL COMMENT '手机号码',
+   `email` VARCHAR(128) DEFAULT NULL COMMENT '邮箱',
+   `id_card_no` VARCHAR(255) DEFAULT NULL COMMENT '身份证号',
+   `dept_id` BIGINT UNSIGNED NOT NULL COMMENT '拟入职部门ID',
+   `post_id` BIGINT UNSIGNED NOT NULL COMMENT '拟入职岗位ID',
+   `hire_type` TINYINT NOT NULL COMMENT '录用类型：1-全职 2-兼职 3-实习',
+   `probation_month` INT NOT NULL COMMENT '试用期（月）',
+   `probation_salary_ratio` DECIMAL(5,2) NOT NULL DEFAULT 80.00 COMMENT '试用期薪资比例（%）',
+   `expected_hire_date` DATE NOT NULL COMMENT '预计入职日期',
+   `leader_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '直接汇报人',
+   `approval_instance_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '审批实例ID',
+   `approval_status` TINYINT NOT NULL DEFAULT 0 COMMENT '审批状态：0-草稿 1-审批中 2-已通过 3-已拒绝 5-已入职',
+   `actual_hire_date` DATE DEFAULT NULL COMMENT '实际入职日期（HR确认时填写）',
+   `employee_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '确认入职后关联的员工ID',
+   `employee_no` VARCHAR(32) DEFAULT NULL COMMENT '确认入职后关联的员工工号',
+   `create_by` BIGINT UNSIGNED DEFAULT NULL COMMENT '创建人',
+   `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+   `update_by` BIGINT UNSIGNED DEFAULT NULL COMMENT '更新人',
+   `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+   `is_deleted` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+   `version` INT NOT NULL DEFAULT 0 COMMENT '版本号',
+   PRIMARY KEY (`id`),
+   UNIQUE KEY `uk_hr_entry_app_phone` (`phone`),
+   KEY `idx_hr_entry_app_status` (`approval_status`),
+   KEY `idx_hr_entry_app_dept` (`dept_id`),
+   KEY `idx_hr_entry_app_employee_id` (`employee_id`),
+   KEY `idx_hr_entry_app_employee_no` (`employee_no`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='入职申请表';
+
+-- hr_transfer_application（调岗申请表）
+CREATE TABLE `hr_transfer_application` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `employee_id` BIGINT UNSIGNED NOT NULL COMMENT '员工ID',
+  `from_dept_id` BIGINT UNSIGNED NOT NULL COMMENT '原部门ID',
+  `to_dept_id` BIGINT UNSIGNED NOT NULL COMMENT '新部门ID',
+  `from_post_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '原岗位ID',
+  `to_post_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '新岗位ID',
+  `from_job_level` VARCHAR(16) DEFAULT NULL COMMENT '原职级',
+  `to_job_level` VARCHAR(16) DEFAULT NULL COMMENT '新职级',
+  `from_leader_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '原汇报人ID',
+  `to_leader_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '新汇报人ID',
+  `salary_adjustment` DECIMAL(12,2) DEFAULT NULL COMMENT '薪资调整金额（正=调增 负=调减）',
+  `effective_date` DATE NOT NULL COMMENT '生效日期',
+  `reason` VARCHAR(500) DEFAULT NULL COMMENT '调岗原因',
+  `approval_instance_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '审批实例ID',
+  `approval_status` TINYINT NOT NULL DEFAULT 0 COMMENT '审批状态',
+  `create_by` BIGINT UNSIGNED DEFAULT NULL COMMENT '创建人',
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_by` BIGINT UNSIGNED DEFAULT NULL COMMENT '更新人',
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  `version` INT NOT NULL DEFAULT 0 COMMENT '版本号',
+  PRIMARY KEY (`id`),
+  KEY `idx_hr_transfer_app_employee` (`employee_id`),
+  KEY `idx_hr_transfer_app_status` (`approval_status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='调岗申请表';
+
+-- hr_regular_application（转正申请表）
+CREATE TABLE `hr_regular_application` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `employee_id` BIGINT UNSIGNED NOT NULL COMMENT '员工ID',
+  `probation_start_date` DATE DEFAULT NULL COMMENT '试用期开始日期',
+  `probation_end_date` DATE DEFAULT NULL COMMENT '试用期结束日期',
+  `evaluate_result` TINYINT NOT NULL DEFAULT 1 COMMENT '评估结果：1-转正 2-延长试用 3-辞退',
+  `extend_month` INT DEFAULT NULL COMMENT '延长试用月数（延长试用时填写）',
+  `salary_adjustment` DECIMAL(12,2) DEFAULT NULL COMMENT '调薪金额',
+  `evaluate_opinion` VARCHAR(500) DEFAULT NULL COMMENT '评估意见',
+  `approval_instance_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '审批实例ID',
+  `approval_status` TINYINT NOT NULL DEFAULT 0 COMMENT '审批状态：0-草稿 1-审批中 2-已通过 3-已拒绝',
+  `regular_date` DATE DEFAULT NULL COMMENT '实际转正日期（审批通过后填写）',
+  `create_by` BIGINT UNSIGNED DEFAULT NULL COMMENT '创建人',
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_by` BIGINT UNSIGNED DEFAULT NULL COMMENT '更新人',
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  `version` INT NOT NULL DEFAULT 0 COMMENT '版本号',
+  `remark` VARCHAR(500) DEFAULT NULL COMMENT '备注',
+  PRIMARY KEY (`id`),
+  KEY `idx_hr_regular_app_employee` (`employee_id`),
+  KEY `idx_hr_regular_app_status` (`approval_status`),
+  KEY `idx_hr_regular_app_probation_end` (`probation_end_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='转正申请表';
+
+-- hr_leave_application（离职申请表）
+CREATE TABLE `hr_leave_application` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `employee_id` BIGINT UNSIGNED NOT NULL COMMENT '员工ID',
+  `leave_type` TINYINT NOT NULL COMMENT '离职类型：1-主动离职 2-被动辞退 3-合同到期不续签 4-其他',
+  `leave_reason` VARCHAR(500) DEFAULT NULL COMMENT '离职原因',
+  `apply_date` DATE NOT NULL COMMENT '申请日期',
+  `expected_last_work_date` DATE NOT NULL COMMENT '预计最后工作日',
+  `last_work_date` DATE DEFAULT NULL COMMENT '实际最后工作日（审批通过后填写）',
+  `handover_employee_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '交接人员工ID',
+  `handover_status` TINYINT NOT NULL DEFAULT 0 COMMENT '交接状态：0-未交接 1-交接中 2-已交接',
+  `handover_note` VARCHAR(500) DEFAULT NULL COMMENT '交接说明',
+  `approval_instance_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '审批实例ID',
+  `approval_status` TINYINT NOT NULL DEFAULT 0 COMMENT '审批状态：0-草稿 1-审批中 2-已通过 3-已拒绝',
+  `create_by` BIGINT UNSIGNED DEFAULT NULL COMMENT '创建人',
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_by` BIGINT UNSIGNED DEFAULT NULL COMMENT '更新人',
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  `version` INT NOT NULL DEFAULT 0 COMMENT '版本号',
+  `remark` VARCHAR(500) DEFAULT NULL COMMENT '备注',
+  PRIMARY KEY (`id`),
+  KEY `idx_hr_leave_app_employee` (`employee_id`),
+  KEY `idx_hr_leave_app_status` (`approval_status`),
+  KEY `idx_hr_leave_app_last_work` (`last_work_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='离职申请表';

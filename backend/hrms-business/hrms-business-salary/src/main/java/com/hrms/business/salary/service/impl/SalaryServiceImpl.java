@@ -17,6 +17,7 @@ import com.hrms.business.salary.dto.SalaryBatchAdjustmentRequestDTO;
 import com.hrms.business.salary.dto.SalaryBatchCreateRequestDTO;
 import com.hrms.business.salary.dto.SalaryManagePayslipQueryDTO;
 import com.hrms.business.salary.dto.SalaryManagePayslipVerifyRequestDTO;
+import com.hrms.business.salary.dto.SalaryPayslipPageQueryDTO;
 import com.hrms.business.salary.dto.SalaryPayslipVerifyRequestDTO;
 import com.hrms.business.salary.dto.SalaryTemplateCreateOrUpdateRequestDTO;
 import com.hrms.business.salary.dto.SalaryTemplateItemRequestDTO;
@@ -97,6 +98,10 @@ import java.util.stream.Collectors;
 public class SalaryServiceImpl implements SalaryService {
 
     private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+    private static final BigDecimal ZERO_RATE = BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
+    private static final BigDecimal DEFAULT_PENSION_INSURANCE_RATE = new BigDecimal("0.0800");
+    private static final BigDecimal DEFAULT_MEDICAL_INSURANCE_RATE = new BigDecimal("0.0200");
+    private static final BigDecimal DEFAULT_UNEMPLOYMENT_INSURANCE_RATE = new BigDecimal("0.0050");
     private static final Set<String> PAYSLIP_VISIBLE_STATUS = Set.of(
             SalaryBatchStatusEnum.APPROVING.name(),
             SalaryBatchStatusEnum.APPROVED.name(),
@@ -117,6 +122,9 @@ public class SalaryServiceImpl implements SalaryService {
             "LATE_DEDUCTION",
             "LEAVE_DEDUCTION",
             "SOCIAL_INSURANCE",
+            "PENSION_INSURANCE",
+            "MEDICAL_INSURANCE",
+            "UNEMPLOYMENT_INSURANCE",
             "HOUSING_FUND",
             "INCOME_TAX"
     );
@@ -263,7 +271,23 @@ public class SalaryServiceImpl implements SalaryService {
         profile.setBaseSalary(money(requestDTO.getBaseSalary()));
         profile.setAllowance(money(requestDTO.getAllowance()));
         profile.setPerformanceBase(money(requestDTO.getPerformanceBase()));
-        profile.setSocialInsuranceBase(money(requestDTO.getSocialInsuranceBase()));
+        BigDecimal pensionInsuranceBase = resolveInsuranceBase(
+                requestDTO.getPensionInsuranceBase(), requestDTO.getSocialInsuranceBase(), profile.getPensionInsuranceBase());
+        BigDecimal medicalInsuranceBase = resolveInsuranceBase(
+                requestDTO.getMedicalInsuranceBase(), requestDTO.getSocialInsuranceBase(), profile.getMedicalInsuranceBase());
+        BigDecimal unemploymentInsuranceBase = resolveInsuranceBase(
+                requestDTO.getUnemploymentInsuranceBase(), requestDTO.getSocialInsuranceBase(), profile.getUnemploymentInsuranceBase());
+        profile.setPensionInsuranceBase(pensionInsuranceBase);
+        profile.setPensionInsuranceRate(resolveInsuranceRate(
+                requestDTO.getPensionInsuranceRate(), profile.getPensionInsuranceRate(), DEFAULT_PENSION_INSURANCE_RATE));
+        profile.setMedicalInsuranceBase(medicalInsuranceBase);
+        profile.setMedicalInsuranceRate(resolveInsuranceRate(
+                requestDTO.getMedicalInsuranceRate(), profile.getMedicalInsuranceRate(), DEFAULT_MEDICAL_INSURANCE_RATE));
+        profile.setUnemploymentInsuranceBase(unemploymentInsuranceBase);
+        profile.setUnemploymentInsuranceRate(resolveInsuranceRate(
+                requestDTO.getUnemploymentInsuranceRate(), profile.getUnemploymentInsuranceRate(), DEFAULT_UNEMPLOYMENT_INSURANCE_RATE));
+        profile.setSocialInsuranceBase(resolveCompatibleSocialInsuranceBase(
+                requestDTO.getSocialInsuranceBase(), pensionInsuranceBase, medicalInsuranceBase, unemploymentInsuranceBase));
         profile.setHousingFundBase(money(requestDTO.getHousingFundBase()));
         profile.setBankName(requestDTO.getBankName());
         profile.setBankAccount(requestDTO.getBankAccount());
@@ -641,6 +665,30 @@ public class SalaryServiceImpl implements SalaryService {
      * @return 验证结果
      * 本方法使用的工具类: PasswordEncoder(spring-security-crypto),StringRedisTemplate(spring-data-redis),IdUtil(hutool)
      */
+    /**
+     * 分页查询当前员工工资条列表。
+     *
+     * @param queryDTO 查询参数
+     * @return 工资条分页结果
+     * 本方法使用的工具类: Page(MyBatis-Plus),PageResult(hrms-common),StringRedisTemplate(spring-data-redis)
+     */
+    @Override
+    public PageResult<SalaryPayslipListVO> pagePayslips(SalaryPayslipPageQueryDTO queryDTO) {
+        Long employeeId = getCurrentEmployeeId();
+        int pageNum = Optional.ofNullable(queryDTO.getPageNum()).orElse(1);
+        int pageSize = Optional.ofNullable(queryDTO.getPageSize()).orElse(10);
+        Page<SalaryPayslipListVO> page = salaryBatchItemMapper.selectEmployeePayslipPage(
+                Page.of(pageNum, pageSize), employeeId, queryDTO, PAYSLIP_VISIBLE_STATUS);
+        StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+        if (redisTemplate != null) {
+            page.getRecords().forEach(record -> record.setVerified(Boolean.TRUE.equals(redisTemplate.hasKey(
+                    SalaryCacheKeys.payslipVerify(employeeId, record.getSalaryMonth())))));
+        } else {
+            page.getRecords().forEach(record -> record.setVerified(false));
+        }
+        return PageResult.of(page.getRecords(), page.getTotal(), (int) page.getCurrent(), (int) page.getSize());
+    }
+
     @Override
     public SalaryPayslipVerifyVO verifyPayslip(SalaryPayslipVerifyRequestDTO requestDTO) {
         Long userId = SecurityContextHolder.getUserId();
@@ -891,7 +939,16 @@ public class SalaryServiceImpl implements SalaryService {
                 .map(AttendancePayrollSourceVO::getLateCount).orElse(0)).multiply(new BigDecimal("20")));
         BigDecimal leaveDays = Optional.ofNullable(attendance).map(AttendancePayrollSourceVO::getLeaveDays).orElse(BigDecimal.ZERO);
         BigDecimal leaveDeduction = money(baseSalary.divide(new BigDecimal("21.75"), 2, RoundingMode.HALF_UP).multiply(leaveDays));
-        BigDecimal socialInsurance = money(profile.getSocialInsuranceBase()).multiply(new BigDecimal("0.08")).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal pensionInsurance = calculateInsuranceAmount(
+                profile.getPensionInsuranceBase(), profile.getPensionInsuranceRate(),
+                profile.getSocialInsuranceBase(), DEFAULT_PENSION_INSURANCE_RATE);
+        BigDecimal medicalInsurance = calculateInsuranceAmount(
+                profile.getMedicalInsuranceBase(), profile.getMedicalInsuranceRate(),
+                profile.getSocialInsuranceBase(), DEFAULT_MEDICAL_INSURANCE_RATE);
+        BigDecimal unemploymentInsurance = calculateInsuranceAmount(
+                profile.getUnemploymentInsuranceBase(), profile.getUnemploymentInsuranceRate(),
+                profile.getSocialInsuranceBase(), DEFAULT_UNEMPLOYMENT_INSURANCE_RATE);
+        BigDecimal socialInsurance = pensionInsurance.add(medicalInsurance).add(unemploymentInsurance).setScale(2, RoundingMode.HALF_UP);
         BigDecimal housingFund = money(profile.getHousingFundBase()).multiply(new BigDecimal("0.07")).setScale(2, RoundingMode.HALF_UP);
         BigDecimal gross = baseSalary.add(allowance).add(performanceBonus).add(overtimePay);
         BigDecimal incomeTax = calculateIncomeTax(gross.subtract(socialInsurance).subtract(housingFund));
@@ -903,6 +960,9 @@ public class SalaryServiceImpl implements SalaryService {
         item.setOvertimePay(overtimePay);
         item.setLateDeduction(lateDeduction);
         item.setLeaveDeduction(leaveDeduction);
+        item.setPensionInsurance(pensionInsurance);
+        item.setMedicalInsurance(medicalInsurance);
+        item.setUnemploymentInsurance(unemploymentInsurance);
         item.setSocialInsurance(socialInsurance);
         item.setHousingFund(housingFund);
         item.setIncomeTax(incomeTax);
@@ -978,6 +1038,9 @@ public class SalaryServiceImpl implements SalaryService {
         item.setOvertimePay(ZERO);
         item.setLateDeduction(ZERO);
         item.setLeaveDeduction(ZERO);
+        item.setPensionInsurance(ZERO);
+        item.setMedicalInsurance(ZERO);
+        item.setUnemploymentInsurance(ZERO);
         item.setSocialInsurance(ZERO);
         item.setHousingFund(ZERO);
         item.setIncomeTax(ZERO);
@@ -1224,7 +1287,23 @@ public class SalaryServiceImpl implements SalaryService {
                 .baseSalary(profile.getBaseSalary())
                 .allowance(profile.getAllowance())
                 .performanceBase(profile.getPerformanceBase())
-                .socialInsuranceBase(profile.getSocialInsuranceBase())
+                .socialInsuranceBase(resolveCompatibleSocialInsuranceBase(
+                        profile.getSocialInsuranceBase(),
+                        profile.getPensionInsuranceBase(),
+                        profile.getMedicalInsuranceBase(),
+                        profile.getUnemploymentInsuranceBase()))
+                .pensionInsuranceBase(resolveInsuranceBase(
+                        profile.getPensionInsuranceBase(), profile.getSocialInsuranceBase(), null))
+                .pensionInsuranceRate(resolveInsuranceRate(
+                        profile.getPensionInsuranceRate(), null, DEFAULT_PENSION_INSURANCE_RATE))
+                .medicalInsuranceBase(resolveInsuranceBase(
+                        profile.getMedicalInsuranceBase(), profile.getSocialInsuranceBase(), null))
+                .medicalInsuranceRate(resolveInsuranceRate(
+                        profile.getMedicalInsuranceRate(), null, DEFAULT_MEDICAL_INSURANCE_RATE))
+                .unemploymentInsuranceBase(resolveInsuranceBase(
+                        profile.getUnemploymentInsuranceBase(), profile.getSocialInsuranceBase(), null))
+                .unemploymentInsuranceRate(resolveInsuranceRate(
+                        profile.getUnemploymentInsuranceRate(), null, DEFAULT_UNEMPLOYMENT_INSURANCE_RATE))
                 .housingFundBase(profile.getHousingFundBase())
                 .bankName(profile.getBankName())
                 .bankAccountMasked(maskBankAccount(profile.getBankAccount()))
@@ -1327,6 +1406,9 @@ public class SalaryServiceImpl implements SalaryService {
                 .overtimePay(item.getOvertimePay())
                 .lateDeduction(item.getLateDeduction())
                 .leaveDeduction(item.getLeaveDeduction())
+                .pensionInsurance(item.getPensionInsurance())
+                .medicalInsurance(item.getMedicalInsurance())
+                .unemploymentInsurance(item.getUnemploymentInsurance())
                 .socialInsurance(item.getSocialInsurance())
                 .housingFund(item.getHousingFund())
                 .incomeTax(item.getIncomeTax())
@@ -1357,6 +1439,9 @@ public class SalaryServiceImpl implements SalaryService {
                 .overtimePay(item.getOvertimePay())
                 .lateDeduction(item.getLateDeduction())
                 .leaveDeduction(item.getLeaveDeduction())
+                .pensionInsurance(item.getPensionInsurance())
+                .medicalInsurance(item.getMedicalInsurance())
+                .unemploymentInsurance(item.getUnemploymentInsurance())
                 .socialInsurance(item.getSocialInsurance())
                 .housingFund(item.getHousingFund())
                 .incomeTax(item.getIncomeTax())
@@ -1668,6 +1753,18 @@ public class SalaryServiceImpl implements SalaryService {
             case "LATE_DEDUCTION" -> item.setLateDeduction(money(item.getLateDeduction()).add(amount));
             case "LEAVE_DEDUCTION" -> item.setLeaveDeduction(money(item.getLeaveDeduction()).add(amount));
             case "SOCIAL_INSURANCE" -> item.setSocialInsurance(money(item.getSocialInsurance()).add(amount));
+            case "PENSION_INSURANCE" -> {
+                item.setPensionInsurance(money(item.getPensionInsurance()).add(amount));
+                syncSocialInsuranceTotal(item);
+            }
+            case "MEDICAL_INSURANCE" -> {
+                item.setMedicalInsurance(money(item.getMedicalInsurance()).add(amount));
+                syncSocialInsuranceTotal(item);
+            }
+            case "UNEMPLOYMENT_INSURANCE" -> {
+                item.setUnemploymentInsurance(money(item.getUnemploymentInsurance()).add(amount));
+                syncSocialInsuranceTotal(item);
+            }
             case "HOUSING_FUND" -> item.setHousingFund(money(item.getHousingFund()).add(amount));
             case "INCOME_TAX" -> item.setIncomeTax(money(item.getIncomeTax()).add(amount));
             default -> throw new GlobalException(ErrorCode.PARAM_FORMAT_ERROR, "不支持的薪资调整项目");
@@ -1775,6 +1872,115 @@ public class SalaryServiceImpl implements SalaryService {
      */
     private BigDecimal money(BigDecimal value) {
         return Optional.ofNullable(value).orElse(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * 格式化比例。
+     *
+     * @param value 比例
+     * @return 格式化后的比例
+     * 本方法使用的工具类: Optional(JDK),BigDecimal(JDK)
+     */
+    /**
+     * 计算险种金额。
+     *
+     * @param insuranceBase 险种基数
+     * @param insuranceRate 险种比例
+     * @param legacyBase 旧社保基数
+     * @param defaultRate 默认比例
+     * @return 险种金额
+     * 本方法使用的工具类: BigDecimal(JDK)
+     */
+    private BigDecimal calculateInsuranceAmount(BigDecimal insuranceBase,
+                                                BigDecimal insuranceRate,
+                                                BigDecimal legacyBase,
+                                                BigDecimal defaultRate) {
+        BigDecimal base = resolveInsuranceBase(insuranceBase, legacyBase, null);
+        BigDecimal ratio = resolveInsuranceRate(insuranceRate, null, defaultRate);
+        return money(base.multiply(ratio));
+    }
+
+    /**
+     * 同步社保合计金额。
+     *
+     * @param item 薪资明细
+     * 本方法使用的工具类: BigDecimal(JDK)
+     */
+    private void syncSocialInsuranceTotal(SalaryBatchItemEntity item) {
+        item.setSocialInsurance(money(item.getPensionInsurance())
+                .add(money(item.getMedicalInsurance()))
+                .add(money(item.getUnemploymentInsurance())));
+    }
+
+    private BigDecimal rate(BigDecimal value) {
+        return Optional.ofNullable(value).orElse(BigDecimal.ZERO).setScale(4, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * 解析险种基数。
+     *
+     * @param requestBase 请求值
+     * @param legacyBase  旧社保基数
+     * @param existingBase 已有值
+     * @return 险种基数
+     * 本方法使用的工具类: BigDecimal(JDK)
+     */
+    private BigDecimal resolveInsuranceBase(BigDecimal requestBase, BigDecimal legacyBase, BigDecimal existingBase) {
+        if (requestBase != null) {
+            return money(requestBase);
+        }
+        if (legacyBase != null) {
+            return money(legacyBase);
+        }
+        if (existingBase != null) {
+            return money(existingBase);
+        }
+        return ZERO;
+    }
+
+    /**
+     * 解析险种比例。
+     *
+     * @param requestRate 请求值
+     * @param existingRate 已有值
+     * @param defaultRate 默认值
+     * @return 险种比例
+     * 本方法使用的工具类: BigDecimal(JDK)
+     */
+    private BigDecimal resolveInsuranceRate(BigDecimal requestRate, BigDecimal existingRate, BigDecimal defaultRate) {
+        if (requestRate != null) {
+            return rate(requestRate);
+        }
+        if (existingRate != null) {
+            return rate(existingRate);
+        }
+        return rate(defaultRate);
+    }
+
+    /**
+     * 解析兼容社保合计基数。
+     *
+     * @param legacyBase 旧社保基数
+     * @param pensionBase 养老保险基数
+     * @param medicalBase 医疗保险基数
+     * @param unemploymentBase 失业保险基数
+     * @return 兼容社保合计基数
+     * 本方法使用的工具类: Objects(JDK)
+     */
+    private BigDecimal resolveCompatibleSocialInsuranceBase(BigDecimal legacyBase,
+                                                            BigDecimal pensionBase,
+                                                            BigDecimal medicalBase,
+                                                            BigDecimal unemploymentBase) {
+        if (legacyBase != null) {
+            return money(legacyBase);
+        }
+        BigDecimal pension = money(pensionBase);
+        BigDecimal medical = money(medicalBase);
+        BigDecimal unemployment = money(unemploymentBase);
+        if (Objects.equals(pension, medical) && Objects.equals(pension, unemployment)) {
+            return pension;
+        }
+        return pension;
     }
 
     /**

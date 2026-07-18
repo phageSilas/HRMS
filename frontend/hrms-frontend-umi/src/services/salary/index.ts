@@ -4,6 +4,7 @@
  */
 
 import request from '@/utils/request';
+import type { PageResult } from '@/types/api';
 
 // ============ 薪资账套类型 ============
 
@@ -83,6 +84,9 @@ export interface SalaryBatchItem {
   lateDeduction?: number | string;
   leaveDeduction?: number | string;
   socialInsurance?: number | string;
+  pensionInsurance?: number | string;
+  medicalInsurance?: number | string;
+  unemploymentInsurance?: number | string;
   housingFund?: number | string;
   incomeTax?: number | string;
   grossSalary?: number | string;
@@ -191,6 +195,17 @@ export interface SalaryPayslipDetail extends SalaryBatchItem {
   batchNo?: string;
 }
 
+export interface SalaryPayslipPageQuery {
+  month?: string;
+  pageNum?: number;
+  pageSize?: number;
+}
+
+export interface SalaryTrendItem {
+  month: string;
+  netSalary?: number | string;
+}
+
 // ============ 账套接口 ============
 
 export async function getSalaryTemplateList(params: SalaryTemplateQuery) {
@@ -264,6 +279,16 @@ export async function submitSalaryBatch(batchId: number) {
 
 export async function getPayslipList(params: { month?: string }) {
   return request.get<SalaryPayslipListItem[]>('/api/v1/salary/payslips', { params });
+}
+
+export async function getPayslipPage(params: SalaryPayslipPageQuery) {
+  return request.get<PageResult<SalaryPayslipListItem>>('/api/v1/salary/payslips/page', {
+    params,
+  });
+}
+
+export async function getSalaryTrend() {
+  return request.get<SalaryTrendItem[]>('/api/v1/salary/trend');
 }
 
 export async function verifyPayslip(data: { month: string; password: string }) {
