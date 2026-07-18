@@ -65,11 +65,12 @@ const MenuPage: React.FC = () => {
   }, []);
 
   // 菜单类型标签
+  // menu_type: 1=目录, 2=菜单, 3=按钮
   const menuTypeTag = (type: number) => {
     const map: Record<number, { text: string; color: string; icon: React.ReactNode }> = {
-      0: { text: '目录', color: 'blue', icon: <FolderOutlined /> },
-      1: { text: '菜单', color: 'green', icon: <FileOutlined /> },
-      2: { text: '按钮', color: 'orange', icon: <BarsOutlined /> },
+      1: { text: '目录', color: 'blue', icon: <FolderOutlined /> },
+      2: { text: '菜单', color: 'green', icon: <FileOutlined /> },
+      3: { text: '按钮', color: 'orange', icon: <BarsOutlined /> },
     };
     const item = map[type] || { text: '未知', color: 'default', icon: null };
     return (
@@ -389,11 +390,11 @@ const MenuPage: React.FC = () => {
         <ProFormSelect
           name="menuType"
           label="菜单类型"
-          initialValue={0}
+          initialValue={1}
           options={[
-            { label: '目录', value: 0 },
-            { label: '菜单', value: 1 },
-            { label: '按钮', value: 2 },
+            { label: '目录', value: 1 },
+            { label: '菜单', value: 2 },
+            { label: '按钮', value: 3 },
           ]}
           rules={[{ required: true, message: '请选择菜单类型' }]}
         />

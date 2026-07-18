@@ -29,8 +29,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -208,13 +210,14 @@ public class AuthServiceImpl implements AuthService {
         List<String> permissions = menuService.getPermissionsByRoleIds(roleIds);
         currentUserVO.setPermissions(permissions);
 
-        // 查询用户菜单树
+        // 查询用户菜单树（已过滤掉三级按钮）
         List<MenuEntity> menuEntities = menuService.getMenusByRoleIds(roleIds);
         List<MenuVO> menuVOs = menuEntities.stream()
             .map(entity -> {
                 MenuVO vo = new MenuVO();
                 vo.setId(entity.getId());
                 vo.setName(entity.getMenuName());
+                vo.setTitle(entity.getMenuName());  // 标题使用菜单名称
                 vo.setPath(entity.getPath());
                 vo.setComponent(entity.getComponent());
                 vo.setIcon(entity.getIcon());
@@ -223,9 +226,44 @@ public class AuthServiceImpl implements AuthService {
                 return vo;
             })
             .collect(Collectors.toList());
+
+        // 构建菜单树结构
+        menuVOs = buildMenuTree(menuVOs);
         currentUserVO.setMenus(menuVOs);
 
         return currentUserVO;
+    }
+
+    /**
+     * 构建菜单树结构
+     */
+    private List<MenuVO> buildMenuTree(List<MenuVO> menus) {
+        if (menus == null || menus.isEmpty()) {
+            return menus;
+        }
+
+        // 按 ID 分组
+        Map<Long, MenuVO> menuMap = menus.stream()
+            .collect(Collectors.toMap(MenuVO::getId, menu -> menu));
+
+        // 构建树形结构
+        List<MenuVO> rootMenus = new ArrayList<>();
+
+        for (MenuVO menu : menus) {
+            if (menu.getParentId() == null || menu.getParentId() == 0) {
+                rootMenus.add(menu);
+            } else {
+                MenuVO parent = menuMap.get(menu.getParentId());
+                if (parent != null) {
+                    if (parent.getChildren() == null) {
+                        parent.setChildren(new ArrayList<>());
+                    }
+                    parent.getChildren().add(menu);
+                }
+            }
+        }
+
+        return rootMenus;
     }
 
     @Override

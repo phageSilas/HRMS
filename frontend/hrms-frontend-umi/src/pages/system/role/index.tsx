@@ -35,7 +35,7 @@ import {
   updateRole,
   deleteRole,
   assignRoleMenus,
-  getMenuList,
+  getMenuTree,
 } from '@/services/system';
 import type { RoleItem, MenuItem } from '@/types/system';
 
@@ -45,6 +45,7 @@ const RolePage: React.FC = () => {
   const [assignMenuModalVisible, setAssignMenuModalVisible] = useState(false);
   const [currentRole, setCurrentRole] = useState<RoleItem | null>(null);
   const [menuList, setMenuList] = useState<MenuItem[]>([]);
+  const [menuTreeData, setMenuTreeData] = useState<any[]>([]);
   const [selectedMenuIds, setSelectedMenuIds] = useState<number[]>([]);
   const [createForm] = Form.useForm();
   const [editForm] = Form.useForm();
@@ -165,14 +166,29 @@ const RolePage: React.FC = () => {
     },
   ];
 
-  // 获取菜单列表
+  // 获取菜单列表（树形结构）
   const fetchMenuList = async () => {
     try {
-      const res = await getMenuList();
+      // 调用树形接口，后端已构建好树形结构
+      const res = await getMenuTree();
+      // 将后端返回的树形结构转换为 Ant Design Tree 需要的格式
+      const treeData = convertToTreeData(res || []);
       setMenuList(res || []);
+      setMenuTreeData(treeData);
     } catch (error) {
       console.error('获取菜单列表失败:', error);
     }
+  };
+
+  // 将后端菜单树转换为 Ant Design Tree 格式
+  const convertToTreeData = (menus: MenuItem[]): any[] => {
+    if (!menus || menus.length === 0) return [];
+
+    return menus.map(menu => ({
+      title: menu.menuName,
+      key: menu.id,
+      children: menu.children ? convertToTreeData(menu.children) : [],
+    }));
   };
 
   // 分配菜单权限
@@ -242,45 +258,6 @@ const RolePage: React.FC = () => {
       message.error(error.message || '更新失败');
       return false;
     }
-  };
-
-  // 构建树形数据
-  const buildTreeData = (menus: MenuItem[]): any[] => {
-    const menuMap = new Map<number, MenuItem>();
-    menus.forEach((menu) => menuMap.set(menu.id, menu));
-
-    const treeData: any[] = [];
-    menus.forEach((menu) => {
-      const node = {
-        title: menu.menuName,
-        key: menu.id,
-        children: [] as any[],
-      };
-      if (menu.parentId === 0 || !menu.parentId) {
-        treeData.push(node);
-      } else {
-        const parent = menuMap.get(menu.parentId);
-        if (parent) {
-          const parentNode = findNodeInTree(treeData, menu.parentId);
-          if (parentNode) {
-            parentNode.children = parentNode.children || [];
-            parentNode.children.push(node);
-          }
-        }
-      }
-    });
-    return treeData;
-  };
-
-  const findNodeInTree = (tree: any[], key: number): any | null => {
-    for (const node of tree) {
-      if (node.key === key) return node;
-      if (node.children) {
-        const found = findNodeInTree(node.children, key);
-        if (found) return found;
-      }
-    }
-    return null;
   };
 
   return (
@@ -427,7 +404,7 @@ const RolePage: React.FC = () => {
         <Divider orientation="left">菜单权限</Divider>
         <Tree
           checkable
-          treeData={buildTreeData(menuList)}
+          treeData={menuTreeData}
           checkedKeys={selectedMenuIds}
           onCheck={(checkedKeys) => {
             setSelectedMenuIds(checkedKeys as number[]);

@@ -3,6 +3,8 @@
 <mapper namespace="com.hrms.system.auth.mapper.MenuMapper">
 
     <!-- 根据角色 ID 列表查询菜单列表 -->
+    <!-- menu_type: 1=目录, 2=菜单, 3=按钮 -->
+    <!-- 返回目录和菜单，过滤按钮（type=3） -->
     <select id="selectMenusByRoleIds" resultType="com.hrms.system.auth.entity.MenuEntity">
         SELECT m.* FROM sys_menu m
         INNER JOIN sys_role_menu rm ON m.id = rm.menu_id
@@ -12,6 +14,9 @@
         </foreach>
           AND m.is_deleted = 0
           AND rm.is_deleted = 0
+          AND m.menu_type IN (1, 2)
+          AND m.visible = 1
+          AND m.status = 1
         ORDER BY m.sort_no
     </select>
 

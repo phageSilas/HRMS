@@ -48,7 +48,7 @@ export interface RoleItem {
 export interface MenuItem {
   id: number;
   menuName: string;
-  menuType: number; // 0-目录 1-菜单 2-按钮
+  menuType: number; // 1-目录 2-菜单 3-按钮
   path: string;
   component: string;
   permission: string;
@@ -56,5 +56,7 @@ export interface MenuItem {
   parentId: number;
   sortNo: number;
   status: number;
+  visible?: number;
+  children?: MenuItem[]; // 子菜单列表（树形结构）
   createTime?: string;
 }

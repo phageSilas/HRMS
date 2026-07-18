@@ -57,82 +57,153 @@ INSERT IGNORE INTO `sys_user` (
     0,                                    -- version
     NULL                                  -- remark
 );
--- ----------------------------------------
--- 2. 角色 (sys_role)
--- ----------------------------------------
-INSERT IGNORE INTO `sys_role` (`id`, `role_name`, `role_code`, `data_scope`, `status`, `sort_no`, `create_time`, `update_time`, `is_deleted`, `version`) VALUES
-                                                                                                                                                             (1, '超级管理员', 'ADMIN', 4, 1, 1, NOW(), NOW(), 0, 0),
-                                                                                                                                                             (2, '人力资源', 'HR', 3, 1, 2, NOW(), NOW(), 0, 0),
-                                                                                                                                                             (3, '部门经理', 'MANAGER', 2, 1, 3, NOW(), NOW(), 0, 0),
-                                                                                                                                                             (4, '财务人员', 'FINANCE', 3, 1, 4, NOW(), NOW(), 0, 0),
-                                                                                                                                                             (5, '普通员工', 'EMPLOYEE', 1, 1, 5, NOW(), NOW(), 0, 0);
+INSERT INTO `sys_role` (`id`, `role_name`, `role_code`, `data_scope`, `status`, `sort_no`, `remark`) VALUES
+                                                                                                         (1, '系统管理员', 'ADMIN', 4, 1, 1, '拥有系统全部权限，可管理所有数据'),
+                                                                                                         (2, 'HR专员', 'HR', 3, 1, 2, '负责人力资源管理，可查看本部门及下属部门数据'),
+                                                                                                         (3, '部门主管', 'MANAGER', 3, 1, 3, '负责部门管理和审批，可查看本部门及下属部门数据'),
+                                                                                                         (4, '财务专员', 'FINANCE', 2, 1, 4, '负责薪资核算和财务相关业务，可查看本部门数据'),
+                                                                                                         (5, '普通员工', 'EMPLOYEE', 1, 1, 5, '普通员工角色，仅可查看本人数据');
 
--- ----------------------------------------
--- 3. 用户角色关联 (sys_user_role)
--- ----------------------------------------
-INSERT IGNORE INTO `sys_user_role` (`id`, `user_id`, `role_id`, `create_time`, `update_time`, `is_deleted`, `version`) VALUES
-    (1, 1, 1, NOW(), NOW(), 0, 0);
+-- ============================================================
+-- 2. 初始菜单数据
+-- ============================================================
+-- 菜单类型说明：
+--   1 = 目录（一级菜单，可包含子菜单）
+--   2 = 菜单（二级菜单，具体页面）
+-- ============================================================
 
--- ----------------------------------------
--- 4. 菜单 (sys_menu) - 精简版三级菜单
--- ----------------------------------------
-INSERT IGNORE INTO `sys_menu` (`id`, `parent_id`, `menu_name`, `menu_type`, `path`, `component`, `permission`, `icon`, `sort_no`, `visible`, `status`, `create_time`, `update_time`, `is_deleted`, `version`) VALUES
--- 一级目录
-(1, 0, '系统管理', 1, '/system', 'Layout', NULL, 'system', 1, 1, 1, NOW(), NOW(), 0, 0),
-(2, 0, '个人中心', 1, '/profile', 'Layout', NULL, 'profile', 2, 1, 1, NOW(), NOW(), 0, 0),
-(3, 0, 'AI 智能助手', 1, '/ai', '@/pages/ai', 'ai:chat', 'robot', 3, 1, 1, NOW(), NOW(), 0, 0),
--- 二级菜单
-(101, 1, '用户管理', 2, 'user', 'system/user/index', 'system:user:list', 'user', 1, 1, 1, NOW(), NOW(), 0, 0),
-(102, 1, '角色管理', 2, 'role', 'system/role/index', 'system:role:list', 'role', 2, 1, 1, NOW(), NOW(), 0, 0),
-(201, 2, '个人信息', 2, 'info', 'profile/info/index', 'profile:info:view', 'info', 1, 1, 1, NOW(), NOW(), 0, 0),
-(202, 2, '修改密码', 2, 'password', 'profile/password/index', 'profile:password:update', 'password', 2, 1, 1, NOW(), NOW(), 0, 0),
--- 三级按钮 - 用户管理
-(10101, 101, '用户查询', 3, NULL, NULL, 'system:user:query', NULL, 1, 1, 1, NOW(), NOW(), 0, 0),
-(10102, 101, '用户新增', 3, NULL, NULL, 'system:user:add', NULL, 2, 1, 1, NOW(), NOW(), 0, 0),
-(10103, 101, '用户修改', 3, NULL, NULL, 'system:user:edit', NULL, 3, 1, 1, NOW(), NOW(), 0, 0),
-(10104, 101, '用户删除', 3, NULL, NULL, 'system:user:delete', NULL, 4, 1, 1, NOW(), NOW(), 0, 0),
--- 三级按钮 - 角色管理
-(10201, 102, '角色查询', 3, NULL, NULL, 'system:role:query', NULL, 1, 1, 1, NOW(), NOW(), 0, 0),
-(10202, 102, '角色新增', 3, NULL, NULL, 'system:role:add', NULL, 2, 1, 1, NOW(), NOW(), 0, 0),
-(10203, 102, '角色修改', 3, NULL, NULL, 'system:role:edit', NULL, 3, 1, 1, NOW(), NOW(), 0, 0),
-(10204, 102, '角色删除', 3, NULL, NULL, 'system:role:delete', NULL, 4, 1, 1, NOW(), NOW(), 0, 0);
+-- 一级菜单（目录）
+INSERT INTO `sys_menu` (`id`, `parent_id`, `menu_name`, `menu_type`, `path`, `component`, `permission`, `icon`, `sort_no`, `visible`, `status`, `remark`) VALUES
+                                                                                                                                                              (1, 0, '首页', 1, '/home', '@/pages/Home', 'home', 'home', 1, 1, 1, '首页工作台'),
+                                                                                                                                                              (2, 0, '权限体系', 1, '/system', 'Layout', 'system', 'setting', 2, 1, 1, '系统管理目录'),
+                                                                                                                                                              (3, 0, '组织架构', 1, '/organization', 'Layout', 'organization', 'apartment', 3, 1, 1, '组织架构目录'),
+                                                                                                                                                              (4, 0, '员工档案', 1, '/employee', 'Layout', 'employee', 'team', 4, 1, 1, '员工档案目录'),
+                                                                                                                                                              (5, 0, '入转调离', 1, '/process', 'Layout', 'process', 'swap', 5, 1, 1, '入转调离目录'),
+                                                                                                                                                              (6, 0, '考勤管理', 1, '/attendance', 'Layout', 'attendance', 'clock-circle', 6, 1, 1, '考勤管理目录'),
+                                                                                                                                                              (7, 0, '薪资管理', 1, '/salary', 'Layout', 'salary', 'pay-circle', 7, 1, 1, '薪资管理目录'),
+                                                                                                                                                              (8, 0, '审批中心', 1, '/approval', 'Layout', 'approval', 'check-circle', 8, 1, 1, '审批中心目录'),
+                                                                                                                                                              (9, 0, '个人中心', 1, '/profile', 'Layout', 'profile', 'user', 9, 1, 1, '个人中心目录'),
+                                                                                                                                                              (10, 0, 'AI智能助手', 1, '/ai', '@/pages/ai', 'ai', 'robot', 10, 1, 1, 'AI智能助手');
 
--- ----------------------------------------
--- 5. 角色菜单关联 (sys_role_menu)
--- ----------------------------------------
-INSERT IGNORE INTO `sys_role_menu` (`id`, `role_id`, `menu_id`, `create_time`, `update_time`, `is_deleted`, `version`) VALUES
--- ADMIN: 全部菜单
-(1, 1, 1, NOW(), NOW(), 0, 0),
-(2, 1, 2, NOW(), NOW(), 0, 0),
-(3, 1, 101, NOW(), NOW(), 0, 0),
-(4, 1, 102, NOW(), NOW(), 0, 0),
-(5, 1, 201, NOW(), NOW(), 0, 0),
-(6, 1, 202, NOW(), NOW(), 0, 0),
-(7, 1, 10101, NOW(), NOW(), 0, 0),
-(8, 1, 10102, NOW(), NOW(), 0, 0),
-(9, 1, 10103, NOW(), NOW(), 0, 0),
-(10, 1, 10104, NOW(), NOW(), 0, 0),
-(11, 1, 10201, NOW(), NOW(), 0, 0),
-(12, 1, 10202, NOW(), NOW(), 0, 0),
-(13, 1, 10203, NOW(), NOW(), 0, 0),
-(14, 1, 10204, NOW(), NOW(), 0, 0),
--- ADMIN: AI 智能助手
-(15, 1, 3, NOW(), NOW(), 0, 0),
--- EMPLOYEE: 仅个人中心
-(16, 5, 2, NOW(), NOW(), 0, 0),
-(17, 5, 201, NOW(), NOW(), 0, 0),
-(18, 5, 202, NOW(), NOW(), 0, 0),
+-- 权限体系子菜单
+INSERT INTO `sys_menu` (`id`, `parent_id`, `menu_name`, `menu_type`, `path`, `component`, `permission`, `icon`, `sort_no`, `visible`, `status`, `remark`) VALUES
+                                                                                                                                                              (101, 2,
+                                                                                                                                                               '用户管理', 2, '/system/user', '@/pages/system/user', 'system:user', 'user', 1, 1, 1, '用户管理页面'),
+                                                                                                                                                              (102, 2, '角色管理', 2, '/system/role', '@/pages/system/role', 'system:role', 'team', 2, 1, 1, '角色管理页面'),
+                                                                                                                                                              (103, 2, '菜单管理', 2, '/system/menu', '@/pages/system/menu', 'system:menu', 'menu', 3, 1, 1, '菜单管理页面');
 
--- AI 智能助手菜单 (菜单ID: 3)
--- HR 角色
-(19, 2, 3, NOW(), NOW(), 0, 0),
--- MANAGER 角色
-(20, 3, 3, NOW(), NOW(), 0, 0),
--- EMPLOYEE 角色
-(21, 5, 3, NOW(), NOW(), 0, 0),
--- FINANCE 角色
-(22, 4, 3, NOW(), NOW(), 0, 0);
+-- 组织架构子菜单
+INSERT INTO `sys_menu` (`id`, `parent_id`, `menu_name`, `menu_type`, `path`, `component`, `permission`, `icon`, `sort_no`, `visible`, `status`, `remark`) VALUES
+                                                                                                                                                              (301, 3, '部门管理', 2, '/organization/dept', '@/pages/organization/dept', 'organization:dept', 'apartment', 1, 1, 1, '部门管理页面'),
+                                                                                                                                                              (302, 3, '职位管理', 2, '/organization/post', '@/pages/organization/post', 'organization:post', 'solution', 2, 1, 1, '职位管理页面'),
+                                                                                                                                                              (303, 3, '字典管理', 2, '/organization/dict', '@/pages/organization/dict', 'organization:dict', 'book', 3, 1, 1, '字典管理页面');
 
+-- 员工档案子菜单
+INSERT INTO `sys_menu` (`id`, `parent_id`, `menu_name`, `menu_type`, `path`, `component`, `permission`, `icon`, `sort_no`, `visible`, `status`, `remark`) VALUES
+                                                                                                                                                              (401, 4, '员工列表', 2, '/employee/list', '@/pages/employee', 'employee:list', 'unordered-list', 1, 1, 1, '员工列表页面'),
+                                                                                                                                                              (402, 4, '新增员工', 2, '/employee/create', '@/pages/employee/edit', 'employee:create', 'plus', 2, 0, 1, '新增员工页面（隐藏菜单）'),
+                                                                                                                                                              (403, 4, '编辑员工', 2, '/employee/:id/edit', '@/pages/employee/edit', 'employee:update', 'edit', 3, 0, 1, '编辑员工页面（隐藏菜单）'),
+                                                                                                                                                              (404, 4, '员工详情', 2, '/employee/detail/:id', '@/pages/employee/detail', 'employee:detail', 'file-text', 4, 0, 1, '员工详情页面（隐藏菜单）'),
+                                                                                                                                                              (405, 4, '合同管理', 2, '/employee/contract', '@/pages/employee/contract', 'employee:contract', 'file', 5, 1, 1, '合同管理页面');
+
+-- 入转调离子菜单
+INSERT INTO `sys_menu` (`id`, `parent_id`, `menu_name`, `menu_type`, `path`, `component`, `permission`, `icon`, `sort_no`, `visible`, `status`, `remark`) VALUES
+                                                                                                                                                              (501, 5, '入职申请', 2, '/process/entry', '@/pages/process/entry', 'process:entry', 'user-add', 1, 1, 1, '入职申请页面'),
+                                                                                                                                                              (502, 5, '转正申请', 2, '/process/regular', '@/pages/process/regular', 'process:regular', 'check-circle', 2, 1, 1, '转正申请页面'),
+                                                                                                                                                              (503, 5, '调岗申请', 2, '/process/transfer', '@/pages/process/transfer', 'process:transfer', 'swap', 3, 1, 1, '调岗申请页面'),
+                                                                                                                                                              (504, 5, '离职申请', 2, '/process/leave', '@/pages/process/leave', 'process:leave', 'user-delete', 4, 1, 1, '离职申请页面');
+
+-- 考勤管理子菜单
+INSERT INTO `sys_menu` (`id`, `parent_id`, `menu_name`, `menu_type`, `path`, `component`, `permission`, `icon`, `sort_no`, `visible`, `status`, `remark`) VALUES
+                                                                                                                                                              (601, 6, '员工打卡', 2, '/attendance/punch', '@/pages/attendance/punch', 'attendance:punch', 'clock-circle', 1, 1, 1, '员工打卡页面'),
+                                                                                                                                                              (602, 6, '考勤记录', 2, '/attendance/record', '@/pages/attendance/record', 'attendance:record', 'calendar', 2, 1, 1, '考勤记录页面'),
+                                                                                                                                                              (603, 6, '考勤配置', 2, '/attendance/groups', '@/pages/attendance/groups', 'attendance:config', 'setting', 3, 1, 1, '考勤配置页面'),
+                                                                                                                                                              (604, 6, '我的请假', 2, '/attendance/leave', '@/pages/attendance/leave', 'attendance:leave', 'form', 4, 0, 1, '我的请假页面（隐藏菜单）'),
+                                                                                                                                                              (605, 6, '请假管理', 2, '/attendance/leaveManage', '@/pages/attendance/leaveManage', 'attendance:leave-manage', 'audit', 5, 1, 1, '请假管理页面'),
+                                                                                                                                                              (606, 6, '考勤统计', 2, '/attendance/summary', '@/pages/attendance/summary', 'attendance:summary', 'bar-chart', 6, 1, 1, '考勤统计页面');
+
+-- 薪资管理子菜单
+INSERT INTO `sys_menu` (`id`, `parent_id`, `menu_name`, `menu_type`, `path`, `component`, `permission`, `icon`, `sort_no`, `visible`, `status`, `remark`) VALUES
+                                                                                                                                                              (701, 7, '薪资账套', 2, '/salary/account', '@/pages/salary/account', 'salary:account', 'wallet', 1, 1, 1, '薪资账套页面'),
+                                                                                                                                                              (702, 7, '薪资核算', 2, '/salary/batch', '@/pages/salary/batch', 'salary:batch', 'calculator', 2, 1, 1, '薪资核算页面'),
+                                                                                                                                                              (703, 7, '工资条', 2, '/salary/payslip', '@/pages/salary/payslip', 'salary:payslip', 'pay-circle', 3, 1, 1, '工资条页面');
+
+-- 审批中心子菜单
+INSERT INTO `sys_menu` (`id`, `parent_id`, `menu_name`, `menu_type`, `path`, `component`, `permission`, `icon`, `sort_no`, `visible`, `status`, `remark`) VALUES
+                                                                                                                                                              (801, 8, '审批工作台', 2, '/approval/workspace', '@/pages/approval/workspace', 'approval:workspace', 'desktop', 1, 1, 1, '审批工作台页面'),
+                                                                                                                                                              (802, 8, '委托审批', 2, '/approval/delegation', '@/pages/approval/delegation', 'approval:delegation', 'user-switch', 2, 1, 1, '委托审批页面'),
+                                                                                                                                                              (803, 8, '审批详情', 2, '/approval/detail/:id', '@/pages/approval/detail', 'approval:detail', 'file-text', 3, 0, 1, '审批详情页面（隐藏菜单）');
+
+-- 个人中心子菜单
+INSERT INTO `sys_menu` (`id`, `parent_id`, `menu_name`, `menu_type`, `path`, `component`, `permission`, `icon`, `sort_no`, `visible`, `status`, `remark`) VALUES
+                                                                                                                                                              (901, 9, '我的首页', 2, '/profile/index', '@/pages/profile/index', 'profile:index', 'home', 1, 1, 1, '我的首页页面'),
+                                                                                                                                                              (902, 9, '我的档案', 2, '/profile/archive', '@/pages/profile/archive', 'profile:archive', 'folder', 2, 1, 1, '我的档案页面'),
+                                                                                                                                                              (903, 9, '我的考勤', 2, '/profile/attendance', '@/pages/profile/attendance', 'profile:attendance', 'calendar', 3, 1, 1, '我的考勤页面'),
+                                                                                                                                                              (904, 9, '我的请假', 2, '/profile/leave', '@/pages/profile/leave', 'profile:leave', 'form', 4, 1, 1, '我的请假页面（重定向）'),
+                                                                                                                                                              (905, 9, '我的薪资', 2, '/profile/salary', '@/pages/profile/salary', 'profile:salary', 'pay-circle', 5, 1, 1, '我的薪资页面'),
+                                                                                                                                                              (906, 9, '账号安全', 2, '/profile/security', '@/pages/profile/security', 'profile:security', 'lock', 6, 1, 1, '账号安全页面');
+
+-- ============================================================
+-- 3. 角色菜单关联数据
+-- ============================================================
+
+-- 系统管理员(ADMIN) - 拥有全部菜单权限
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`)
+SELECT 1, id FROM `sys_menu`;
+
+-- HR专员(HR) - 排除权限体系模块，拥有其他业务模块权限
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`)
+SELECT 2, id FROM `sys_menu` WHERE id NOT IN (
+    -- 排除权限体系相关菜单
+                                              2, 101, 102, 103
+    );
+
+-- 部门主管(MANAGER) - 员工档案、入转调离、考勤管理、审批中心、个人中心、AI助手
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`)
+SELECT 3, id FROM `sys_menu` WHERE id IN (
+    -- 首页
+                                          1,
+    -- 员工档案
+                                          4, 401, 402, 403, 404, 405,
+    -- 入转调离
+                                          5, 501, 502, 503, 504,
+    -- 考勤管理
+                                          6, 601, 602, 603, 604, 605, 606,
+    -- 审批中心
+                                          8, 801, 802, 803,
+    -- 个人中心
+                                          9, 901, 902, 903, 904, 905, 906,
+    -- AI助手
+                                          10
+    );
+
+-- 财务专员(FINANCE) - 薪资管理、审批中心、个人中心、AI助手
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`)
+SELECT 4, id FROM `sys_menu` WHERE id IN (
+    -- 首页
+                                          1,
+    -- 薪资管理
+                                          7, 701, 702, 703,
+    -- 审批中心
+                                          8, 801, 802, 803,
+    -- 个人中心
+                                          9, 901, 902, 903, 904, 905, 906,
+    -- AI助手
+                                          10
+    );
+
+-- 普通员工(EMPLOYEE) - 仅打卡、个人中心、AI助手
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`)
+SELECT 5, id FROM `sys_menu` WHERE id IN (
+    -- 首页
+                                          1,
+    -- 考勤打卡
+                                          6, 601, 604,
+    -- 个人中心
+                                          9, 901, 902, 903, 904, 905, 906,
+    -- AI助手
+                                          10
+    );
 -- ----------------------------------------
 -- 6. 字典类型 (sys_dict_type)
 -- ----------------------------------------
@@ -311,7 +382,7 @@ UPDATE hr_salary_batch_item SET employee_id = 6 WHERE id IN (1,3) AND employee_i
 INSERT IGNORE INTO `hr_attendance_overtime` (`id`, `employee_id`, `overtime_date`, `duration`, `reason`, `approval_status`, `create_time`, `update_time`, `is_deleted`, `version`) VALUES
     (1, 5, '2026-07-10 18:00:00', 3.0, '项目上线紧急支持', 2, NOW(), NOW(), 0, 0);
 
-# 新增用户职级字段
+-- # 新增用户职级字段
 START TRANSACTION;
 
 INSERT INTO sys_dict_type (
