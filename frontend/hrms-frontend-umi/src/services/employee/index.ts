@@ -98,9 +98,12 @@ export interface EmployeeCreateRequest {
 
 /** 字段权限 */
 export interface FieldPermissions {
+  /** 可查看字段列表，["*"] 表示全部 */
+  viewableFields: string[];
+  /** 可编辑字段列表，["*"] 表示全部 */
   editableFields: string[];
-  flowFields: string[];
-  hiddenFields: string[];
+  /** 流程必填字段列表（需走审批流程，不可直接编辑） */
+  flowRequiredFields: string[];
 }
 
 /** 合同信息（字段与后端 EmployeeContractVO 对齐） */
@@ -239,7 +242,9 @@ export async function getEmployeesByDepartment(departmentId: number) {
  * 获取字段权限
  */
 export async function getFieldPermissions() {
-  return request.get<FieldPermissions>('/api/v1/permissions/field');
+  return request.get<FieldPermissions>('/api/v1/permissions/field', {
+    params: { bizType: 'employee' },
+  });
 }
 
 /**
