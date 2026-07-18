@@ -1,7 +1,6 @@
 package com.hrms.business.personnel.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -19,6 +18,7 @@ import com.hrms.business.personnel.enums.ApplicationStatusEnum;
 import com.hrms.business.personnel.enums.RegularEvaluateResultEnum;
 import com.hrms.business.personnel.mapper.EmployeeSnapshotMapper;
 import com.hrms.business.personnel.mapper.RegularApplicationMapper;
+import com.hrms.business.personnel.convert.PersonnelDisplayEnricher;
 import com.hrms.business.personnel.service.RegularApplicationService;
 import com.hrms.business.personnel.vo.RegularApplicationApplyVO;
 import com.hrms.business.personnel.vo.RegularApplicationPageVO;
@@ -26,6 +26,8 @@ import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
 import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
+import com.hrms.system.organization.service.DeptService;
+import com.hrms.system.organization.service.PostService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -66,6 +68,10 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
     private final EmployeeService employeeService;
 
     private final ApprovalEngine approvalEngine;
+
+    private final DeptService deptService;
+
+    private final PostService postService;
 
     /**
      * 分页查询转正申请。
@@ -205,12 +211,19 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
     private PageResult<RegularApplicationPageVO> pagePendingRegularEmployees(RegularApplicationQueryDTO queryDTO) {
         int pageNum = normalizePageNum(queryDTO.getPageNum());
         int pageSize = normalizePageSize(queryDTO.getPageSize());
+        PersonnelDisplayEnricher displayEnricher = new PersonnelDisplayEnricher(deptService, postService);
         Page<EmployeeSnapshotEntity> page = employeeSnapshotMapper.selectPage(
                 Page.of(pageNum, pageSize),
                 buildPendingEmployeeWrapper(queryDTO)
         );
+        Map<Long, RegularApplicationEntity> processingApplicationMap = listProcessingRegularApplicationMap(
+                page.getRecords().stream().map(EmployeeSnapshotEntity::getId).toList()
+        );
         List<RegularApplicationPageVO> records = page.getRecords().stream()
-                .map(RegularApplicationConvert::toPendingVO)
+                .map(employee -> RegularApplicationConvert.toPendingVO(
+                        employee,
+                        processingApplicationMap.get(employee.getId())))
+                .map(displayEnricher::enrichRegularApplication)
                 .toList();
         return PageResult.of(records, page.getTotal(), pageNum, pageSize);
     }
@@ -225,6 +238,7 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
     private PageResult<RegularApplicationPageVO> pageEvaluatedRegularApplications(RegularApplicationQueryDTO queryDTO) {
         int pageNum = normalizePageNum(queryDTO.getPageNum());
         int pageSize = normalizePageSize(queryDTO.getPageSize());
+        PersonnelDisplayEnricher displayEnricher = new PersonnelDisplayEnricher(deptService, postService);
         Page<RegularApplicationEntity> page = regularApplicationMapper.selectPage(
                 Page.of(pageNum, pageSize),
                 new LambdaQueryWrapper<RegularApplicationEntity>().orderByDesc(RegularApplicationEntity::getCreateTime)
@@ -234,6 +248,7 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
         );
         List<RegularApplicationPageVO> records = page.getRecords().stream()
                 .map(entity -> RegularApplicationConvert.toEvaluatedVO(entity, employeeSnapshotMap.get(entity.getEmployeeId())))
+                .map(displayEnricher::enrichRegularApplication)
                 .toList();
         return PageResult.of(records, page.getTotal(), pageNum, pageSize);
     }
@@ -274,6 +289,34 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
                 .filter(employee -> employee != null)
                 .map(this::toEmployeeSnapshot)
                 .collect(Collectors.toMap(EmployeeSnapshotEntity::getId, Function.identity(), (left, right) -> left));
+    }
+
+    /**
+     * 批量查询员工进行中的转正申请映射。
+     *
+     * @param employeeIds 员工ID列表
+     * @return 进行中的转正申请映射
+     * 本方法使用的工具类: CollUtil(hutool),Collectors(JDK)
+     */
+    private Map<Long, RegularApplicationEntity> listProcessingRegularApplicationMap(List<Long> employeeIds) {
+        if (CollUtil.isEmpty(employeeIds)) {
+            return Collections.emptyMap();
+        }
+        List<RegularApplicationEntity> applications = regularApplicationMapper.selectList(
+                new LambdaQueryWrapper<RegularApplicationEntity>()
+                        .in(RegularApplicationEntity::getEmployeeId, employeeIds)
+                        .in(RegularApplicationEntity::getApprovalStatus,
+                                ApplicationStatusEnum.DRAFT.getCode(),
+                                ApplicationStatusEnum.APPROVING.getCode())
+                        .orderByDesc(RegularApplicationEntity::getCreateTime)
+                        .orderByDesc(RegularApplicationEntity::getId)
+        );
+        return applications.stream()
+                .collect(Collectors.toMap(
+                        RegularApplicationEntity::getEmployeeId,
+                        Function.identity(),
+                        (left, right) -> left
+                ));
     }
 
     /**

@@ -21,6 +21,7 @@ import {
   PlusOutlined,
   SendOutlined,
 } from '@ant-design/icons';
+import { formatProcessDateTime } from '../utils';
 import {
   DrawerForm,
   PageContainer,
@@ -238,14 +239,14 @@ const EntryPage: React.FC = () => {
       dataIndex: 'deptName',
       width: 130,
       search: false,
-      renderText: (_, record) => record.deptName || `部门 ${record.deptId}`,
+      renderText: (_, record) => record.deptName || '--',
     },
     {
       title: '职位',
       dataIndex: 'postName',
       width: 150,
       search: false,
-      renderText: (_, record) => record.postName || `职位 ${record.postId}`,
+      renderText: (_, record) => record.postName || '--',
     },
     {
       title: '录用类型',
@@ -281,9 +282,9 @@ const EntryPage: React.FC = () => {
     {
       title: '申请时间',
       dataIndex: 'createTime',
-      valueType: 'dateTime',
       width: 170,
       search: false,
+      render: (_, record) => formatProcessDateTime(record.createTime),
     },
     {
       title: '操作',

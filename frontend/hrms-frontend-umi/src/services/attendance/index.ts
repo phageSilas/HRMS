@@ -142,6 +142,16 @@ export interface AttendanceGroupQuery extends Partial<PageQuery> {
   status?: number;
 }
 
+export type AttendanceGroupScopeType = 'DEPT' | 'POST' | 'EMPLOYEE';
+
+export interface AttendanceGroupMemberRange {
+  scopeType?: AttendanceGroupScopeType;
+  deptIds?: number[];
+  deptId?: number;
+  postId?: number;
+  employeeIds?: number[];
+}
+
 export interface AttendanceGroup {
   id: number;
   groupName: string;
@@ -153,6 +163,14 @@ export interface AttendanceGroup {
   monthlyCorrectionLimit?: number;
   status?: number;
   statusText?: string;
+  scopeType?: AttendanceGroupScopeType | string;
+  scopeValue?: string;
+  scopeName?: string;
+  memberCount?: number;
+  deptIds?: number[];
+  deptId?: number;
+  postId?: number;
+  employeeIds?: number[];
   createTime?: string | number[];
 }
 
@@ -175,6 +193,7 @@ export interface AttendanceGroupRequest {
     radius?: number;
     address?: string;
   };
+  memberRange?: AttendanceGroupMemberRange;
   status?: number;
 }
 

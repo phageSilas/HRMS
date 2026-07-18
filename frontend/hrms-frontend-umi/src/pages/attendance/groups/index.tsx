@@ -2,6 +2,7 @@ import { usePageAutoRefresh } from '@/hooks/usePageAutoRefresh';
 import type {
   AttendanceGroup,
   AttendanceGroupRequest,
+  AttendanceGroupScopeType,
 } from '@/services/attendance';
 import {
   createAttendanceGroup,
@@ -9,6 +10,10 @@ import {
   getAttendanceGroups,
   updateAttendanceGroup,
 } from '@/services/attendance';
+import type { EmployeeBrief } from '@/services/employee';
+import { getEmployeeList } from '@/services/employee';
+import type { DeptTreeNode, PostItem } from '@/services/organization';
+import { getDepartmentTree, getPostList } from '@/services/organization';
 import {
   CalendarOutlined,
   ClockCircleOutlined,
@@ -19,7 +24,6 @@ import {
 } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
 import { history } from '@umijs/max';
-import type { PageResult } from '@/types/api';
 import {
   Button,
   Card,
@@ -30,6 +34,7 @@ import {
   Input,
   InputNumber,
   Modal,
+  Radio,
   Row,
   Select,
   Space,
@@ -37,6 +42,7 @@ import {
   Switch,
   Tag,
   TimePicker,
+  TreeSelect,
   Typography,
   message,
 } from 'antd';
@@ -55,6 +61,7 @@ type GroupFormValues = Omit<
   | 'flexibleStartTime'
   | 'flexibleEndTime'
   | 'locationRange'
+  | 'memberRange'
 > & {
   clockInTime: dayjs.Dayjs;
   clockOutTime: dayjs.Dayjs;
@@ -67,12 +74,30 @@ type GroupFormValues = Omit<
   locationRadius?: number;
   locationAddress?: string;
   enabled?: boolean;
+  scopeType?: AttendanceGroupScopeType;
+  deptIds?: number[];
+  postId?: number;
+  employeeDeptId?: number;
+  employeeIds?: number[];
+};
+
+type TreeSelectNode = {
+  title: string;
+  value: number;
+  key: number;
+  children?: TreeSelectNode[];
 };
 
 const shiftTypeMap: Record<string, { label: string; color: string }> = {
   FIXED: { label: '固定班', color: 'blue' },
   FLEXIBLE: { label: '弹性班', color: 'purple' },
   SCHEDULED: { label: '排班制', color: 'orange' },
+};
+
+const scopeTypeText: Record<AttendanceGroupScopeType, string> = {
+  DEPT: '部门',
+  POST: '职位',
+  EMPLOYEE: '指定员工',
 };
 
 const weekDays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
@@ -102,31 +127,123 @@ function getShiftMeta(type?: string) {
   };
 }
 
+function toTreeSelectData(nodes?: DeptTreeNode[]): TreeSelectNode[] {
+  return (nodes || []).map((node) => ({
+    title: node.deptName,
+    value: node.id,
+    key: node.id,
+    children: toTreeSelectData(node.children),
+  }));
+}
+
+function buildMemberRange(values: GroupFormValues): AttendanceGroupRequest['memberRange'] {
+  const scopeType = values.scopeType || 'DEPT';
+  if (scopeType === 'DEPT') {
+    return {
+      scopeType,
+      deptIds: values.deptIds || [],
+    };
+  }
+  if (scopeType === 'POST') {
+    return {
+      scopeType,
+      postId: values.postId,
+    };
+  }
+  return {
+    scopeType,
+    deptId: values.employeeDeptId,
+    employeeIds: values.employeeIds || [],
+  };
+}
+
 const AttendanceGroupsPage: React.FC = () => {
   const [form] = Form.useForm<GroupFormValues>();
+  const scopeType = Form.useWatch('scopeType', form);
+  const employeeDeptId = Form.useWatch('employeeDeptId', form);
+
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<AttendanceGroup>();
   const [query] = useState({ pageNum: 1, pageSize: 20 });
   const [groups, setGroups] = useState<AttendanceGroup[]>([]);
-  const [groupPageData, setGroupPageData] = useState<PageResult<AttendanceGroup>>();
   const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [departmentTree, setDepartmentTree] = useState<DeptTreeNode[]>([]);
+  const [departmentLoading, setDepartmentLoading] = useState(false);
+  const [postOptions, setPostOptions] = useState<PostItem[]>([]);
+  const [postLoading, setPostLoading] = useState(false);
+  const [employeeOptions, setEmployeeOptions] = useState<EmployeeBrief[]>([]);
+  const [employeeLoading, setEmployeeLoading] = useState(false);
+
+  const departmentTreeData = useMemo(() => toTreeSelectData(departmentTree), [departmentTree]);
 
   const loadGroups = async () => {
     setLoading(true);
     try {
       const page = await getAttendanceGroups(query);
-      setGroupPageData(page);
       const nextGroups = page.records ?? [];
       setGroups(nextGroups);
       return nextGroups;
     } catch (error) {
-      const messageText =
-        error instanceof Error ? error.message : '考勤组加载失败';
+      const messageText = error instanceof Error ? error.message : '考勤组加载失败';
       message.error(messageText);
       return groups;
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadDepartmentTree = async () => {
+    if (departmentTree.length > 0) {
+      return;
+    }
+    setDepartmentLoading(true);
+    try {
+      setDepartmentTree(await getDepartmentTree());
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : '部门数据加载失败';
+      message.error(messageText);
+    } finally {
+      setDepartmentLoading(false);
+    }
+  };
+
+  const loadPostOptions = async () => {
+    if (postOptions.length > 0) {
+      return;
+    }
+    setPostLoading(true);
+    try {
+      const page = await getPostList({ pageNum: 1, pageSize: 100 });
+      setPostOptions(page.records || []);
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : '职位数据加载失败';
+      message.error(messageText);
+    } finally {
+      setPostLoading(false);
+    }
+  };
+
+  const searchEmployees = async (keyword = '', deptId = employeeDeptId) => {
+    if (!deptId) {
+      setEmployeeOptions([]);
+      return;
+    }
+    setEmployeeLoading(true);
+    try {
+      const page = await getEmployeeList({
+        keyword,
+        deptIds: [deptId],
+        pageNum: 1,
+        pageSize: 20,
+      });
+      setEmployeeOptions(page.records || []);
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : '员工数据加载失败';
+      message.error(messageText);
+    } finally {
+      setEmployeeLoading(false);
     }
   };
 
@@ -137,6 +254,21 @@ const AttendanceGroupsPage: React.FC = () => {
   usePageAutoRefresh(() => {
     void loadGroups();
   });
+
+  useEffect(() => {
+    if (!drawerOpen) {
+      return;
+    }
+    void loadDepartmentTree();
+    void loadPostOptions();
+  }, [drawerOpen]);
+
+  useEffect(() => {
+    if (!drawerOpen || scopeType !== 'EMPLOYEE') {
+      return;
+    }
+    void searchEmployees('', employeeDeptId);
+  }, [employeeDeptId]);
 
   const activeCount = useMemo(
     () => groups.filter((item) => item.status !== 0).length,
@@ -155,10 +287,12 @@ const AttendanceGroupsPage: React.FC = () => {
         earlyLeaveThreshold: 15,
         maxCorrectionCount: 2,
         enabled: true,
+        scopeType: 'DEPT',
       });
       return;
     }
 
+    const nextScopeType = (editingGroup.scopeType || 'DEPT') as AttendanceGroupScopeType;
     form.setFieldsValue({
       groupName: editingGroup.groupName,
       shiftType: (editingGroup.shiftType || 'FIXED').toUpperCase(),
@@ -168,7 +302,15 @@ const AttendanceGroupsPage: React.FC = () => {
       earlyLeaveThreshold: editingGroup.earlyLeaveThresholdMinutes,
       maxCorrectionCount: editingGroup.monthlyCorrectionLimit,
       enabled: editingGroup.status !== 0,
+      scopeType: nextScopeType,
+      deptIds: editingGroup.deptIds || [],
+      postId: editingGroup.postId,
+      employeeDeptId: editingGroup.deptId,
+      employeeIds: editingGroup.employeeIds || [],
     });
+    if (nextScopeType === 'EMPLOYEE') {
+      void searchEmployees('', editingGroup.deptId);
+    }
   }, [drawerOpen, editingGroup, form]);
 
   const openCreateDrawer = () => {
@@ -187,43 +329,57 @@ const AttendanceGroupsPage: React.FC = () => {
     setDrawerOpen(false);
     setEditingGroup(undefined);
     setDeleting(false);
+    setSubmitting(false);
+    setEmployeeOptions([]);
     form.resetFields();
   };
 
   const handleSubmit = async () => {
-    const values = await form.validateFields();
-    const payload: AttendanceGroupRequest = {
-      groupName: values.groupName,
-      shiftType: values.shiftType,
-      clockInTime: toRequestTime(values.clockInTime) || '09:00:00',
-      clockOutTime: toRequestTime(values.clockOutTime) || '18:00:00',
-      restStartTime: toRequestTime(values.restStartTime),
-      restEndTime: toRequestTime(values.restEndTime),
-      flexibleStartTime: toRequestTime(values.flexibleStartTime),
-      flexibleEndTime: toRequestTime(values.flexibleEndTime),
-      lateThreshold: values.lateThreshold,
-      earlyLeaveThreshold: values.earlyLeaveThreshold,
-      maxCorrectionCount: values.maxCorrectionCount,
-      ipWhitelist: values.ipWhitelist,
-      status: values.enabled === false ? 0 : 1,
-      locationRange: {
-        latitude: values.locationLatitude,
-        longitude: values.locationLongitude,
-        radius: values.locationRadius,
-        address: values.locationAddress,
-      },
-    };
+    try {
+      const values = await form.validateFields();
+      const payload: AttendanceGroupRequest = {
+        groupName: values.groupName,
+        shiftType: values.shiftType,
+        clockInTime: toRequestTime(values.clockInTime) || '09:00:00',
+        clockOutTime: toRequestTime(values.clockOutTime) || '18:00:00',
+        restStartTime: toRequestTime(values.restStartTime),
+        restEndTime: toRequestTime(values.restEndTime),
+        flexibleStartTime: toRequestTime(values.flexibleStartTime),
+        flexibleEndTime: toRequestTime(values.flexibleEndTime),
+        lateThreshold: values.lateThreshold,
+        earlyLeaveThreshold: values.earlyLeaveThreshold,
+        maxCorrectionCount: values.maxCorrectionCount,
+        ipWhitelist: values.ipWhitelist,
+        status: values.enabled === false ? 0 : 1,
+        locationRange: {
+          latitude: values.locationLatitude,
+          longitude: values.locationLongitude,
+          radius: values.locationRadius,
+          address: values.locationAddress,
+        },
+        memberRange: buildMemberRange(values),
+      };
 
-    if (editingGroup) {
-      await updateAttendanceGroup(editingGroup.id, payload);
-      message.success('考勤组已更新');
-    } else {
-      await createAttendanceGroup(payload);
-      message.success('考勤组已新增');
+      setSubmitting(true);
+      if (editingGroup) {
+        await updateAttendanceGroup(editingGroup.id, payload);
+        message.success('考勤组已更新');
+      } else {
+        await createAttendanceGroup(payload);
+        message.success('考勤组已新增');
+      }
+
+      closeDrawer();
+      await loadGroups();
+    } catch (error) {
+      if (error && typeof error === 'object' && 'errorFields' in error) {
+        return;
+      }
+      const messageText = error instanceof Error ? error.message : '考勤组保存失败';
+      message.error(messageText);
+    } finally {
+      setSubmitting(false);
     }
-
-    closeDrawer();
-    await loadGroups();
   };
 
   const handleDeleteGroup = () => {
@@ -236,7 +392,7 @@ const AttendanceGroupsPage: React.FC = () => {
       content: '删除后不可恢复。',
       okText: '确认删除',
       cancelText: '取消',
-      okButtonProps: { danger: true, loading: deleting },
+      okButtonProps: { danger: true },
       onOk: async () => {
         try {
           setDeleting(true);
@@ -245,8 +401,7 @@ const AttendanceGroupsPage: React.FC = () => {
           closeDrawer();
           await loadGroups();
         } catch (error) {
-          const messageText =
-            error instanceof Error ? error.message : '考勤组删除失败';
+          const messageText = error instanceof Error ? error.message : '考勤组删除失败';
           message.error(messageText);
         } finally {
           setDeleting(false);
@@ -260,13 +415,9 @@ const AttendanceGroupsPage: React.FC = () => {
       <div className={styles.pageHeader}>
         <div>
           <Title level={3}>考勤规则配置</Title>
-          <Text type="secondary">管理考勤组、工作日及打卡规则</Text>
+          <Text type="secondary">管理考勤组、适用范围、工作日及打卡规则</Text>
         </div>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={openCreateDrawer}
-        >
+        <Button type="primary" icon={<PlusOutlined />} onClick={openCreateDrawer}>
           新增考勤组
         </Button>
       </div>
@@ -276,6 +427,8 @@ const AttendanceGroupsPage: React.FC = () => {
           <Row gutter={[16, 16]} className={styles.groupGrid}>
             {groups.map((group) => {
               const shiftMeta = getShiftMeta(group.shiftType);
+              const scopeText = group.scopeName || '暂未配置适用范围';
+              const normalizedScopeType = group.scopeType as AttendanceGroupScopeType | undefined;
               return (
                 <Col xs={24} md={12} xl={8} key={group.id}>
                   <Card
@@ -289,8 +442,8 @@ const AttendanceGroupsPage: React.FC = () => {
                       />
                     }
                   >
-                    <Space direction="vertical" size={10}>
-                      <Space>
+                    <Space direction="vertical" size={10} className={styles.groupCardContent}>
+                      <Space wrap>
                         <Text strong className={styles.groupName}>
                           {group.groupName}
                         </Text>
@@ -301,26 +454,27 @@ const AttendanceGroupsPage: React.FC = () => {
                       </Space>
                       <div className={styles.groupMeta}>
                         <ClockCircleOutlined />
-                        {formatBackendTime(group.workStartTime)} -{' '}
-                        {formatBackendTime(group.workEndTime)}
+                        {formatBackendTime(group.workStartTime)} - {formatBackendTime(group.workEndTime)}
                       </div>
-                      <div className={styles.groupMeta}>
+                      <div className={styles.scopeMeta}>
                         <TeamOutlined />
-                        成员范围由后端考勤组规则解析
+                        <div>
+                          <div className={styles.scopeSummary}>
+                            {normalizedScopeType ? `${scopeTypeText[normalizedScopeType] || '范围'}：` : ''}
+                            {scopeText}
+                          </div>
+                          <Text type="secondary">{group.memberCount ?? 0} 人</Text>
+                        </div>
                       </div>
                       <div className={styles.groupFooter}>
                         <span>补卡上限 {group.monthlyCorrectionLimit ?? 0} 次/月</span>
-                        <span>
-                          迟到阈值 {group.lateThresholdMinutes ?? 0}min
-                        </span>
+                        <span>迟到阈值 {group.lateThresholdMinutes ?? 0}min</span>
                       </div>
                       <div className={styles.groupActions}>
                         <Button
                           type="link"
                           icon={<FileSearchOutlined />}
-                          onClick={() =>
-                            history.push(`/attendance/record?groupId=${group.id}`)
-                          }
+                          onClick={() => history.push(`/attendance/record?groupId=${group.id}`)}
                         >
                           查看记录
                         </Button>
@@ -333,10 +487,7 @@ const AttendanceGroupsPage: React.FC = () => {
           </Row>
         ) : (
           <Card bordered={false} className={styles.emptyCard}>
-            <Empty
-              description="暂无考勤组，请先新增考勤规则"
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-            />
+            <Empty description="暂无考勤组，请先新增考勤规则" image={Empty.PRESENTED_IMAGE_SIMPLE} />
           </Card>
         )}
       </Spin>
@@ -347,11 +498,7 @@ const AttendanceGroupsPage: React.FC = () => {
             <Title level={5}>工作日设置</Title>
             <Space wrap className={styles.weekLine}>
               {weekDays.map((day, index) => (
-                <Tag
-                  key={day}
-                  color={index < 5 ? 'blue' : 'default'}
-                  className={styles.weekTag}
-                >
+                <Tag key={day} color={index < 5 ? 'blue' : 'default'} className={styles.weekTag}>
                   {day}
                 </Tag>
               ))}
@@ -388,13 +535,13 @@ const AttendanceGroupsPage: React.FC = () => {
       <Drawer
         title={editingGroup ? '编辑考勤组' : '新增考勤组'}
         open={drawerOpen}
-        width={560}
+        width={620}
         destroyOnClose
         onClose={closeDrawer}
         extra={
           <Space>
-            <Button onClick={() => setDrawerOpen(false)}>取消</Button>
-            <Button type="primary" onClick={handleSubmit}>
+            <Button onClick={closeDrawer}>取消</Button>
+            <Button type="primary" loading={submitting} onClick={handleSubmit}>
               保存
             </Button>
           </Space>
@@ -408,6 +555,121 @@ const AttendanceGroupsPage: React.FC = () => {
           >
             <Input placeholder="如：标准工时组" />
           </Form.Item>
+
+          <Card size="small" className={styles.scopeFormCard}>
+            <Space>
+              <TeamOutlined />
+              <Text strong>适用范围</Text>
+            </Space>
+            <Form.Item
+              label="范围方式"
+              name="scopeType"
+              rules={[{ required: true, message: '请选择范围方式' }]}
+              style={{ marginTop: 12 }}
+            >
+              <Radio.Group
+                optionType="button"
+                buttonStyle="solid"
+                options={[
+                  { label: '部门', value: 'DEPT' },
+                  { label: '职位', value: 'POST' },
+                  { label: '指定员工', value: 'EMPLOYEE' },
+                ]}
+              />
+            </Form.Item>
+
+            <Form.Item noStyle shouldUpdate={(prev, next) => prev.scopeType !== next.scopeType}>
+              {({ getFieldValue }) => {
+                const currentScopeType = getFieldValue('scopeType') || 'DEPT';
+                if (currentScopeType === 'POST') {
+                  return (
+                    <Form.Item
+                      label="适用职位"
+                      name="postId"
+                      rules={[{ required: true, message: '请选择适用职位' }]}
+                    >
+                      <Select
+                        showSearch
+                        loading={postLoading}
+                        placeholder="请选择职位"
+                        optionFilterProp="label"
+                        options={postOptions.map((post) => ({
+                          label: `${post.postName}${post.deptName ? `（${post.deptName}）` : ''}`,
+                          value: post.id,
+                        }))}
+                      />
+                    </Form.Item>
+                  );
+                }
+                if (currentScopeType === 'EMPLOYEE') {
+                  return (
+                    <>
+                      <Form.Item
+                        label="员工所属部门"
+                        name="employeeDeptId"
+                        rules={[{ required: true, message: '请先选择员工所属部门' }]}
+                      >
+                        <TreeSelect
+                          allowClear
+                          showSearch
+                          treeData={departmentTreeData}
+                          loading={departmentLoading}
+                          placeholder="请选择部门"
+                          treeDefaultExpandAll
+                          treeNodeFilterProp="title"
+                          onChange={() => {
+                            form.setFieldValue('employeeIds', []);
+                          }}
+                        />
+                      </Form.Item>
+                      <Form.Item
+                        label="指定员工"
+                        name="employeeIds"
+                        rules={[{ required: true, message: '请选择指定员工' }]}
+                      >
+                        <Select
+                          mode="multiple"
+                          showSearch
+                          allowClear
+                          filterOption={false}
+                          disabled={!employeeDeptId}
+                          loading={employeeLoading}
+                          placeholder={employeeDeptId ? '输入姓名或工号搜索员工' : '请先选择部门'}
+                          onFocus={() => searchEmployees('', employeeDeptId)}
+                          onSearch={(keyword) => searchEmployees(keyword, employeeDeptId)}
+                          options={employeeOptions.map((employee) => ({
+                            label: `${employee.employeeName}（${employee.employeeNo}）`,
+                            value: employee.id,
+                          }))}
+                        />
+                      </Form.Item>
+                    </>
+                  );
+                }
+                return (
+                  <Form.Item
+                    label="适用部门"
+                    name="deptIds"
+                    rules={[{ required: true, message: '请选择适用部门' }]}
+                  >
+                    <TreeSelect
+                      multiple
+                      allowClear
+                      showSearch
+                      treeCheckable
+                      treeData={departmentTreeData}
+                      loading={departmentLoading}
+                      placeholder="请选择一个或多个部门"
+                      treeDefaultExpandAll
+                      treeNodeFilterProp="title"
+                      showCheckedStrategy={TreeSelect.SHOW_CHILD}
+                    />
+                  </Form.Item>
+                );
+              }}
+            </Form.Item>
+          </Card>
+
           <Row gutter={12}>
             <Col span={12}>
               <Form.Item
@@ -521,7 +783,7 @@ const AttendanceGroupsPage: React.FC = () => {
             </Form.Item>
           </Card>
           {editingGroup ? (
-            <div style={{ marginTop: 24 }}>
+            <div className={styles.deleteArea}>
               <Button danger loading={deleting} onClick={handleDeleteGroup}>
                 删除考勤配置
               </Button>

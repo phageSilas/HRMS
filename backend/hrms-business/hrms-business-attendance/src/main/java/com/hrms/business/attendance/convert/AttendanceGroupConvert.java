@@ -34,7 +34,9 @@ public final class AttendanceGroupConvert {
                 .earlyLeaveThresholdMinutes(entity.getEarlyLeaveThresholdMinutes())
                 .monthlyCorrectionLimit(entity.getMonthlyCorrectionLimit())
                 .status(entity.getStatus())
-                .statusText(Integer.valueOf(1).equals(entity.getStatus()) ? "鍚敤" : "绂佺敤")
+                .statusText(Integer.valueOf(1).equals(entity.getStatus()) ? "启用" : "停用")
+                .scopeType(entity.getScopeType())
+                .scopeValue(entity.getScopeValue())
                 .createTime(entity.getCreateTime())
                 .build();
     }
