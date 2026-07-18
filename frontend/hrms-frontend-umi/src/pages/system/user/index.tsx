@@ -212,8 +212,10 @@ const UserPage: React.FC = () => {
   };
 
   // 编辑用户
-  const handleEdit = (record: UserItem) => {
+  const handleEdit = async (record: UserItem) => {
     setCurrentUser(record);
+    // 先加载角色列表，确保下拉框有数据
+    await fetchRoleList();
     editForm.setFieldsValue({
       ...record,
       roleIds: record.roleIds || [],
