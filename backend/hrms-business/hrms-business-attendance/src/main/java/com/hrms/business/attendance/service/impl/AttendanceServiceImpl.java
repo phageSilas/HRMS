@@ -1273,6 +1273,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         AttendanceRecordEntity record = buildClockRecord(employee.getId(), group.getId(), recordDate, now, period, status, requestDTO, clientIp);
 
         persistClockRecord(existing, record, period);
+        evictCalendarCache(employee.getId(), recordDate);
         AttendanceClockCreatedEvent event = buildClockCreatedEvent(record, period, status, now, requestDTO.getDeviceInfo());
         publishClockCreatedEvent(event);
         return buildClockVO(record, period, status, now);

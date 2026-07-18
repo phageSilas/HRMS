@@ -79,6 +79,11 @@ interface LocalTodayRecord {
   clockInIp?: string;
   clockOutIp?: string;
   dayStatus?: string;
+  leave?: boolean;
+}
+
+interface DisplayTodayRecord extends AttendanceCalendarDayVO {
+  date?: string | number[];
 }
 
 type ClockPeriod = 'CLOCK_IN' | 'CLOCK_OUT';
@@ -240,6 +245,31 @@ function findTodayRecord(
   );
 }
 
+function mergeTodayRecord(
+  calendarRecord?: AttendanceCalendarDayVO,
+  localRecord?: LocalTodayRecord,
+): DisplayTodayRecord | undefined {
+  if (!calendarRecord && !localRecord) {
+    return undefined;
+  }
+
+  return {
+    ...(calendarRecord || {}),
+    ...(localRecord || {}),
+    date: localRecord?.date || calendarRecord?.date,
+    clockInTime: localRecord?.clockInTime || calendarRecord?.clockInTime,
+    clockOutTime: localRecord?.clockOutTime || calendarRecord?.clockOutTime,
+    clockInGps: localRecord?.clockInGps || calendarRecord?.clockInGps,
+    clockOutGps: localRecord?.clockOutGps || calendarRecord?.clockOutGps,
+    clockInStatus: localRecord?.clockInStatus || calendarRecord?.clockInStatus,
+    clockOutStatus: localRecord?.clockOutStatus || calendarRecord?.clockOutStatus,
+    clockInIp: localRecord?.clockInIp || calendarRecord?.clockInIp,
+    clockOutIp: localRecord?.clockOutIp || calendarRecord?.clockOutIp,
+    dayStatus: localRecord?.dayStatus || calendarRecord?.dayStatus,
+    leave: localRecord?.leave ?? calendarRecord?.leave,
+  };
+}
+
 const AttendancePunchPage: React.FC = () => {
   const [now, setNow] = useState(dayjs());
   const currentDate = now.format('YYYY-MM-DD');
@@ -248,6 +278,7 @@ const AttendancePunchPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [calendarData, setCalendarData] = useState<AttendanceCalendarVO>();
   const [localTodayRecord, setLocalTodayRecord] = useState<LocalTodayRecord>();
+  const [latestSuccessIp, setLatestSuccessIp] = useState<string>();
   const [locationState, setLocationState] = useState<LocationState>({
     status: 'idle',
     text: '点击打卡时获取高德定位',
@@ -277,13 +308,10 @@ const AttendancePunchPage: React.FC = () => {
   }, [calendarData?.days, currentDate]);
 
   const resolvedTodayRecord = useMemo(() => {
-    if (todayRecord) {
+    if (localTodayRecord?.date !== currentDate) {
       return todayRecord;
     }
-    if (localTodayRecord?.date === currentDate) {
-      return localTodayRecord;
-    }
-    return undefined;
+    return mergeTodayRecord(todayRecord, localTodayRecord);
   }, [currentDate, localTodayRecord, todayRecord]);
 
   const handleSubmitClock = async (type: ClockPeriod) => {
@@ -332,6 +360,9 @@ const AttendancePunchPage: React.FC = () => {
       const networkIp = getClockIp(result);
       const clockGps = result.clockGps || buildGpsText(location);
       const locationDetail = formatLocationDetail(location);
+      if (networkIp) {
+        setLatestSuccessIp(networkIp);
+      }
 
       setLocalTodayRecord((previous) => {
         const baseRecord =
@@ -407,12 +438,15 @@ const AttendancePunchPage: React.FC = () => {
       if (previous.date !== currentDate) {
         return undefined;
       }
-      return resolvedTodayRecord === todayRecord && todayRecord ? undefined : previous;
+      return previous;
     });
-  }, [currentDate, resolvedTodayRecord, todayRecord]);
+    setLatestSuccessIp(undefined);
+  }, [currentDate]);
 
   const latestNetworkIp =
-    resolvedTodayRecord?.clockOutIp || resolvedTodayRecord?.clockInIp;
+    latestSuccessIp ||
+    resolvedTodayRecord?.clockOutIp ||
+    resolvedTodayRecord?.clockInIp;
   const latestGpsText = formatGpsText(
     resolvedTodayRecord?.clockOutGps || resolvedTodayRecord?.clockInGps,
   );
