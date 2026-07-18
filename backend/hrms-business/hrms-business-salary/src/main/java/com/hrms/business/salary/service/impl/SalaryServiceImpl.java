@@ -122,6 +122,9 @@ public class SalaryServiceImpl implements SalaryService {
             "LATE_DEDUCTION",
             "LEAVE_DEDUCTION",
             "SOCIAL_INSURANCE",
+            "PENSION_INSURANCE",
+            "MEDICAL_INSURANCE",
+            "UNEMPLOYMENT_INSURANCE",
             "HOUSING_FUND",
             "INCOME_TAX"
     );
@@ -936,7 +939,16 @@ public class SalaryServiceImpl implements SalaryService {
                 .map(AttendancePayrollSourceVO::getLateCount).orElse(0)).multiply(new BigDecimal("20")));
         BigDecimal leaveDays = Optional.ofNullable(attendance).map(AttendancePayrollSourceVO::getLeaveDays).orElse(BigDecimal.ZERO);
         BigDecimal leaveDeduction = money(baseSalary.divide(new BigDecimal("21.75"), 2, RoundingMode.HALF_UP).multiply(leaveDays));
-        BigDecimal socialInsurance = money(profile.getSocialInsuranceBase()).multiply(new BigDecimal("0.08")).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal pensionInsurance = calculateInsuranceAmount(
+                profile.getPensionInsuranceBase(), profile.getPensionInsuranceRate(),
+                profile.getSocialInsuranceBase(), DEFAULT_PENSION_INSURANCE_RATE);
+        BigDecimal medicalInsurance = calculateInsuranceAmount(
+                profile.getMedicalInsuranceBase(), profile.getMedicalInsuranceRate(),
+                profile.getSocialInsuranceBase(), DEFAULT_MEDICAL_INSURANCE_RATE);
+        BigDecimal unemploymentInsurance = calculateInsuranceAmount(
+                profile.getUnemploymentInsuranceBase(), profile.getUnemploymentInsuranceRate(),
+                profile.getSocialInsuranceBase(), DEFAULT_UNEMPLOYMENT_INSURANCE_RATE);
+        BigDecimal socialInsurance = pensionInsurance.add(medicalInsurance).add(unemploymentInsurance).setScale(2, RoundingMode.HALF_UP);
         BigDecimal housingFund = money(profile.getHousingFundBase()).multiply(new BigDecimal("0.07")).setScale(2, RoundingMode.HALF_UP);
         BigDecimal gross = baseSalary.add(allowance).add(performanceBonus).add(overtimePay);
         BigDecimal incomeTax = calculateIncomeTax(gross.subtract(socialInsurance).subtract(housingFund));
@@ -948,6 +960,9 @@ public class SalaryServiceImpl implements SalaryService {
         item.setOvertimePay(overtimePay);
         item.setLateDeduction(lateDeduction);
         item.setLeaveDeduction(leaveDeduction);
+        item.setPensionInsurance(pensionInsurance);
+        item.setMedicalInsurance(medicalInsurance);
+        item.setUnemploymentInsurance(unemploymentInsurance);
         item.setSocialInsurance(socialInsurance);
         item.setHousingFund(housingFund);
         item.setIncomeTax(incomeTax);
@@ -1023,6 +1038,9 @@ public class SalaryServiceImpl implements SalaryService {
         item.setOvertimePay(ZERO);
         item.setLateDeduction(ZERO);
         item.setLeaveDeduction(ZERO);
+        item.setPensionInsurance(ZERO);
+        item.setMedicalInsurance(ZERO);
+        item.setUnemploymentInsurance(ZERO);
         item.setSocialInsurance(ZERO);
         item.setHousingFund(ZERO);
         item.setIncomeTax(ZERO);
@@ -1388,6 +1406,9 @@ public class SalaryServiceImpl implements SalaryService {
                 .overtimePay(item.getOvertimePay())
                 .lateDeduction(item.getLateDeduction())
                 .leaveDeduction(item.getLeaveDeduction())
+                .pensionInsurance(item.getPensionInsurance())
+                .medicalInsurance(item.getMedicalInsurance())
+                .unemploymentInsurance(item.getUnemploymentInsurance())
                 .socialInsurance(item.getSocialInsurance())
                 .housingFund(item.getHousingFund())
                 .incomeTax(item.getIncomeTax())
@@ -1418,6 +1439,9 @@ public class SalaryServiceImpl implements SalaryService {
                 .overtimePay(item.getOvertimePay())
                 .lateDeduction(item.getLateDeduction())
                 .leaveDeduction(item.getLeaveDeduction())
+                .pensionInsurance(item.getPensionInsurance())
+                .medicalInsurance(item.getMedicalInsurance())
+                .unemploymentInsurance(item.getUnemploymentInsurance())
                 .socialInsurance(item.getSocialInsurance())
                 .housingFund(item.getHousingFund())
                 .incomeTax(item.getIncomeTax())
@@ -1729,6 +1753,18 @@ public class SalaryServiceImpl implements SalaryService {
             case "LATE_DEDUCTION" -> item.setLateDeduction(money(item.getLateDeduction()).add(amount));
             case "LEAVE_DEDUCTION" -> item.setLeaveDeduction(money(item.getLeaveDeduction()).add(amount));
             case "SOCIAL_INSURANCE" -> item.setSocialInsurance(money(item.getSocialInsurance()).add(amount));
+            case "PENSION_INSURANCE" -> {
+                item.setPensionInsurance(money(item.getPensionInsurance()).add(amount));
+                syncSocialInsuranceTotal(item);
+            }
+            case "MEDICAL_INSURANCE" -> {
+                item.setMedicalInsurance(money(item.getMedicalInsurance()).add(amount));
+                syncSocialInsuranceTotal(item);
+            }
+            case "UNEMPLOYMENT_INSURANCE" -> {
+                item.setUnemploymentInsurance(money(item.getUnemploymentInsurance()).add(amount));
+                syncSocialInsuranceTotal(item);
+            }
             case "HOUSING_FUND" -> item.setHousingFund(money(item.getHousingFund()).add(amount));
             case "INCOME_TAX" -> item.setIncomeTax(money(item.getIncomeTax()).add(amount));
             default -> throw new GlobalException(ErrorCode.PARAM_FORMAT_ERROR, "不支持的薪资调整项目");
@@ -1845,6 +1881,37 @@ public class SalaryServiceImpl implements SalaryService {
      * @return 格式化后的比例
      * 本方法使用的工具类: Optional(JDK),BigDecimal(JDK)
      */
+    /**
+     * 计算险种金额。
+     *
+     * @param insuranceBase 险种基数
+     * @param insuranceRate 险种比例
+     * @param legacyBase 旧社保基数
+     * @param defaultRate 默认比例
+     * @return 险种金额
+     * 本方法使用的工具类: BigDecimal(JDK)
+     */
+    private BigDecimal calculateInsuranceAmount(BigDecimal insuranceBase,
+                                                BigDecimal insuranceRate,
+                                                BigDecimal legacyBase,
+                                                BigDecimal defaultRate) {
+        BigDecimal base = resolveInsuranceBase(insuranceBase, legacyBase, null);
+        BigDecimal ratio = resolveInsuranceRate(insuranceRate, null, defaultRate);
+        return money(base.multiply(ratio));
+    }
+
+    /**
+     * 同步社保合计金额。
+     *
+     * @param item 薪资明细
+     * 本方法使用的工具类: BigDecimal(JDK)
+     */
+    private void syncSocialInsuranceTotal(SalaryBatchItemEntity item) {
+        item.setSocialInsurance(money(item.getPensionInsurance())
+                .add(money(item.getMedicalInsurance()))
+                .add(money(item.getUnemploymentInsurance())));
+    }
+
     private BigDecimal rate(BigDecimal value) {
         return Optional.ofNullable(value).orElse(BigDecimal.ZERO).setScale(4, RoundingMode.HALF_UP);
     }
