@@ -11,12 +11,18 @@
     "start": "npm run dev"
   },
   "dependencies": {
+    "@ant-design/charts": "^2.6.7",
     "@ant-design/icons": "^5.0.1",
     "@ant-design/pro-components": "^2.4.4",
     "@umijs/max": "^4.6.73",
     "antd": "^5.4.0",
     "axios": "^1.18.1",
-    "dayjs": "^1.11.21"
+    "dayjs": "^1.11.21",
+    "react-markdown": "^10.1.0",
+    "rehype-raw": "^7.0.0",
+    "remark-gfm": "^4.0.1",
+    "three": "^0.121.1",
+    "vanta": "^0.5.24"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",

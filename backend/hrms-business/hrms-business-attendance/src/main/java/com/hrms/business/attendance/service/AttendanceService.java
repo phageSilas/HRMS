@@ -5,8 +5,11 @@ import com.hrms.business.attendance.dto.AttendanceGroupCreateOrUpdateRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceClockRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceCorrectionCreateRequestDTO;
 import com.hrms.business.attendance.dto.LeaveCreateRequestDTO;
+import com.hrms.business.attendance.dto.AttendanceLeaveManageQueryDTO;
+import com.hrms.business.attendance.dto.AttendanceGroupRecordQueryDTO;
 import com.hrms.business.attendance.dto.MonthlyStatGenerateRequestDTO;
 import com.hrms.business.attendance.vo.AttendanceGroupPageVO;
+import com.hrms.business.attendance.vo.AttendanceGroupRecordPageVO;
 import com.hrms.business.attendance.vo.AttendanceClockVO;
 import com.hrms.business.attendance.vo.AttendanceCalendarVO;
 import com.hrms.business.attendance.vo.AttendanceCorrectionCreateVO;
@@ -15,6 +18,8 @@ import com.hrms.business.attendance.vo.LeaveBalanceVO;
 import com.hrms.business.attendance.vo.LeaveCreateVO;
 import com.hrms.business.attendance.vo.MonthlyStatGenerateVO;
 import com.hrms.business.attendance.vo.AttendancePayrollSourceVO;
+import com.hrms.business.attendance.vo.AttendanceSummaryDashboardVO;
+import com.hrms.business.attendance.vo.AttendanceLeaveManageItemVO;
 
 import java.util.List;
 import com.hrms.common.web.PageResult;
@@ -53,6 +58,25 @@ public interface AttendanceService {
     AttendanceGroupPageVO updateAttendanceGroup(Long id, AttendanceGroupCreateOrUpdateRequestDTO requestDTO);
 
     /**
+     * 逻辑删除考勤组。
+     *
+     * @param id 考勤组ID
+     * 本方法使用的工具类: 无
+     */
+    void deleteAttendanceGroup(Long id);
+
+    /**
+     * 分页查询考勤组打卡记录。
+     *
+     * @param groupId  考勤组ID
+     * @param queryDTO 查询参数
+     * @return 考勤组打卡记录分页结果
+     * 本方法使用的工具类: PageResult(hrms-common)
+     */
+    PageResult<AttendanceGroupRecordPageVO> pageGroupAttendanceRecords(Long groupId,
+                                                                       AttendanceGroupRecordQueryDTO queryDTO);
+
+    /**
      * 当前登录员工打卡。
      *
      * @param requestDTO 打卡请求
@@ -70,6 +94,25 @@ public interface AttendanceService {
      * 本方法使用的工具类: 无
      */
     AttendanceCalendarVO getMyCalendar(String yearMonth);
+
+    /**
+     * 查询HR和主管考勤统计看板。
+     *
+     * @param yearMonth 月份，格式yyyy-MM
+     * @param deptId    部门ID
+     * @return 考勤统计看板
+     * 本方法使用的工具类: 无
+     */
+    AttendanceSummaryDashboardVO getSummaryDashboard(String yearMonth, Long deptId);
+
+    /**
+     * 分页查询管理侧请假记录。
+     *
+     * @param queryDTO 查询参数
+     * @return 请假管理分页列表
+     * 本方法使用的工具类: PageResult(hrms-common)
+     */
+    PageResult<AttendanceLeaveManageItemVO> pageLeaveManageList(AttendanceLeaveManageQueryDTO queryDTO);
 
     /**
      * 创建补卡申请。

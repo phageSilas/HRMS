@@ -1,7 +1,10 @@
 package com.hrms.business.employee.util;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 
+import jakarta.annotation.PostConstruct;
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
@@ -18,6 +21,7 @@ import java.util.Base64;
  * </p>
  */
 @Slf4j
+@Component
 public class AesEncryptUtil {
 
     private static final String ALGORITHM = "AES";
@@ -25,10 +29,46 @@ public class AesEncryptUtil {
     private static final int GCM_IV_LENGTH = 12;
     private static final int GCM_TAG_LENGTH = 128;
 
-    private final String secretKey;
+    @Value("${hrms.aes.secret-key}")
+    private String secretKey;
 
-    public AesEncryptUtil(String secretKey) {
-        this.secretKey = secretKey;
+    private static String staticSecretKey;
+
+    @PostConstruct
+    public void init() {
+        // 确保密钥长度符合AES要求（16、24或32字节）
+        staticSecretKey = normalizeAesKey(secretKey);
+    }
+
+    /**
+     * 规范化AES密钥长度，确保其符合AES要求（16、24或32字节）
+     * 
+     * @param originalKey 原始密钥
+     * @return 符合AES长度要求的密钥
+     */
+    private static String normalizeAesKey(String originalKey) {
+        if (originalKey == null) {
+            throw new IllegalArgumentException("AES密钥不能为空");
+        }
+
+        // AES支持的密钥长度：128位(16字节)、192位(24字节)、256位(32字节)
+        // 这里我们使用256位(32字节)，这是最常用的安全级别
+        int targetLength = 32;
+        
+        if (originalKey.length() >= targetLength) {
+            // 如果原始密钥长度大于等于目标长度，截取前32个字符
+            return originalKey.substring(0, targetLength);
+        } else {
+            // 如果原始密钥长度小于目标长度，进行填充
+            StringBuilder sb = new StringBuilder(originalKey);
+            while (sb.length() < targetLength) {
+                // 使用原始密钥循环填充直到达到目标长度
+                for (int i = 0; i < originalKey.length() && sb.length() < targetLength; i++) {
+                    sb.append(originalKey.charAt(i));
+                }
+            }
+            return sb.toString();
+        }
     }
 
     /**
@@ -37,7 +77,7 @@ public class AesEncryptUtil {
      * @param plaintext 明文
      * @return 密文（Base64 编码，包含 IV）
      */
-    public String encrypt(String plaintext) {
+    public static String encrypt(String plaintext) {
         if (plaintext == null || plaintext.isEmpty()) {
             return plaintext;
         }
@@ -46,7 +86,7 @@ public class AesEncryptUtil {
             new SecureRandom().nextBytes(iv);
 
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
-            SecretKey key = new SecretKeySpec(secretKey.getBytes(StandardCharsets.UTF_8), ALGORITHM);
+            SecretKey key = new SecretKeySpec(staticSecretKey.getBytes(StandardCharsets.UTF_8), ALGORITHM);
             GCMParameterSpec parameterSpec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
             cipher.init(Cipher.ENCRYPT_MODE, key, parameterSpec);
 
@@ -70,7 +110,7 @@ public class AesEncryptUtil {
      * @param ciphertext 密文（Base64 编码，包含 IV）
      * @return 明文
      */
-    public String decrypt(String ciphertext) {
+    public static String decrypt(String ciphertext) {
         if (ciphertext == null || ciphertext.isEmpty()) {
             return ciphertext;
         }
@@ -85,7 +125,7 @@ public class AesEncryptUtil {
             byteBuffer.get(encrypted);
 
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
-            SecretKey key = new SecretKeySpec(secretKey.getBytes(StandardCharsets.UTF_8), ALGORITHM);
+            SecretKey key = new SecretKeySpec(staticSecretKey.getBytes(StandardCharsets.UTF_8), ALGORITHM);
             GCMParameterSpec parameterSpec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
             cipher.init(Cipher.DECRYPT_MODE, key, parameterSpec);
 
@@ -96,5 +136,4 @@ public class AesEncryptUtil {
             throw new RuntimeException("解密失败", e);
         }
     }
-
 }

@@ -37,9 +37,6 @@ public class UserDetailVO {
     @Schema(description = "关联员工ID")
     private Long employeeId;
 
-    @Schema(description = "员工工号")
-    private String employeeNo;
-
     @Schema(description = "部门ID")
     private Long deptId;
 

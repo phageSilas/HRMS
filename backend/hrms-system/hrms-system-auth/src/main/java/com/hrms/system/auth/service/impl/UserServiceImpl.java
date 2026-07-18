@@ -66,8 +66,10 @@ public class UserServiceImpl implements UserService {
             wrapper.eq(UserEntity::getStatus, queryDTO.getStatus());
         }
 
-        // 部门筛选（如果用户表有deptId字段）
-        // TODO: 用户表目前没有deptId字段，需要在UserEntity中添加
+        // 部门筛选（通过 deptId 直接查询）
+        if (queryDTO.getDeptId() != null) {
+            wrapper.eq(UserEntity::getDeptId, queryDTO.getDeptId());
+        }
 
         // 按创建时间降序
         wrapper.orderByDesc(UserEntity::getCreateTime);
@@ -107,7 +109,8 @@ public class UserServiceImpl implements UserService {
             vo.setEmail(user.getEmail());
             vo.setStatus(user.getStatus());
             vo.setEmployeeId(user.getEmployeeId());
-            // TODO: employeeNo 和 deptName 需要从员工模块查询
+            vo.setDeptId(user.getDeptId()); // 直接使用用户表冗余字段
+            // 部门名称由调用方（如 employee 模块）根据 deptId 查询后填充
             vo.setLastLoginTime(user.getLastLoginTime());
             vo.setCreateTime(user.getCreateTime());
 
@@ -151,7 +154,8 @@ public class UserServiceImpl implements UserService {
         vo.setStatus(user.getStatus());
         vo.setRoleIds(roleIds);
         vo.setEmployeeId(user.getEmployeeId());
-        // TODO: employeeNo, deptId 需要从员工模块查询
+        vo.setDeptId(user.getDeptId()); // 直接使用用户表冗余字段
+        // 部门名称由调用方（如 employee 模块）根据 deptId 查询后填充
         vo.setCreateTime(user.getCreateTime());
         vo.setLastLoginTime(user.getLastLoginTime());
         vo.setRemark(user.getRemark());
@@ -171,7 +175,7 @@ public class UserServiceImpl implements UserService {
         // 3. 校验角色ID是否存在
         validateRoleIds(createDTO.getRoleIds());
 
-        // 4. 创建用户实体
+        // 4. 创建用户实体（系统账号，employeeId 必须为 null）
         UserEntity user = new UserEntity();
         user.setUsername(createDTO.getUsername());
         user.setPassword(passwordEncoder.encode(createDTO.getPassword()));
@@ -179,7 +183,7 @@ public class UserServiceImpl implements UserService {
         user.setPhone(createDTO.getPhone());
         user.setEmail(createDTO.getEmail());
         user.setStatus(1); // 默认启用
-        user.setEmployeeId(createDTO.getEmployeeId());
+        user.setEmployeeId(null); // 系统账号不关联员工档案
         user.setNeedChangePassword(1); // 首次登录强制修改密码
         user.setPasswordUpdateTime(LocalDateTime.now());
 
@@ -225,14 +229,13 @@ public class UserServiceImpl implements UserService {
             validateRoleIds(updateDTO.getRoleIds());
         }
 
-        // 4. 更新用户信息
+        // 4. 更新用户信息（不允许修改 employeeId）
         user.setRealName(updateDTO.getRealName());
         user.setPhone(updateDTO.getPhone());
         user.setEmail(updateDTO.getEmail());
         if (updateDTO.getStatus() != null) {
             user.setStatus(updateDTO.getStatus());
         }
-        // TODO: deptId 需要在UserEntity中添加
         userMapper.updateById(user);
 
         // 5. 更新角色关联（全量覆盖）
@@ -259,10 +262,15 @@ public class UserServiceImpl implements UserService {
             throw new GlobalException(ErrorCode.NOT_FOUND, "用户不存在");
         }
 
-        // 2. 逻辑删除用户
+        // 2. 禁止删除已关联员工档案的账号
+        if (user.getEmployeeId() != null) {
+            throw new GlobalException(ErrorCode.PARAM_VALIDATION_FAILED, "该用户已关联员工档案，不可删除");
+        }
+
+        // 3. 逻辑删除用户
         userMapper.deleteById(id);
 
-        // 3. 删除角色关联
+        // 4. 删除角色关联
         userRoleMapper.delete(
                 new LambdaQueryWrapper<UserRoleEntity>()
                         .eq(UserRoleEntity::getUserId, id));
@@ -292,6 +300,20 @@ public class UserServiceImpl implements UserService {
         result.setNeedChangePassword(true);
 
         return result;
+    }
+
+    @Override
+    public void updateUserDept(Long userId, Long deptId) {
+        if (userId == null) {
+            return;
+        }
+        UserEntity user = userMapper.selectById(userId);
+        if (user == null || user.getIsDeleted() == 1) {
+            return;
+        }
+        user.setDeptId(deptId);
+        userMapper.updateById(user);
+        log.info("同步更新用户部门，userId={}, deptId={}", userId, deptId);
     }
 
     /**

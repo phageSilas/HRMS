@@ -51,4 +51,14 @@ public class AttendanceClockVO {
      * 打卡时间。
      */
     private LocalDateTime clockTime;
+
+    /**
+     * 打卡 GPS 位置。
+     */
+    private String clockGps;
+
+    /**
+     * 打卡设备网络 IP。
+     */
+    private String clientIp;
 }

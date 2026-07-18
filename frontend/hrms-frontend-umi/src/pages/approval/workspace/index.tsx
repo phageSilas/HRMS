@@ -4,10 +4,10 @@
  * 功能：待审批列表（含角标）、已审批列表、我发起的申请列表
  * 每个标签页支持搜索筛选和分页，点击行跳转审批详情
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { history } from '@umijs/max';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import type { ProColumns } from '@ant-design/pro-components';
+import type { ProColumns, ActionType } from '@ant-design/pro-components';
 import { Tabs, Tag, Badge, DatePicker, Space, Select, Button, Form, Input, message } from 'antd';
 import type { ApprovalTask, PendingQuery, MyApplicationQuery } from '@/services/approval';
 import {
@@ -30,6 +30,7 @@ const BUSINESS_TYPE_OPTIONS = [
   { label: '离职审批', value: 'LEAVE' },
   { label: '请假审批', value: 'LEAVE_REQUEST' },
   { label: '补卡审批', value: 'CORRECTION' },
+  { label: '加班审批', value: 'OVERTIME' },
   { label: '薪资批次审批', value: 'SALARY' },
 ];
 
@@ -49,6 +50,7 @@ const STATUS_COLOR_MAP: Record<string, string> = {
   DRAFT: 'default',
   WITHDRAWN: 'warning',
   CANCELLED: 'default',
+  EXPIRED: 'warning',
 };
 
 /** 状态码 → 中文名映射（用于后端未返回 statusName 时的降级） */
@@ -59,6 +61,7 @@ const STATUS_LABEL_MAP: Record<string, string> = {
   DRAFT: '草稿',
   WITHDRAWN: '已撤回',
   CANCELLED: '已取消',
+  EXPIRED: '已过期',
 };
 
 // ============ 工具函数 ============
@@ -110,6 +113,16 @@ const TABLE_COLUMNS: ProColumns<ApprovalTask>[] = [
     title: '当前节点',
     dataIndex: 'nodeName',
     width: 120,
+    render: (_, record) => (
+      <span>
+        {record.nodeName}
+        {record.delegateFlag && record.delegateMark && (
+          <Tag color="orange" style={{ marginLeft: 4, fontSize: 11 }}>
+            {record.delegateMark}
+          </Tag>
+        )}
+      </span>
+    ),
   },
   {
     title: '状态',
@@ -129,6 +142,10 @@ const WorkspacePage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('pending');
   const [badgeCount, setBadgeCount] = useState<number>(0);
 
+  // ProTable actionRef（用于手动触发刷新）
+  const pendingActionRef = useRef<ActionType>();
+  const historyActionRef = useRef<ActionType>();
+
   // 各标签页搜索参数（传递给 ProTable params 属性，变化时触发重新查询）
   const [pendingSearch, setPendingSearch] = useState<Partial<PendingQuery>>({});
   const [historySearch, setHistorySearch] = useState<Partial<PendingQuery>>({});
@@ -137,6 +154,15 @@ const WorkspacePage: React.FC = () => {
   // 搜索表单实例（保留表单状态，切换标签页时不清空）
   const [pendingFormInstance] = Form.useForm();
   const [historyFormInstance] = Form.useForm();
+
+  // 搜索参数变化时主动触发 ProTable 刷新（比依赖 params 属性更可靠）
+  useEffect(() => {
+    pendingActionRef.current?.reload();
+  }, [pendingSearch]);
+
+  useEffect(() => {
+    historyActionRef.current?.reload();
+  }, [historySearch]);
 
   // ============ 生命周期 ============
 
@@ -166,19 +192,15 @@ const WorkspacePage: React.FC = () => {
     };
   };
 
-  const handlePendingSearch = useCallback(async () => {
-    try {
-      const values = await pendingFormInstance.validateFields();
-      const params: Partial<PendingQuery> = {};
-      if (values.businessType) params.businessType = values.businessType;
-      if (values.keyword) params.keyword = values.keyword;
-      if (values.dateRange) {
-        Object.assign(params, formatDateRange(values.dateRange));
-      }
-      setPendingSearch(params);
-    } catch {
-      // 表单校验不通过时不处理
+  const handlePendingSearch = useCallback(() => {
+    const values = pendingFormInstance.getFieldsValue();
+    const params: Partial<PendingQuery> = {};
+    if (values.businessType) params.businessType = values.businessType;
+    if (values.keyword) params.keyword = values.keyword;
+    if (values.dateRange && values.dateRange.length === 2) {
+      Object.assign(params, formatDateRange(values.dateRange));
     }
+    setPendingSearch(params);
   }, [pendingFormInstance]);
 
   const handlePendingReset = useCallback(() => {
@@ -188,19 +210,15 @@ const WorkspacePage: React.FC = () => {
 
   // ============ 已审批搜索/重置 ============
 
-  const handleHistorySearch = useCallback(async () => {
-    try {
-      const values = await historyFormInstance.validateFields();
-      const params: Partial<PendingQuery> = {};
-      if (values.businessType) params.businessType = values.businessType;
-      if (values.keyword) params.keyword = values.keyword;
-      if (values.dateRange) {
-        Object.assign(params, formatDateRange(values.dateRange));
-      }
-      setHistorySearch(params);
-    } catch {
-      // 表单校验不通过时不处理
+  const handleHistorySearch = useCallback(() => {
+    const values = historyFormInstance.getFieldsValue();
+    const params: Partial<PendingQuery> = {};
+    if (values.businessType) params.businessType = values.businessType;
+    if (values.keyword) params.keyword = values.keyword;
+    if (values.dateRange && values.dateRange.length === 2) {
+      Object.assign(params, formatDateRange(values.dateRange));
     }
+    setHistorySearch(params);
   }, [historyFormInstance]);
 
   const handleHistoryReset = useCallback(() => {
@@ -233,7 +251,6 @@ const WorkspacePage: React.FC = () => {
       } as PendingQuery);
       return { data: result.records, success: true, total: result.total };
     } catch {
-      message.error('获取待审批列表失败');
       return { data: [], success: false, total: 0 };
     }
   }, []);
@@ -248,7 +265,6 @@ const WorkspacePage: React.FC = () => {
       } as PendingQuery);
       return { data: result.records, success: true, total: result.total };
     } catch {
-      message.error('获取已审批列表失败');
       return { data: [], success: false, total: 0 };
     }
   }, []);
@@ -263,7 +279,6 @@ const WorkspacePage: React.FC = () => {
       } as MyApplicationQuery);
       return { data: result.records, success: true, total: result.total };
     } catch {
-      message.error('获取我的申请列表失败');
       return { data: [], success: false, total: 0 };
     }
   }, []);
@@ -345,6 +360,7 @@ const WorkspacePage: React.FC = () => {
                 {/* 待审批列表 */}
                 <ProTable<ApprovalTask>
                   {...commonProTableProps}
+                  actionRef={pendingActionRef}
                   request={pendingRequest}
                   params={pendingSearch}
                 />
@@ -392,6 +408,7 @@ const WorkspacePage: React.FC = () => {
                 {/* 已审批列表 */}
                 <ProTable<ApprovalTask>
                   {...commonProTableProps}
+                  actionRef={historyActionRef}
                   request={historyRequest}
                   params={historySearch}
                 />

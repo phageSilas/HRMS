@@ -5,7 +5,6 @@
 
 import { EditOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
-import { useRequest } from '@umijs/max';
 import {
   Button,
   Card,
@@ -18,9 +17,10 @@ import {
   Tooltip,
   Typography,
 } from 'antd';
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { getProfile, updateProfile } from '@/services/profile';
 import type { ProfileUpdateRequest } from '@/services/profile';
+import type { ProfileVO } from '@/services/profile';
 
 const { Text } = Typography;
 
@@ -34,12 +34,34 @@ const FIELD_LABEL_MAP: Record<string, string> = {
 };
 
 const ProfileArchivePage: React.FC = () => {
-  const { data, loading, refresh } = useRequest(getProfile);
+  const [profile, setProfile] = useState<ProfileVO | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  const fetchProfile = useCallback(async () => {
+    setLoading(true);
+    setFetchError(null);
+    try {
+      const data = await getProfile();
+      console.log('[我的档案] API 返回数据:', data);
+      setProfile(data);
+    } catch (err: any) {
+      console.error('[我的档案] API 错误:', err);
+      setFetchError(err?.message || '未知错误');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchProfile();
+  }, [fetchProfile]);
+
+  const refresh = fetchProfile;
+
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingField, setEditingField] = useState<string>('');
   const [form] = Form.useForm();
-
-  const profile = data;
 
   // ============ 编辑弹窗提交 ============
 
@@ -72,10 +94,17 @@ const ProfileArchivePage: React.FC = () => {
     );
   }
 
-  if (!profile) {
+  if (!profile && !loading) {
     return (
       <PageContainer>
-        <Text type="warning">获取档案信息失败</Text>
+        <Text type="warning">
+          获取档案信息失败
+          {fetchError && (
+            <div style={{ marginTop: 8, fontSize: 13, color: '#999' }}>
+              错误详情：{fetchError}
+            </div>
+          )}
+        </Text>
       </PageContainer>
     );
   }
@@ -129,6 +158,9 @@ const ProfileArchivePage: React.FC = () => {
           </Descriptions.Item>
           <Descriptions.Item label="邮箱">
             {renderField('email', profile.email)}
+          </Descriptions.Item>
+          <Descriptions.Item label="现住址">
+            {renderField('currentAddress', profile.currentAddress)}
           </Descriptions.Item>
           <Descriptions.Item label="身份证号">
             <span>{profile.idCard || '-'}</span>

@@ -1,6 +1,7 @@
 package com.hrms.business.mycenter.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.hrms.business.approval.service.ApprovalService;
 import com.hrms.business.mycenter.dto.LeaveBalanceVO;
 import com.hrms.business.mycenter.dto.LeaveRequestDTO;
 import com.hrms.business.mycenter.dto.LeaveVO;
@@ -28,10 +29,12 @@ import java.util.stream.Collectors;
 public class LeaveServiceImpl implements LeaveService {
 
     private final MyCenterLeaveRequestMapper leaveRequestMapper;
+    private final ApprovalService approvalService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void createLeave(Long employeeId, LeaveRequestDTO request) {
+        // 1. 创建请假记录
         LeaveRequestEntity entity = new LeaveRequestEntity();
         entity.setEmployeeId(employeeId);
         entity.setLeaveType(request.getLeaveType());
@@ -43,6 +46,52 @@ public class LeaveServiceImpl implements LeaveService {
         entity.setAttachmentUrl(request.getAttachmentUrl());
         entity.setApprovalStatus(0); // 草稿
         leaveRequestMapper.insert(entity);
+
+        // 2. 构建表单快照
+        String formDataJson = buildLeaveFormData(request);
+
+        // 3. 发起审批
+        try {
+            Long instanceId = approvalService.startApproval("LEAVE_REQUEST", entity.getId(), formDataJson);
+
+            // 4. 回填审批实例ID，更新状态为"审批中"
+            entity.setApprovalInstanceId(instanceId);
+            entity.setApprovalStatus(1);
+            leaveRequestMapper.updateById(entity);
+
+            log.info("请假提交并发起审批成功: leaveId={}, instanceId={}", entity.getId(), instanceId);
+        } catch (Exception e) {
+            log.error("请假发起审批失败: leaveId={}, error={}", entity.getId(), e.getMessage(), e);
+            throw new GlobalException(ErrorCode.BUSINESS_ERROR, "发起审批失败：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 构建请假表单快照 JSON
+     */
+    private String buildLeaveFormData(LeaveRequestDTO request) {
+        StringBuilder json = new StringBuilder();
+        json.append("{");
+        json.append("\"leaveType\":\"").append(escapeJson(request.getLeaveType())).append("\",");
+        json.append("\"startTime\":\"").append(request.getStartTime()).append("\",");
+        json.append("\"endTime\":\"").append(request.getEndTime()).append("\",");
+        json.append("\"totalDays\":").append(request.getTotalDays()).append(",");
+        json.append("\"totalHours\":").append(request.getTotalHours() != null ? request.getTotalHours() : "null").append(",");
+        json.append("\"leaveReason\":\"").append(escapeJson(request.getLeaveReason())).append("\"");
+        json.append("}");
+        return json.toString();
+    }
+
+    /**
+     * 简单的 JSON 字符串转义
+     */
+    private String escapeJson(String value) {
+        if (value == null) return "";
+        return value.replace("\\", "\\\\")
+                    .replace("\"", "\\\"")
+                    .replace("\n", "\\n")
+                    .replace("\r", "\\r")
+                    .replace("\t", "\\t");
     }
 
     @Override
@@ -165,6 +214,7 @@ public class LeaveServiceImpl implements LeaveService {
         vo.setLeaveReason(entity.getLeaveReason());
         vo.setApprovalStatus(entity.getApprovalStatus());
         vo.setApprovalStatusDesc(getApprovalStatusDesc(entity.getApprovalStatus()));
+        vo.setApprovalInstanceId(entity.getApprovalInstanceId());
         vo.setCreateTime(entity.getCreateTime());
         return vo;
     }

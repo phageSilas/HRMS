@@ -3,6 +3,7 @@
  * 考勤日历月视图 + 打卡 + 补卡申请 + 加班申请
  */
 
+import { usePageAutoRefresh } from '@/hooks/usePageAutoRefresh';
 import {
   CheckCircleOutlined,
   ClockCircleOutlined,
@@ -10,8 +11,8 @@ import {
   ExclamationCircleOutlined,
   FieldTimeOutlined,
 } from '@ant-design/icons';
+import { history, useRequest } from '@umijs/max';
 import { PageContainer } from '@ant-design/pro-components';
-import { useRequest } from '@umijs/max';
 import {
   Button,
   Card,
@@ -42,7 +43,14 @@ import {
   getMakeupRecords,
   getOvertimeRecords,
 } from '@/services/profile';
-import type { MakeupRequest, OvertimeRequest } from '@/services/profile';
+import type {
+  AttendanceCalendarVO,
+  AttendanceDayVO,
+  MakeupRecordVO,
+  MakeupRequest,
+  OvertimeRecordVO,
+  OvertimeRequest,
+} from '@/services/profile';
 
 const { Text, Title } = Typography;
 
@@ -76,25 +84,38 @@ const ProfileAttendancePage: React.FC = () => {
   const [makeupForm] = Form.useForm();
 
   // 考勤日历
-  const { data: calendarData, loading: calendarLoading, refresh: refreshCalendar } = useRequest(
-    () => getAttendanceCalendar(currentMonth),
-  );
+  const {
+    data: calendarData,
+    loading: calendarLoading,
+    refresh: refreshCalendar,
+  } = useRequest<AttendanceCalendarVO>(() => getAttendanceCalendar(currentMonth));
 
   // 补卡记录
-  const { data: makeupData, loading: makeupLoading, refresh: refreshMakeup } = useRequest(
-    getMakeupRecords,
-  );
+  const {
+    data: makeupData,
+    loading: makeupLoading,
+    refresh: refreshMakeup,
+  } = useRequest<MakeupRecordVO[]>(getMakeupRecords);
 
   // 加班记录
   const [overtimeModalOpen, setOvertimeModalOpen] = useState(false);
   const [overtimeForm] = Form.useForm();
 
-  const { data: overtimeData, loading: overtimeLoading, refresh: refreshOvertime } = useRequest(
-    getOvertimeRecords,
-  );
+  const {
+    data: overtimeData,
+    loading: overtimeLoading,
+    refresh: refreshOvertime,
+  } = useRequest<OvertimeRecordVO[]>(getOvertimeRecords);
 
-  const calendar = calendarData;
-  const makeupRecords = makeupData || [];
+  usePageAutoRefresh(() => {
+    refreshCalendar();
+    refreshMakeup();
+    refreshOvertime();
+  });
+
+  const calendar = calendarData as AttendanceCalendarVO | undefined;
+  const makeupRecords = (makeupData as MakeupRecordVO[] | undefined) || [];
+  const overtimeRecords = (overtimeData as OvertimeRecordVO[] | undefined) || [];
 
   // ============ 打卡 ============
 
@@ -151,7 +172,7 @@ const ProfileAttendancePage: React.FC = () => {
 
   // ============ 日历渲染 ============
 
-  const calendarDays = useMemo(() => {
+  const calendarDays = useMemo<AttendanceDayVO[]>(() => {
     if (!calendar?.days) return [];
     return calendar.days;
   }, [calendar]);
@@ -208,6 +229,17 @@ const ProfileAttendancePage: React.FC = () => {
         const item = map[s] || { text: '未知', color: 'default' };
         return <Tag color={item.color}>{item.text}</Tag>;
       },
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 100,
+      render: (_: any, record: any) =>
+        record.approvalInstanceId ? (
+          <Button type="link" size="small" onClick={() => history.push(`/approval/detail/${record.approvalInstanceId}`)}>
+            查看进度
+          </Button>
+        ) : null,
     },
     {
       title: '申请时间',
@@ -313,6 +345,7 @@ const ProfileAttendancePage: React.FC = () => {
                 ))}
               {calendarDays.map((day) => {
                 const dayNum = dayjs(day.date).date();
+                const isMissed = day.status === 'MISSED';
 
                 return (
                   <Col span={3} key={day.date}>
@@ -324,8 +357,16 @@ const ProfileAttendancePage: React.FC = () => {
                         backgroundColor: STATUS_BG_MAP[day.status] || '#fff',
                         border: '1px solid ' + (STATUS_COLOR_MAP[day.status] || '#f0f0f0'),
                         minHeight: 60,
-                        cursor: 'pointer',
+                        cursor: isMissed ? 'pointer' : 'default',
+                        transition: 'all 0.2s',
                       }}
+                      onClick={() => {
+                        if (isMissed) {
+                          makeupForm.setFieldsValue({ correctionDate: dayjs(day.date) });
+                          setMakeupModalOpen(true);
+                        }
+                      }}
+                      title={isMissed ? '点击申请补卡' : undefined}
                     >
                       <div style={{ fontWeight: 500, fontSize: 14 }}>{dayNum}</div>
                       <Tag
@@ -425,12 +466,23 @@ const ProfileAttendancePage: React.FC = () => {
         style={{ marginTop: 16 }}
       >
         <Table
-          dataSource={overtimeData || []}
+          dataSource={overtimeRecords}
           columns={[
             { title: '加班日期', dataIndex: 'overtimeDate', key: 'overtimeDate', width: 170, render: (t: string) => t || '-' },
             { title: '时长(小时)', dataIndex: 'duration', key: 'duration', width: 100 },
             { title: '事由', dataIndex: 'reason', key: 'reason', ellipsis: true },
             { title: '状态', dataIndex: 'approvalStatusDesc', key: 'approvalStatusDesc', width: 100 },
+            {
+              title: '操作',
+              key: 'action',
+              width: 100,
+              render: (_: any, record: any) =>
+                record.approvalInstanceId ? (
+                  <Button type="link" size="small" onClick={() => history.push(`/approval/detail/${record.approvalInstanceId}`)}>
+                    查看进度
+                  </Button>
+                ) : null,
+            },
             { title: '申请时间', dataIndex: 'createTime', key: 'createTime', width: 170, render: (t: string) => t || '-' },
           ]}
           rowKey="id"
@@ -475,6 +527,7 @@ const ProfileAttendancePage: React.FC = () => {
           </Form.Item>
         </Form>
       </Modal>
+
     </PageContainer>
   );
 };

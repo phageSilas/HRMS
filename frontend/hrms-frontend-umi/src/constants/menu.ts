@@ -26,9 +26,18 @@ export const menuConfig: MenuItem[] = [
       { key: 'system-user', name: '用户管理', icon: '', path: '/system/user' },
       { key: 'system-role', name: '角色管理', icon: '', path: '/system/role' },
       { key: 'system-menu', name: '菜单管理', icon: '', path: '/system/menu' },
-      { key: 'system-dept', name: '部门管理', icon: '', path: '/system/dept' },
-      { key: 'system-post', name: '职位管理', icon: '', path: '/system/post' },
-      { key: 'system-dict', name: '字典管理', icon: '', path: '/system/dict' },
+    ],
+  },
+  {
+    key: 'organization',
+    name: '组织架构',
+    icon: 'ApartmentOutlined',
+    path: '/organization',
+    access: 'organization',
+    children: [
+      { key: 'organization-dept', name: '部门管理', icon: '', path: '/organization/dept' },
+      { key: 'organization-post', name: '职位管理', icon: '', path: '/organization/post' },
+      { key: 'organization-dict', name: '字典管理', icon: '', path: '/organization/dict' },
     ],
   },
   {
@@ -60,11 +69,12 @@ export const menuConfig: MenuItem[] = [
     name: '考勤管理',
     icon: 'ClockCircleOutlined',
     path: '/attendance',
-    access: 'attendance',
     children: [
-      { key: 'attendance-record', name: '考勤记录', icon: '', path: '/attendance/record' },
-      { key: 'attendance-leave', name: '请假申请', icon: '', path: '/attendance/leave' },
-      { key: 'attendance-summary', name: '考勤统计', icon: '', path: '/attendance/summary' },
+      { key: 'attendance-punch', name: '员工打卡', icon: '', path: '/attendance/punch', access: 'attendancePunch' },
+      { key: 'attendance-record', name: '考勤记录', icon: '', path: '/attendance/record', access: 'attendanceManage' },
+      { key: 'attendance-groups', name: '考勤配置', icon: '', path: '/attendance/groups', access: 'attendanceManage' },
+      { key: 'attendance-leave-manage', name: '请假管理', icon: '', path: '/attendance/leaveManage', access: 'attendanceManage' },
+      { key: 'attendance-summary', name: '考勤统计', icon: '', path: '/attendance/summary', access: 'attendanceManage' },
     ],
   },
   {
@@ -87,7 +97,7 @@ export const menuConfig: MenuItem[] = [
     access: 'approval',
     children: [
       { key: 'approval-workspace', name: '审批工作台', icon: '', path: '/approval/workspace' },
-      { key: 'approval-delegation', name: '审批配置', icon: '', path: '/approval/delegation' },
+      { key: 'approval-delegation', name: '委托审批', icon: '', path: '/approval/delegation' },
     ],
   },
   {

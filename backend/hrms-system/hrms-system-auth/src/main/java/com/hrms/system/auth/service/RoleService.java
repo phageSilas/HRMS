@@ -1,7 +1,9 @@
 package com.hrms.system.auth.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.hrms.system.auth.dto.RoleCreateDTO;
 import com.hrms.system.auth.dto.RoleMenuAssignDTO;
+import com.hrms.system.auth.dto.RoleUpdateDTO;
 import com.hrms.system.auth.entity.RoleEntity;
 import com.hrms.system.auth.vo.RoleVO;
 
@@ -15,17 +17,18 @@ public interface RoleService {
     /**
      * 创建角色
      *
-     * @param role 角色实体
+     * @param createDTO 角色创建DTO
      * @return 角色 ID
      */
-    Long create(RoleEntity role);
+    Long create(RoleCreateDTO createDTO);
 
     /**
      * 更新角色
      *
-     * @param role 角色实体
+     * @param id 角色ID
+     * @param updateDTO 角色更新DTO
      */
-    void update(RoleEntity role);
+    void update(Long id, RoleUpdateDTO updateDTO);
 
     /**
      * 删除角色
@@ -78,9 +81,11 @@ public interface RoleService {
     /**
      * 查询所有角色VO列表（包含菜单ID）
      *
+     * @param keyword 角色名称关键字（可选）
+     * @param status  状态（可选）
      * @return 角色VO列表
      */
-    List<RoleVO> listRoleVOs();
+    List<RoleVO> listRoleVOs(String keyword, Integer status);
 
     /**
      * 分配角色菜单权限

@@ -28,7 +28,15 @@ public class ProfileServiceImpl implements ProfileService {
 
     @Override
     public ProfileVO getProfile(Long userId) {
+        // 方式一：通过 hr_employee.user_id 查询（反向关联，最可靠）
         ProfileVO profile = profileMapper.selectProfileByUserId(userId);
+        if (profile == null) {
+            // 方式二：通过 sys_user.employee_id（正向关联）查 hr_employee.id
+            UserEntity user = userMapper.selectById(userId);
+            if (user != null && user.getEmployeeId() != null) {
+                profile = profileMapper.selectProfileByEmployeeId(user.getEmployeeId());
+            }
+        }
         if (profile == null) {
             throw new GlobalException(ErrorCode.NOT_FOUND, "员工信息不存在");
         }

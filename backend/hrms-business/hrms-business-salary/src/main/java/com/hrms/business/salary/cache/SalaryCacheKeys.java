@@ -63,4 +63,15 @@ public final class SalaryCacheKeys {
     public static String payslipVerify(Long employeeId, String month) {
         return "salary:payslip:verify:" + employeeId + ":" + month;
     }
+
+    /**
+     * 获取管理端工资条二次验证 Key。
+     *
+     * @param userId 登录用户ID
+     * @return Redis Key
+     * 本方法使用的工具类: 无
+     */
+    public static String managePayslipVerify(Long userId) {
+        return "salary:manage:payslip:verify:" + userId;
+    }
 }

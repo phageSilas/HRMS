@@ -4,7 +4,6 @@
  */
 
 import request from '@/utils/request';
-import type { Result } from '@/types/api';
 
 // ======================================================================
 // 类型定义（与后端 DTO/VO 对齐）
@@ -49,7 +48,7 @@ export interface ProfileUpdateRequest {
 /** 考勤日历中的某一天 */
 export interface AttendanceDayVO {
   date: string;
-  status: string;       // NORMAL / LATE / EARLY_LEAVE / MISSED / LEAVE / HOLIDAY / ABSENT
+  status: string;
   statusDesc: string;
   clockInTime?: string;
   clockOutTime?: string;
@@ -63,13 +62,13 @@ export interface AttendanceCalendarVO {
 
 /** 打卡请求 */
 export interface ClockInRequest {
-  type: number; // 1=上班, 2=下班
+  type: number;
 }
 
 /** 补卡申请请求 */
 export interface MakeupRequest {
   correctionDate: string;
-  correctionType: string;  // CLOCK_IN / CLOCK_OUT
+  correctionType: string;
   correctionReason: string;
 }
 
@@ -80,6 +79,7 @@ export interface MakeupRecordVO {
   correctionType: string;
   correctionReason: string;
   approvalStatus: number;
+  approvalInstanceId?: number;
   createTime: string;
 }
 
@@ -105,6 +105,7 @@ export interface LeaveVO {
   leaveReason: string;
   approvalStatus: number;
   approvalStatusDesc: string;
+  approvalInstanceId?: number;
   createTime: string;
 }
 
@@ -130,11 +131,22 @@ export interface PhoneBindRequest {
   smsCode: string;
 }
 
-/** 登录日志 VO */
+/** 登录日志 VO（与后端 LoginLogVO 对齐） */
 export interface LoginLogVO {
+  /** 登录IP */
+  ip: string;
+  /** 登录地点 */
+  loginLocation?: string;
+  /** 浏览器 */
+  browser?: string;
+  /** 操作系统 */
+  os?: string;
+  /** 登录状态：1-成功 0-失败 */
+  status: number;
+  /** 错误消息 */
+  errorMsg?: string;
+  /** 登录时间 */
   loginTime: string;
-  ipAddress: string;
-  deviceInfo: string;
 }
 
 // ======================================================================
@@ -143,12 +155,12 @@ export interface LoginLogVO {
 
 /** 获取我的档案 */
 export async function getProfile() {
-  return request.get<Result<ProfileVO>>('/api/v1/profile');
+  return request.get<ProfileVO>('/api/v1/profile');
 }
 
 /** 更新我的档案 */
 export async function updateProfile(data: ProfileUpdateRequest) {
-  return request.put<Result<void>>('/api/v1/profile', data);
+  return request.put<void>('/api/v1/profile', data);
 }
 
 // ======================================================================
@@ -157,24 +169,24 @@ export async function updateProfile(data: ProfileUpdateRequest) {
 
 /** 获取考勤日历 */
 export async function getAttendanceCalendar(yearMonth: string) {
-  return request.get<Result<AttendanceCalendarVO>>('/api/v1/attendance/calendar', {
+  return request.get<AttendanceCalendarVO>('/api/v1/attendance/calendar', {
     params: { yearMonth },
   });
 }
 
 /** 打卡 */
 export async function clockIn(data: ClockInRequest) {
-  return request.post<Result<void>>('/api/v1/attendance/clock-in', data);
+  return request.post<void>('/api/v1/attendance/clock-in', data);
 }
 
 /** 申请补卡 */
 export async function createMakeup(data: MakeupRequest) {
-  return request.post<Result<void>>('/api/v1/attendance/makeup', data);
+  return request.post<void>('/api/v1/attendance/makeup', data);
 }
 
 /** 补卡记录列表 */
 export async function getMakeupRecords() {
-  return request.get<Result<MakeupRecordVO[]>>('/api/v1/attendance/makeup/list');
+  return request.get<MakeupRecordVO[]>('/api/v1/attendance/makeup/list');
 }
 
 // ======================================================================
@@ -183,22 +195,22 @@ export async function getMakeupRecords() {
 
 /** 提交请假申请 */
 export async function createLeave(data: LeaveRequestDTO) {
-  return request.post<Result<void>>('/api/v1/leave', data);
+  return request.post<void>('/api/v1/leave', data);
 }
 
 /** 查询请假记录 */
 export async function getLeaveList() {
-  return request.get<Result<LeaveVO[]>>('/api/v1/leave/list');
+  return request.get<LeaveVO[]>('/api/v1/leave/list');
 }
 
 /** 取消请假 */
 export async function cancelLeave(id: number) {
-  return request.post<Result<void>>(`/api/v1/leave/${id}/cancel`);
+  return request.post<void>(`/api/v1/leave/${id}/cancel`);
 }
 
 /** 查询假期余额 */
 export async function getLeaveBalance() {
-  return request.get<Result<LeaveBalanceVO>>('/api/v1/leave/balance');
+  return request.get<LeaveBalanceVO>('/api/v1/leave/balance');
 }
 
 // ======================================================================
@@ -220,6 +232,7 @@ export interface OvertimeRecordVO {
   reason: string;
   approvalStatus: number;
   approvalStatusDesc: string;
+  approvalInstanceId?: number;
   createTime: string;
 }
 
@@ -235,17 +248,17 @@ export interface AttendanceStatisticsVO {
 
 /** 提交加班申请 */
 export async function createOvertime(data: OvertimeRequest) {
-  return request.post<Result<void>>('/api/v1/attendance/overtime', data);
+  return request.post<void>('/api/v1/attendance/overtime', data);
 }
 
 /** 加班记录列表 */
 export async function getOvertimeRecords() {
-  return request.get<Result<OvertimeRecordVO[]>>('/api/v1/attendance/overtime');
+  return request.get<OvertimeRecordVO[]>('/api/v1/attendance/overtime');
 }
 
 /** 获取考勤统计 */
 export async function getAttendanceStatistics(yearMonth: string) {
-  return request.get<Result<AttendanceStatisticsVO>>('/api/v1/attendance/statistics', {
+  return request.get<AttendanceStatisticsVO>('/api/v1/attendance/statistics', {
     params: { yearMonth },
   });
 }
@@ -256,20 +269,20 @@ export async function getAttendanceStatistics(yearMonth: string) {
 
 /** 修改密码 */
 export async function changePassword(data: PasswordChangeRequest) {
-  return request.put<Result<void>>('/api/v1/account/password', data);
+  return request.put<void>('/api/v1/account/password', data);
 }
 
 /** 绑定手机 */
 export async function bindPhone(data: PhoneBindRequest) {
-  return request.post<Result<void>>('/api/v1/account/phone/bind', data);
+  return request.post<void>('/api/v1/account/phone/bind', data);
 }
 
 /** 解绑手机 */
 export async function unbindPhone() {
-  return request.post<Result<void>>('/api/v1/account/phone/unbind');
+  return request.post<void>('/api/v1/account/phone/unbind');
 }
 
 /** 获取登录日志 */
 export async function getLoginLogs() {
-  return request.get<Result<LoginLogVO[]>>('/api/v1/account/login-logs');
+  return request.get<LoginLogVO[]>('/api/v1/account/login-logs');
 }

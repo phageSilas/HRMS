@@ -21,6 +21,14 @@ export default function access(initialState: { currentUser?: UserInfo }) {
     return permissions.includes(permission)
       || permissions.some(p => p.startsWith(permission + ':'));
   };
+  const isAttendanceManager = ['ADMIN', 'HR', 'MANAGER'].includes(
+    currentUser?.roleCode || '',
+  );
+  const canVisitSalaryModule =
+    hasPermission('salary') ||
+    ['ADMIN', 'HR', 'HR_TEST', 'ROLE_ADMIN', 'FINANCE'].includes(
+      currentUser?.roleCode || '',
+    );
 
   return {
     // 模块权限
@@ -29,7 +37,9 @@ export default function access(initialState: { currentUser?: UserInfo }) {
     employee: hasPermission('employee'),
     process: hasPermission('process'),
     attendance: hasPermission('attendance'),
-    salary: hasPermission('salary'),
+    attendanceManage: isAttendanceManager,
+    attendancePunch: Boolean(currentUser),
+    salary: canVisitSalaryModule,
     approval: hasPermission('approval'),
     mycenter: true, // 个人中心所有人可见
     ai: true,
@@ -48,7 +58,7 @@ export default function access(initialState: { currentUser?: UserInfo }) {
     canViewEmployee: ['ADMIN', 'HR', 'MANAGER'].includes(
       currentUser?.roleCode || '',
     ),
-    canViewSalary: ['ADMIN', 'HR', 'FINANCE'].includes(
+    canViewSalary: ['ADMIN', 'HR', 'HR_TEST', 'ROLE_ADMIN', 'FINANCE'].includes(
       currentUser?.roleCode || '',
     ),
     canApprove: ['ADMIN', 'HR', 'MANAGER', 'FINANCE'].includes(

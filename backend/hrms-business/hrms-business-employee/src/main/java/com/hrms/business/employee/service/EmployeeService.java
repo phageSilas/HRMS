@@ -89,4 +89,28 @@ public interface EmployeeService {
      */
     List<EmployeeEntity> getEmployeesByDept(Long deptId);
 
+    /**
+     * 按职位获取在职员工列表（模块间服务）
+     *
+     * @param postId 职位ID
+     * @return 在职员工列表
+     */
+    List<EmployeeEntity> getEmployeesByPostId(Long postId);
+
+    /**
+     * 检查部门下是否有在职员工（模块间服务）
+     *
+     * @param deptId 部门ID
+     * @return true-有员工，false-无员工
+     */
+    boolean hasEmployeesInDept(Long deptId);
+
+    /**
+     * 检查职位下是否有在职员工（模块间服务）
+     *
+     * @param postId 职位ID
+     * @return true-有员工，false-无员工
+     */
+    boolean hasEmployeesInPost(Long postId);
+
 }

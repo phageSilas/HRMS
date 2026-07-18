@@ -3,14 +3,17 @@ package com.hrms.business.mycenter.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.hrms.business.mycenter.dto.AttendanceCalendarVO;
 import com.hrms.business.mycenter.dto.AttendanceStatisticsVO;
+import com.hrms.business.mycenter.entity.AttendanceOvertimeEntity;
 import com.hrms.business.mycenter.dto.MakeupRecordVO;
 import com.hrms.business.mycenter.dto.MakeupRequest;
 import com.hrms.business.mycenter.dto.OvertimeRecordVO;
 import com.hrms.business.mycenter.dto.OvertimeRequest;
 import com.hrms.business.mycenter.entity.AttendanceCorrectionEntity;
 import com.hrms.business.mycenter.entity.MyAttendanceRecordEntity;
+import com.hrms.business.mycenter.mapper.AttendanceOvertimeMapper;
 import com.hrms.business.mycenter.mapper.MyCenterAttendanceCorrectionMapper;
 import com.hrms.business.mycenter.mapper.MyAttendanceRecordMapper;
+import com.hrms.business.approval.service.ApprovalService;
 import com.hrms.business.mycenter.service.AttendanceService;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
@@ -25,12 +28,8 @@ import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -44,28 +43,8 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     private final MyAttendanceRecordMapper attendanceRecordMapper;
     private final MyCenterAttendanceCorrectionMapper correctionMapper;
-
-    /**
-     * 加班记录内存存储（TODO: 后续对接数据库表 hr_attendance_overtime）
-     */
-    private final Map<Long, List<SimpleOvertimeRecord>> overtimeStore = new ConcurrentHashMap<>();
-    private final AtomicLong overtimeIdSeq = new AtomicLong(1);
-
-    /**
-     * 简单的加班记录内部类（替代数据库实体）
-     */
-    @lombok.Data
-    @lombok.AllArgsConstructor
-    @lombok.NoArgsConstructor
-    private static class SimpleOvertimeRecord {
-        private Long id;
-        private Long employeeId;
-        private LocalDateTime overtimeDate;
-        private java.math.BigDecimal duration;
-        private String reason;
-        private Integer approvalStatus;
-        private LocalDateTime createTime;
-    }
+    private final AttendanceOvertimeMapper overtimeMapper;
+    private final ApprovalService approvalService;
 
     @Override
     public AttendanceCalendarVO getCalendar(Long employeeId, String yearMonth) {
@@ -207,6 +186,48 @@ public class AttendanceServiceImpl implements AttendanceService {
             entity.setRecordId(attendanceRecord.getId());
         }
         correctionMapper.insert(entity);
+
+        // 2. 构建表单快照
+        String formDataJson = buildCorrectionFormData(request);
+
+        // 3. 发起审批
+        try {
+            Long instanceId = approvalService.startApproval("CORRECTION", entity.getId(), formDataJson);
+
+            // 4. 回填审批实例ID
+            entity.setApprovalInstanceId(instanceId);
+            correctionMapper.updateById(entity);
+
+            log.info("补卡提交并发起审批成功: correctionId={}, instanceId={}", entity.getId(), instanceId);
+        } catch (Exception e) {
+            log.error("补卡发起审批失败: correctionId={}, error={}", entity.getId(), e.getMessage(), e);
+            throw new GlobalException(ErrorCode.BUSINESS_ERROR, "发起审批失败：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 构建补卡表单快照 JSON
+     */
+    private String buildCorrectionFormData(MakeupRequest request) {
+        StringBuilder json = new StringBuilder();
+        json.append("{");
+        json.append("\"correctionDate\":\"").append(request.getCorrectionDate()).append("\",");
+        json.append("\"correctionType\":\"").append(escapeJson(request.getCorrectionType())).append("\",");
+        json.append("\"correctionReason\":\"").append(escapeJson(request.getCorrectionReason())).append("\"");
+        json.append("}");
+        return json.toString();
+    }
+
+    /**
+     * 简单的 JSON 字符串转义
+     */
+    private String escapeJson(String value) {
+        if (value == null) return "";
+        return value.replace("\\", "\\\\")
+                    .replace("\"", "\\\"")
+                    .replace("\n", "\\n")
+                    .replace("\r", "\\r")
+                    .replace("\t", "\\t");
     }
 
     @Override
@@ -224,6 +245,7 @@ public class AttendanceServiceImpl implements AttendanceService {
             vo.setCorrectionType(e.getCorrectionType());
             vo.setCorrectionReason(e.getCorrectionReason());
             vo.setApprovalStatus(e.getApprovalStatus());
+            vo.setApprovalInstanceId(e.getApprovalInstanceId());
             vo.setCreateTime(e.getCreateTime());
             return vo;
         }).collect(Collectors.toList());
@@ -232,24 +254,58 @@ public class AttendanceServiceImpl implements AttendanceService {
     // ==================== 加班申请 ====================
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void createOvertime(Long employeeId, OvertimeRequest request) {
-        SimpleOvertimeRecord record = new SimpleOvertimeRecord();
-        record.setId(overtimeIdSeq.incrementAndGet());
-        record.setEmployeeId(employeeId);
-        record.setOvertimeDate(request.getOvertimeDate());
-        record.setDuration(request.getDuration());
-        record.setReason(request.getReason());
-        record.setApprovalStatus(1); // 审批中
-        record.setCreateTime(LocalDateTime.now());
+        // 1. 创建加班记录
+        AttendanceOvertimeEntity entity = new AttendanceOvertimeEntity();
+        entity.setEmployeeId(employeeId);
+        entity.setOvertimeDate(request.getOvertimeDate());
+        entity.setDuration(request.getDuration());
+        entity.setReason(request.getReason());
+        entity.setApprovalStatus(0); // 草稿
+        overtimeMapper.insert(entity);
 
-        overtimeStore.computeIfAbsent(employeeId, k -> new ArrayList<>()).add(record);
-        log.info("员工 {} 提交加班申请，时长 {} 小时", employeeId, request.getDuration());
+        // 2. 构建表单快照
+        String formDataJson = buildOvertimeFormData(request);
+
+        // 3. 发起审批
+        try {
+            Long instanceId = approvalService.startApproval("OVERTIME", entity.getId(), formDataJson);
+
+            // 4. 回填审批实例ID，更新状态为"审批中"
+            entity.setApprovalInstanceId(instanceId);
+            entity.setApprovalStatus(1);
+            overtimeMapper.updateById(entity);
+
+            log.info("加班提交并发起审批成功: overtimeId={}, instanceId={}", entity.getId(), instanceId);
+        } catch (Exception e) {
+            log.error("加班发起审批失败: overtimeId={}, error={}", entity.getId(), e.getMessage(), e);
+            throw new GlobalException(ErrorCode.BUSINESS_ERROR, "发起审批失败：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 构建加班表单快照 JSON
+     */
+    private String buildOvertimeFormData(OvertimeRequest request) {
+        StringBuilder json = new StringBuilder();
+        json.append("{");
+        json.append("\"overtimeDate\":\"").append(request.getOvertimeDate()).append("\",");
+        json.append("\"duration\":").append(request.getDuration()).append(",");
+        json.append("\"reason\":\"").append(escapeJson(request.getReason())).append("\"");
+        json.append("}");
+        return json.toString();
     }
 
     @Override
     public List<OvertimeRecordVO> listOvertimeRecords(Long employeeId) {
-        List<SimpleOvertimeRecord> records = overtimeStore.getOrDefault(employeeId, Collections.emptyList());
-        return records.stream().map(e -> {
+        List<AttendanceOvertimeEntity> list = overtimeMapper.selectList(
+                new LambdaQueryWrapper<AttendanceOvertimeEntity>()
+                        .eq(AttendanceOvertimeEntity::getEmployeeId, employeeId)
+                        .orderByDesc(AttendanceOvertimeEntity::getCreateTime)
+        );
+
+        return list.stream().map(e -> {
             String statusDesc;
             switch (e.getApprovalStatus()) {
                 case 0: statusDesc = "草稿"; break;
@@ -265,10 +321,10 @@ public class AttendanceServiceImpl implements AttendanceService {
                     .reason(e.getReason())
                     .approvalStatus(e.getApprovalStatus())
                     .approvalStatusDesc(statusDesc)
+                    .approvalInstanceId(e.getApprovalInstanceId())
                     .createTime(e.getCreateTime())
                     .build();
-        }).sorted(Comparator.comparing(OvertimeRecordVO::getCreateTime).reversed())
-          .collect(Collectors.toList());
+        }).collect(Collectors.toList());
     }
 
     // ==================== 考勤统计 ====================

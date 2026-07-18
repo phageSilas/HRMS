@@ -14,7 +14,7 @@
 -- M3 考勤管理 (4张): hr_attendance_group, hr_attendance_record, hr_leave_request, hr_attendance_correction
 -- M4 薪资管理 (5张): hr_salary_template, hr_salary_template_item, hr_employee_salary_profile, hr_salary_batch, hr_salary_batch_item
 -- M7 审批中心 (3张): hr_approval_instance, hr_approval_task, hr_approval_delegation
--- M9 AI 助手  (1张): hr_ai_conversation
+-- M9 AI 助手  (2张): hr_ai_conversation, hr_ai_message
 -- 公共模块   (3张): sys_file, sys_operate_log, sys_login_log
 -- ============================================================
 
@@ -41,6 +41,7 @@ CREATE TABLE `sys_user` (
   `phone` VARCHAR(20) NOT NULL COMMENT '手机号',
   `email` VARCHAR(128) DEFAULT NULL COMMENT '邮箱',
   `avatar_url` VARCHAR(255) DEFAULT NULL COMMENT '头像地址',
+  `dept_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '部门ID（冗余字段，避免跨模块查询）',
   `employee_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '关联员工 ID',
   `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态：1-启用 0-禁用',
   `last_login_time` DATETIME DEFAULT NULL COMMENT '最后登录时间',
@@ -60,6 +61,7 @@ CREATE TABLE `sys_user` (
   UNIQUE KEY `uk_sys_user_username` (`username`),
   UNIQUE KEY `uk_sys_user_phone` (`phone`),
   KEY `idx_sys_user_employee_id` (`employee_id`),
+  KEY `idx_sys_user_dept_id` (`dept_id`),
   KEY `idx_sys_user_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='系统用户表';
 
@@ -356,33 +358,39 @@ CREATE TABLE `hr_employee_contract` (
 -- ----------------------------------------
 -- hr_entry_application（入职申请表）
 -- ----------------------------------------
+DROP TABLE IF EXISTS `hr_entry_application`;
+
 CREATE TABLE `hr_entry_application` (
-  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-  `candidate_name` VARCHAR(64) NOT NULL COMMENT '候选人姓名',
-  `gender` TINYINT DEFAULT NULL COMMENT '性别',
-  `phone` VARCHAR(20) NOT NULL COMMENT '手机号',
-  `email` VARCHAR(128) DEFAULT NULL COMMENT '邮箱',
-  `id_card_no` VARCHAR(255) DEFAULT NULL COMMENT '身份证号',
-  `dept_id` BIGINT UNSIGNED NOT NULL COMMENT '拟入职部门ID',
-  `post_id` BIGINT UNSIGNED NOT NULL COMMENT '拟入职职位ID',
-  `hire_type` TINYINT NOT NULL COMMENT '录用类型：1-全职 2-兼职 3-实习',
-  `probation_month` INT NOT NULL COMMENT '试用期（月）',
-  `probation_salary_ratio` DECIMAL(5,2) NOT NULL DEFAULT 80.00 COMMENT '试用期薪资比例（%）',
-  `expected_hire_date` DATE NOT NULL COMMENT '预计入职日期',
-  `leader_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '直接汇报人',
-  `approval_instance_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '审批实例ID',
-  `approval_status` TINYINT NOT NULL DEFAULT 0 COMMENT '审批状态：0-草稿 1-审批中 2-已通过 3-已拒绝 5-已入职',
-  `actual_hire_date` DATE DEFAULT NULL COMMENT '实际入职日期（HR确认时填写）',
-  `create_by` BIGINT UNSIGNED DEFAULT NULL COMMENT '创建人',
-  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `update_by` BIGINT UNSIGNED DEFAULT NULL COMMENT '更新人',
-  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '逻辑删除',
-  `version` INT NOT NULL DEFAULT 0 COMMENT '版本号',
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_hr_entry_app_phone` (`phone`),
-  KEY `idx_hr_entry_app_status` (`approval_status`),
-  KEY `idx_hr_entry_app_dept` (`dept_id`)
+   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+   `candidate_name` VARCHAR(64) NOT NULL COMMENT '候选人姓名',
+   `gender` TINYINT DEFAULT NULL COMMENT '性别',
+   `phone` VARCHAR(20) NOT NULL COMMENT '手机号',
+   `email` VARCHAR(128) DEFAULT NULL COMMENT '邮箱',
+   `id_card_no` VARCHAR(255) DEFAULT NULL COMMENT '身份证号',
+   `dept_id` BIGINT UNSIGNED NOT NULL COMMENT '拟入职部门ID',
+   `post_id` BIGINT UNSIGNED NOT NULL COMMENT '拟入职职位ID',
+   `hire_type` TINYINT NOT NULL COMMENT '录用类型：1-全职 2-兼职 3-实习',
+   `probation_month` INT NOT NULL COMMENT '试用期（月）',
+   `probation_salary_ratio` DECIMAL(5,2) NOT NULL DEFAULT 80.00 COMMENT '试用期薪资比例（%）',
+   `expected_hire_date` DATE NOT NULL COMMENT '预计入职日期',
+   `leader_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '直接汇报人',
+   `approval_instance_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '审批实例ID',
+   `approval_status` TINYINT NOT NULL DEFAULT 0 COMMENT '审批状态：0-草稿 1-审批中 2-已通过 3-已拒绝 5-已入职',
+   `actual_hire_date` DATE DEFAULT NULL COMMENT '实际入职日期（HR确认时填写）',
+   `employee_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '确认入职后关联的员工ID',
+   `employee_no` VARCHAR(32) DEFAULT NULL COMMENT '确认入职后关联的员工工号',
+   `create_by` BIGINT UNSIGNED DEFAULT NULL COMMENT '创建人',
+   `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+   `update_by` BIGINT UNSIGNED DEFAULT NULL COMMENT '更新人',
+   `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+   `is_deleted` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+   `version` INT NOT NULL DEFAULT 0 COMMENT '版本号',
+   PRIMARY KEY (`id`),
+   UNIQUE KEY `uk_hr_entry_app_phone` (`phone`),
+   KEY `idx_hr_entry_app_status` (`approval_status`),
+   KEY `idx_hr_entry_app_dept` (`dept_id`),
+   KEY `idx_hr_entry_app_employee_id` (`employee_id`),
+   KEY `idx_hr_entry_app_employee_no` (`employee_no`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='入职申请表';
 
 -- ----------------------------------------
@@ -565,7 +573,7 @@ CREATE TABLE `hr_leave_request` (
 CREATE TABLE `hr_attendance_correction` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `employee_id` BIGINT UNSIGNED NOT NULL COMMENT '员工ID',
-  `record_id` BIGINT UNSIGNED NOT NULL COMMENT '打卡记录ID',
+  `record_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '打卡记录ID（补卡时可先无打卡记录）',
   `correction_date` DATE NOT NULL COMMENT '补卡日期',
   `correction_type` VARCHAR(32) NOT NULL COMMENT '补卡类型：CLOCK_IN-上班补卡 CLOCK_OUT-下班补卡',
   `correction_reason` VARCHAR(500) NOT NULL COMMENT '补卡原因',
@@ -812,6 +820,8 @@ CREATE TABLE `hr_ai_conversation` (
   `title` VARCHAR(200) NOT NULL DEFAULT '新对话' COMMENT '对话标题',
   `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态：1-活跃 2-已归档',
   `message_count` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '消息总数',
+  `create_by` BIGINT UNSIGNED DEFAULT NULL COMMENT '创建人',
+  `update_by` BIGINT UNSIGNED DEFAULT NULL COMMENT '更新人',
   `version` INT NOT NULL DEFAULT 0 COMMENT '版本号（乐观锁）',
   `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后消息时间',
@@ -820,6 +830,25 @@ CREATE TABLE `hr_ai_conversation` (
   KEY `idx_hr_ai_conv_user` (`user_id`),
   KEY `idx_hr_ai_conv_update` (`update_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='AI对话记录表';
+
+-- ----------------------------------------
+-- hr_ai_message（AI消息记录表）
+-- ----------------------------------------
+CREATE TABLE `hr_ai_message` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `conversation_id` BIGINT UNSIGNED NOT NULL COMMENT '会话ID',
+  `role` VARCHAR(20) NOT NULL COMMENT '角色：user/assistant',
+  `content` TEXT NOT NULL COMMENT '消息内容',
+  `metadata` JSON DEFAULT NULL COMMENT '元数据（意图/引用来源等）',
+  `version` INT NOT NULL DEFAULT 0 COMMENT '版本号',
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  `create_by` BIGINT UNSIGNED DEFAULT NULL COMMENT '创建人',
+  `update_by` BIGINT UNSIGNED DEFAULT NULL COMMENT '更新人',
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_conversation_id` (`conversation_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='AI消息记录表';
 
 -- ============================================================
 -- 公共模块
@@ -899,15 +928,15 @@ CREATE TABLE `sys_login_log` (
 -- ============================================================
 -- 初始化完成
 -- ============================================================
--- 共计 32+1+1 张表
+-- 共计 33 张表
 -- M5 权限体系: 6张
 -- M6 组织架构: 4张
 -- M1 员工档案: 2张
 -- M2 入转调离: 4张
--- M3 考勤管理: 4张+1 + 1 共6张
+-- M3 考勤管理: 6张
 -- M4 薪资管理: 5张
 -- M7 审批中心: 3张
--- M9 AI 助手:  1张
+-- M9 AI 助手:  2张
 -- 公共模块:   3张
 -- ============================================================
 
@@ -960,3 +989,91 @@ CREATE TABLE `hr_attendance_group_member` (
                                               KEY `idx_group_id` (`group_id`),
                                               KEY `idx_effective_date` (`effective_start_date`, `effective_end_date`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='考勤组成员关系表';
+
+-- ----------------------------------------
+-- hr_attendance_overtime（加班申请表）
+-- ----------------------------------------
+CREATE TABLE `hr_attendance_overtime` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `employee_id` BIGINT UNSIGNED NOT NULL COMMENT '员工ID',
+  `overtime_date` DATETIME NOT NULL COMMENT '加班日期',
+  `duration` DECIMAL(5,1) NOT NULL COMMENT '加班时长（小时）',
+  `reason` VARCHAR(500) NOT NULL COMMENT '加班事由',
+  `approval_instance_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '审批实例ID',
+  `approval_status` TINYINT NOT NULL DEFAULT 0 COMMENT '审批状态：0-草稿 1-审批中 2-已通过 3-已拒绝',
+  `create_by` BIGINT UNSIGNED DEFAULT NULL COMMENT '创建人',
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_by` BIGINT UNSIGNED DEFAULT NULL COMMENT '更新人',
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  `version` INT NOT NULL DEFAULT 0 COMMENT '版本号',
+  `remark` VARCHAR(500) DEFAULT NULL COMMENT '备注',
+  PRIMARY KEY (`id`),
+  KEY `idx_hr_att_overtime_employee` (`employee_id`),
+  KEY `idx_hr_att_overtime_date` (`overtime_date`),
+  KEY `idx_hr_att_overtime_status` (`approval_status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='加班申请表';
+
+
+
+-- ============================================================
+-- 修复补卡表的 record_id 字段（允许为空，因为补卡可以先于打卡记录存在）
+-- ============================================================
+ALTER TABLE `hr_attendance_correction` MODIFY COLUMN `record_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '打卡记录ID（补卡时可先无打卡记录）';
+
+-- ============================================================
+-- 添加sys-user表的 dept_id 字段部门ID（冗余字段，避免跨模块查询）
+-- ============================================================
+ALTER TABLE `sys_user`
+    ADD COLUMN `dept_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '部门ID（冗余字段，避免跨模块查询）' AFTER `employee_id`,
+ADD INDEX `idx_sys_user_dept_id` (`dept_id`);
+
+
+# 添加 hr_salary_template 表的 effective_date 字段，表示账套生效日期
+ALTER TABLE hr_salary_template
+    ADD COLUMN effective_date DATE DEFAULT NULL COMMENT '账套生效日期'
+        AFTER scope_value;
+
+# 添加 hr_salary_batch_adjustment 表，表示薪资批次人工调整表
+CREATE TABLE IF NOT EXISTS `hr_salary_batch_adjustment` (
+                                                            `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+                                                            `batch_id` BIGINT UNSIGNED NOT NULL COMMENT '薪资批次ID',
+                                                            `employee_id` BIGINT UNSIGNED NOT NULL COMMENT '员工ID',
+                                                            `item_code` VARCHAR(64) NOT NULL COMMENT '薪资项目编码',
+                                                            `adjust_amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00 COMMENT '调整金额，正数增加、负数减少',
+                                                            `reason` VARCHAR(500) NOT NULL COMMENT '人工调整原因',
+                                                            `create_by` BIGINT UNSIGNED DEFAULT NULL COMMENT '创建人',
+                                                            `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                                                            `update_by` BIGINT UNSIGNED DEFAULT NULL COMMENT '更新人',
+                                                            `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+                                                            `is_deleted` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+                                                            `version` INT NOT NULL DEFAULT 0 COMMENT '版本号',
+                                                            PRIMARY KEY (`id`),
+                                                            KEY `idx_salary_adjust_batch_employee` (`batch_id`, `employee_id`),
+                                                            KEY `idx_salary_adjust_batch_item` (`batch_id`, `employee_id`, `item_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='薪资批次人工调整表';
+
+
+# 添加 hr_salary_payslip_view_record 表，表示工资条查看记录表
+CREATE TABLE IF NOT EXISTS `hr_salary_payslip_view_record` (
+                                                               `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+                                                               `payslip_item_id` BIGINT UNSIGNED NOT NULL COMMENT '工资条明细ID，对应hr_salary_batch_item.id',
+                                                               `batch_id` BIGINT UNSIGNED NOT NULL COMMENT '薪资批次ID',
+                                                               `employee_id` BIGINT UNSIGNED NOT NULL COMMENT '员工ID',
+                                                               `salary_month` CHAR(7) NOT NULL COMMENT '薪资月份 yyyy-MM',
+                                                               `first_view_time` DATETIME NOT NULL COMMENT '首次查看时间',
+                                                               `last_view_time` DATETIME NOT NULL COMMENT '最近查看时间',
+                                                               `view_count` INT NOT NULL DEFAULT 1 COMMENT '查看次数',
+                                                               `create_by` BIGINT UNSIGNED DEFAULT NULL COMMENT '创建人',
+                                                               `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+                                                               `update_by` BIGINT UNSIGNED DEFAULT NULL COMMENT '更新人',
+                                                               `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+                                                               `is_deleted` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+                                                               `version` INT NOT NULL DEFAULT 0 COMMENT '版本号',
+                                                               `remark` VARCHAR(255) DEFAULT NULL COMMENT '备注',
+                                                               PRIMARY KEY (`id`),
+                                                               UNIQUE KEY `uk_salary_payslip_view_item` (`payslip_item_id`),
+                                                               KEY `idx_salary_payslip_view_employee_month` (`employee_id`, `salary_month`),
+                                                               KEY `idx_salary_payslip_view_batch` (`batch_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='工资条查看记录表';
+

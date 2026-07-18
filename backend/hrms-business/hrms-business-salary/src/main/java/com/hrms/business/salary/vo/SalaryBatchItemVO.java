@@ -26,6 +26,8 @@ public class SalaryBatchItemVO {
 
     private String employeeName;
 
+    private String deptName;
+
     private BigDecimal baseSalary;
 
     private BigDecimal allowance;

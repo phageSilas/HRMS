@@ -1,35 +1,54 @@
 package com.hrms.business.mycenter.service.impl;
 
+import com.hrms.business.approval.dto.PendingTaskQuery;
+import com.hrms.business.approval.service.ApprovalTaskService;
+import com.hrms.business.mycenter.dto.ProfileUpdateRequest;
+import com.hrms.business.mycenter.dto.ProfileVO;
 import com.hrms.business.mycenter.service.MyCenterService;
+import com.hrms.business.mycenter.service.ProfileService;
+import com.hrms.common.web.PageResult;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 /**
  * 个人中心服务实现
+ * <p>
+ * 聚合个人档案、审批模块的数据，提供个人中心首页一站式数据。
+ * </p>
  */
+@Slf4j
 @Service
+@RequiredArgsConstructor
 public class MyCenterServiceImpl implements MyCenterService {
 
+    private final ProfileService profileService;
+    private final ApprovalTaskService approvalTaskService;
+
     @Override
-    public Object getProfile(Long userId) {
-        // TODO: 实现获取个人信息逻辑
-        return null;
+    public ProfileVO getProfile(Long userId) {
+        return profileService.getProfile(userId);
     }
 
     @Override
-    public void updateProfile(Long userId, Object profile) {
-        // TODO: 实现更新个人信息逻辑
+    public void updateProfile(Long userId, ProfileUpdateRequest profile) {
+        profileService.updateProfile(userId, profile);
     }
 
     @Override
-    public Object getMyApplications(Long userId) {
-        // TODO: 实现获取我的申请列表逻辑
-        return null;
+    public PageResult<?> getMyApplications(Long userId) {
+        PendingTaskQuery query = new PendingTaskQuery();
+        query.setPageNum(1);
+        query.setPageSize(10);
+        return approvalTaskService.findMyApplications(userId, query);
     }
 
     @Override
-    public Object getMyApprovals(Long userId) {
-        // TODO: 实现获取我的审批列表逻辑
-        return null;
+    public PageResult<?> getMyApprovals(Long userId) {
+        PendingTaskQuery query = new PendingTaskQuery();
+        query.setPageNum(1);
+        query.setPageSize(10);
+        return approvalTaskService.findPendingTasks(userId, query);
     }
 
 }

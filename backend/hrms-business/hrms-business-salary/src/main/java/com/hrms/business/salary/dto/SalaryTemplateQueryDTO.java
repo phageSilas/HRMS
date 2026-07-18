@@ -18,6 +18,8 @@ public class SalaryTemplateQueryDTO {
 
     private String templateName;
 
+    private String scope;
+
     private Integer status;
 
     @Min(1)

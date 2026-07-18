@@ -70,9 +70,10 @@ public class MenuController {
      * 查询所有菜单
      */
     @GetMapping
-    @Operation(summary = "查询菜单列表", description = "查询所有菜单列表")
-    public Result<List<MenuEntity>> list() {
-        List<MenuEntity> menus = menuService.list();
+    @Operation(summary = "查询菜单列表", description = "查询所有菜单列表，支持按菜单名称搜索")
+    public Result<List<MenuEntity>> list(@RequestParam(required = false) String keyword,
+                                         @RequestParam(required = false) Integer status) {
+        List<MenuEntity> menus = menuService.list(keyword, status);
         return Result.success(menus);
     }
 

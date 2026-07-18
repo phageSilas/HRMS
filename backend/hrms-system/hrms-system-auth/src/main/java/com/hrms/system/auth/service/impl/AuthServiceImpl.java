@@ -60,12 +60,6 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public LoginVO login(String username, String password) {
-        // 生成密码哈希（调试用）
-        String encoded = passwordEncoder.encode("123456");
-        System.out.println("============================================");
-        System.out.println("BCrypt hash for '123456':" + encoded);
-        System.out.println("============================================");
-
         // 1. 检查账号是否被锁定
         checkAccountLocked(username);
 
@@ -81,9 +75,8 @@ public class AuthServiceImpl implements AuthService {
             throw new GlobalException(ErrorCode.NOT_FOUND, "用户不存在");
         }
 
-        // 3. 校验密码（开发环境：跳过密码验证）
-         //TODO: 生产环境恢复密码验证
-         if (!passwordEncoder.matches(password, user.getPassword())) {
+        // 3. 校验密码（BCrypt Cost=10）
+        if (!passwordEncoder.matches(password, user.getPassword())) {
              recordLoginFailed(username);
              // 记录登录失败日志
              recordLoginLog(user.getId(), username, 0, "密码错误");
@@ -104,7 +97,7 @@ public class AuthServiceImpl implements AuthService {
         String token = jwtUtils.generateToken(
             user.getId(),
             user.getUsername(),
-            user.getId(), // TODO: 使用实际部门ID
+            user.getDeptId(), // 使用用户表冗余的 deptId
             roleIds
         );
 

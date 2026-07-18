@@ -4,120 +4,291 @@
  */
 
 import request from '@/utils/request';
-import type { Result, PageResult, PageQuery } from '@/types/api';
 
-// ============ 类型定义 ============
+// ============ 薪资账套类型 ============
 
-export interface SalaryAccount {
-  id: number;
-  name: string;
-  description: string;
-  baseSalary: number;
-  probationSalaryRatio: number;
-  status: number;
+export interface SalaryTemplateItem {
+  id?: number;
+  itemCode: string;
+  itemName: string;
+  category: string;
+  calcRule?: string;
+  defaultValue?: number | string;
+  sortNo?: number;
 }
 
-export interface SalaryItem {
+export interface SalaryTemplate {
   id: number;
-  accountId: number;
-  name: string;
-  type: number;  // 1-应发 2-应扣
-  formula: string;
-  sort: number;
+  templateName: string;
+  templateCode?: string;
+  scopeType?: string;
+  scopeValue?: string;
+  scopeName?: string;
+  effectiveDate?: string;
+  status?: number;
+  itemCount?: number;
+  remark?: string;
+  createTime?: string;
+  items: SalaryTemplateItem[];
 }
+
+export interface SalaryTemplateQuery {
+  templateName?: string;
+  scope?: string;
+  status?: number;
+  pageNum?: number;
+  pageSize?: number;
+}
+
+export interface SalaryTemplateCreateOrUpdateRequest {
+  templateName: string;
+  templateCode?: string;
+  scopeType?: string;
+  scopeValue?: string;
+  effectiveDate?: string;
+  status?: number;
+  remark?: string;
+  items?: SalaryTemplateItem[];
+}
+
+// ============ 薪资核算类型 ============
 
 export interface SalaryBatch {
   id: number;
-  yearMonth: string;
-  status: number;
-  totalCount: number;
-  totalAmount: number;
-  createTime: string;
+  batchNo?: string;
+  salaryMonth: string;
+  scopeType?: string;
+  scopeValue?: string;
+  batchStatus: string;
+  approvalInstanceId?: number | null;
+  totalCount?: number;
+  totalGrossSalary?: number | string;
+  totalNetSalary?: number | string;
+  yellowWarningCount?: number;
+  redWarningCount?: number;
+  blockCount?: number;
 }
 
-export interface SalaryDetail {
+export interface SalaryBatchItem {
   id: number;
+  batchId: number;
   employeeId: number;
-  employeeName: string;
-  departmentName: string;
-  yearMonth: string;
-  baseSalary: number;
-  bonus: number;
-  deduction: number;
-  actualSalary: number;
-  status: number;
+  employeeNo?: string;
+  employeeName?: string;
+  deptName?: string;
+  baseSalary?: number | string;
+  allowance?: number | string;
+  performanceBonus?: number | string;
+  overtimePay?: number | string;
+  lateDeduction?: number | string;
+  leaveDeduction?: number | string;
+  socialInsurance?: number | string;
+  housingFund?: number | string;
+  incomeTax?: number | string;
+  grossSalary?: number | string;
+  deductionTotal?: number | string;
+  netSalary?: number | string;
+  warningLevel?: string;
+  warningReason?: string;
 }
 
-export interface Payslip {
-  employeeId: number;
-  employeeName: string;
-  yearMonth: string;
-  items: {
-    name: string;
-    type: number;
-    amount: number;
-  }[];
-  totalIncome: number;
-  totalDeduction: number;
-  actualSalary: number;
+export interface SalaryBatchPreview {
+  batch: SalaryBatch;
+  items: SalaryBatchItem[];
 }
 
-export interface SalaryAccountQuery extends PageQuery {
+export interface SalaryBatchCreateRequest {
+  salaryMonth?: string;
+  month?: string;
+  scopeType?: string;
+  scopeValue?: string;
+  employeeIds?: number[];
+  templateIds?: number[];
+}
+
+export interface SalaryBatchTrendItem {
+  month: string;
+  grossSalary?: number | string;
+  netSalary?: number | string;
+  employeeCount?: number;
+}
+
+export interface SalaryBatchTrendQuery {
+  anchorMonth: string;
+  months?: number;
+  scopeType?: string;
+  scopeValue?: string;
+}
+
+export interface SalaryBatchCurrentQuery {
+  salaryMonth: string;
+  scopeType?: string;
+  scopeValue?: string;
+}
+
+export interface SalaryBatchAdjustmentItem {
+  itemCode: string;
+  adjustAmount: number | string;
+  reason: string;
+}
+
+export interface SalaryBatchAdjustmentRequest {
+  employeeId: number;
+  adjustments: SalaryBatchAdjustmentItem[];
+}
+
+// ============ 工资条类型 ============
+
+export interface SalaryPayslipVerifyResult {
+  success?: boolean;
+  token?: string;
+  expireTime?: string;
+}
+
+export interface SalaryManagePayslipQuery {
   keyword?: string;
-  status?: number;
+  month?: string;
+  deptId?: number;
+  viewStatus?: 'VIEWED' | 'UNVIEWED' | 'UNPUBLISHED';
+  pageNum?: number;
+  pageSize?: number;
 }
 
-// ============ 薪资账套接口 ============
-
-/**
- * 获取薪资账套列表
- */
-export async function getSalaryAccountList(params: SalaryAccountQuery) {
-  return request.get<Result<PageResult<SalaryAccount>>>('/salary-accounts', { params });
+export interface SalaryManagePayslip {
+  id: number;
+  batchId: number;
+  employeeId: number;
+  employeeName?: string;
+  employeeNo?: string;
+  deptId?: number;
+  deptName?: string;
+  salaryMonth?: string;
+  grossSalary?: number | string;
+  deductionTotal?: number | string;
+  netSalary?: number | string;
+  batchStatus?: string;
+  publishStatus?: string;
+  viewStatus?: 'VIEWED' | 'UNVIEWED' | 'UNPUBLISHED' | string;
+  verified?: boolean;
 }
 
-/**
- * 获取薪资账套详情
- */
-export async function getSalaryAccountDetail(id: number) {
-  return request.get<Result<SalaryAccount>>(`/salary-accounts/${id}`);
+export interface SalaryManagePayslipVerifyRequest {
+  password: string;
 }
 
-/**
- * 获取员工薪资档案（跨模块接口）
- */
+export interface SalaryPayslipListItem {
+  id: number;
+  salaryMonth: string;
+  grossSalary?: number | string;
+  deductionTotal?: number | string;
+  netSalary?: number | string;
+  batchStatus?: string;
+  verified?: boolean;
+}
+
+export interface SalaryPayslipDetail extends SalaryBatchItem {
+  salaryMonth?: string;
+  batchNo?: string;
+}
+
+// ============ 账套接口 ============
+
+export async function getSalaryTemplateList(params: SalaryTemplateQuery) {
+  return request.get<{
+    records: SalaryTemplate[];
+    total: number;
+    pageNum: number;
+    pageSize: number;
+  }>('/api/v1/salary/templates', { params });
+}
+
+export async function createSalaryTemplate(data: SalaryTemplateCreateOrUpdateRequest) {
+  return request.post<SalaryTemplate>('/api/v1/salary/templates', data);
+}
+
+export async function updateSalaryTemplate(
+  id: number,
+  data: SalaryTemplateCreateOrUpdateRequest,
+) {
+  return request.put<SalaryTemplate>(`/api/v1/salary/templates/${id}`, data);
+}
+
 export async function getEmployeeSalaryAccount(employeeId: number) {
-  return request.get<Result<{ employeeId: number; salaryAccountId: number; salaryAccountName: string; baseSalary: number; probationSalaryRatio: number }>>(`/salary/account/${employeeId}`);
+  return request.get<{
+    employeeId: number;
+    salaryAccountId: number;
+    salaryAccountName: string;
+    baseSalary: number;
+    probationSalaryRatio: number;
+  }>(`/api/v1/salary/employees/${employeeId}/profile`);
 }
 
 // ============ 薪资核算接口 ============
 
-/**
- * 获取薪资批次列表
- */
-export async function getSalaryBatchList(params: PageQuery & { yearMonth?: string }) {
-  return request.get<Result<PageResult<SalaryBatch>>>('/salary/batches', { params });
+export async function createSalaryBatch(data: SalaryBatchCreateRequest) {
+  return request.post<SalaryBatch>('/api/v1/salary/batches', data);
 }
 
-/**
- * 发起薪资核算
- */
-export async function calculateSalary(data: { yearMonth: string; departmentIds?: number[] }) {
-  return request.post<Result<SalaryBatch>>('/salary/calculate', data);
+export async function getCurrentSalaryBatch(params: SalaryBatchCurrentQuery) {
+  return request.get<SalaryBatch | null>('/api/v1/salary/batches/current', { params });
 }
 
-// ============ 工资条接口 ============
-
-/**
- * 获取工资条列表
- */
-export async function getPayslipList(params: PageQuery & { yearMonth?: string }) {
-  return request.get<Result<PageResult<SalaryDetail>>>('/salary/payslips', { params });
+export async function getSalaryBatchTrend(params: SalaryBatchTrendQuery) {
+  return request.get<SalaryBatchTrendItem[]>('/api/v1/salary/batches/trend', { params });
 }
 
-/**
- * 获取工资条详情
- */
-export async function getPayslipDetail(employeeId: number, yearMonth: string) {
-  return request.get<Result<Payslip>>(`/salary/payslips/${employeeId}/${yearMonth}`);
+export async function calculateSalaryBatch(batchId: number) {
+  return request.post<SalaryBatch>(`/api/v1/salary/batches/${batchId}/calculate`);
+}
+
+export async function previewSalaryBatch(batchId: number) {
+  return request.get<SalaryBatchPreview>(`/api/v1/salary/batches/${batchId}/preview`);
+}
+
+export async function saveSalaryBatchAdjustments(
+  batchId: number,
+  data: SalaryBatchAdjustmentRequest,
+) {
+  return request.post<SalaryBatchItem>(`/api/v1/salary/batches/${batchId}/adjustments`, data);
+}
+
+export async function recalculateSalaryBatch(batchId: number) {
+  return request.post<SalaryBatch>(`/api/v1/salary/batches/${batchId}/recalculate`);
+}
+
+export async function submitSalaryBatch(batchId: number) {
+  return request.post<SalaryBatch>(`/api/v1/salary/batches/${batchId}/submit`);
+}
+
+// ============ 员工端工资条接口 ============
+
+export async function getPayslipList(params: { month?: string }) {
+  return request.get<SalaryPayslipListItem[]>('/api/v1/salary/payslips', { params });
+}
+
+export async function verifyPayslip(data: { month: string; password: string }) {
+  return request.post<SalaryPayslipVerifyResult>('/api/v1/salary/payslip/verify', data);
+}
+
+export async function getPayslipDetail(id: number) {
+  return request.get<SalaryPayslipDetail>(`/api/v1/salary/payslip/${id}`);
+}
+
+// ============ 管理端工资条接口 ============
+
+export async function verifyManagePayslip(data: SalaryManagePayslipVerifyRequest) {
+  return request.post<SalaryPayslipVerifyResult>('/api/v1/salary/manage/payslip/verify', data);
+}
+
+export async function getManagePayslipList(params: SalaryManagePayslipQuery) {
+  return request.get<{
+    records: SalaryManagePayslip[];
+    total: number;
+    pageNum: number;
+    pageSize: number;
+  }>('/api/v1/salary/manage/payslips', { params });
+}
+
+export async function getManagePayslipDetail(id: number) {
+  return request.get<SalaryPayslipDetail>(`/api/v1/salary/manage/payslip/${id}`);
 }

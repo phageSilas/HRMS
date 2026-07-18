@@ -43,9 +43,11 @@ public interface MenuService {
     /**
      * 查询所有菜单
      *
+     * @param keyword 菜单名称关键字（可选）
+     * @param status  状态（可选）
      * @return 菜单列表
      */
-    List<MenuEntity> list();
+    List<MenuEntity> list(String keyword, Integer status);
 
     /**
      * 分页查询菜单

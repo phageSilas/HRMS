@@ -1,14 +1,22 @@
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+import axios, {
+  AxiosInstance,
+  AxiosRequestConfig,
+  AxiosResponse,
+} from 'axios';
 import { message } from 'antd';
 
 /**
  * HRMS 请求工具封装
  * 基于 axios 封装，统一处理 Token 注入、响应拦截、错误处理
+ *
+ * 重要：响应拦截器已自动解包后端 Result<T> 格式，
+ * 成功时直接返回 data 字段（T），失败时抛出异常。
+ * 因此 service 中的泛型参数应为实际数据类型，无需再包裹 Result<>。
  */
 
 // 创建 axios 实例
 // 走 Umi 代理（开发环境 proxy 配置见 .umirc.ts），不设 baseURL 直连后端
-const request: AxiosInstance = axios.create({
+const instance: AxiosInstance = axios.create({
   baseURL: process.env.API_BASE_URL || '',
   timeout: 10000,
   headers: {
@@ -17,7 +25,7 @@ const request: AxiosInstance = axios.create({
 });
 
 // 请求拦截器：注入 Token
-request.interceptors.request.use(
+instance.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
     if (token) {
@@ -27,11 +35,11 @@ request.interceptors.request.use(
   },
   (error) => {
     return Promise.reject(error);
-  }
+  },
 );
 
 // 响应拦截器：处理 Result<T> 格式
-request.interceptors.response.use(
+instance.interceptors.response.use(
   (response: AxiosResponse) => {
     const { code, message: msg, data } = response.data;
 
@@ -42,8 +50,25 @@ request.interceptors.response.use(
 
     // 认证失败：40100-40199
     if (code >= 40100 && code <= 40199) {
-      // 不清除 token 也不硬跳转：让业务组件自行处理未登录状态
-      // 防止后端未就绪时与 getInitialState 形成死循环
+      // 账号锁定/禁用等不跳转，只提示
+      if (code === 40110 || code === 40111 || code === 40112) {
+        message.error(msg || '账号状态异常，请联系管理员');
+        return Promise.reject(new Error(msg || '账号状态异常'));
+      }
+      // Token 过期/无效/未登录 → 跳转登录页
+      localStorage.removeItem('token');
+      localStorage.removeItem('userInfo');
+      // 防止重复跳转：5 秒内只跳一次
+      const lastRedirect = sessionStorage.getItem('redirectToLogin');
+      const now = Date.now();
+      if (lastRedirect && now - Number(lastRedirect) < 5000) {
+        return Promise.reject(new Error(msg || '认证失败'));
+      }
+      sessionStorage.setItem('redirectToLogin', String(now));
+      message.error(msg || '登录已过期，请重新登录');
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
       return Promise.reject(new Error(msg || '认证失败，请重新登录'));
     }
 
@@ -70,21 +95,38 @@ request.interceptors.response.use(
     return Promise.reject(new Error(msg || '请求失败'));
   },
   (error) => {
-    // 网络错误或超时
+    // 网络错误或超时：保留原始 AxiosError 的 code，让上层能判断网络状态
     if (error.code === 'ECONNABORTED') {
       message.error('请求超时，请稍后重试');
-      return Promise.reject(new Error('请求超时，请稍后重试'));
+      return Promise.reject(error);
     }
     if (!window.navigator.onLine) {
       message.error('网络断开，请检查网络连接');
-      return Promise.reject(new Error('网络断开，请检查网络连接'));
+      return Promise.reject(error);
     }
     // HTTP 状态码错误
     if (error.response) {
       const status = error.response.status;
       if (status === 401) {
-        // 不清除 token 不跳转：开发环境下后端可能未就绪或token不匹配
-        // 登录页面的鉴权状态由 getInitialState 管理
+        // 检查业务错误码，账号锁定类不跳转
+        const bizCode = error.response.data?.code;
+        if (bizCode === 40110 || bizCode === 40111 || bizCode === 40112) {
+          message.error(error.response.data?.message || '账号状态异常，请联系管理员');
+          return Promise.reject(new Error('账号状态异常'));
+        }
+        localStorage.removeItem('token');
+        localStorage.removeItem('userInfo');
+        // 防止重复跳转：5 秒内只跳一次
+        const lastRedirect = sessionStorage.getItem('redirectToLogin');
+        const now = Date.now();
+        if (lastRedirect && now - Number(lastRedirect) < 5000) {
+          return Promise.reject(new Error('认证失败'));
+        }
+        sessionStorage.setItem('redirectToLogin', String(now));
+        message.error('登录已过期，请重新登录');
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
         return Promise.reject(new Error('登录已过期，请重新登录'));
       }
       if (status === 403) {
@@ -100,9 +142,39 @@ request.interceptors.response.use(
         return Promise.reject(new Error('服务器繁忙，请稍后重试'));
       }
     }
+    // 其他网络错误（连接失败等），保留原始错误
     message.error('网络错误，请稍后重试');
-    return Promise.reject(new Error('网络错误，请稍后重试'));
-  }
+    return Promise.reject(error);
+  },
 );
+
+/**
+ * 类型安全的请求方法包装
+ * 响应拦截器已解包 Result<T> -> T，此处泛型 T 即为业务数据类型
+ */
+const request = {
+  get: <T = any>(url: string, config?: AxiosRequestConfig): Promise<T> =>
+    instance.get(url, config) as unknown as Promise<T>,
+
+  post: <T = any>(
+    url: string,
+    data?: any,
+    config?: AxiosRequestConfig,
+  ): Promise<T> =>
+    instance.post(url, data, config) as unknown as Promise<T>,
+
+  put: <T = any>(
+    url: string,
+    data?: any,
+    config?: AxiosRequestConfig,
+  ): Promise<T> =>
+    instance.put(url, data, config) as unknown as Promise<T>,
+
+  delete: <T = any>(
+    url: string,
+    config?: AxiosRequestConfig,
+  ): Promise<T> =>
+    instance.delete(url, config) as unknown as Promise<T>,
+};
 
 export default request;

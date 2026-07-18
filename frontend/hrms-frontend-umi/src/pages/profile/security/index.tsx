@@ -9,7 +9,6 @@ import {
   SafetyCertificateOutlined,
 } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
-import { useRequest } from '@umijs/max';
 import {
   Button,
   Card,
@@ -24,9 +23,9 @@ import {
   Typography,
   Spin,
 } from 'antd';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { changePassword, bindPhone, getLoginLogs, unbindPhone } from '@/services/profile';
-import type { PasswordChangeRequest, PhoneBindRequest } from '@/services/profile';
+import type { LoginLogVO, PasswordChangeRequest, PhoneBindRequest } from '@/services/profile';
 
 const { Text, Title } = Typography;
 
@@ -52,9 +51,42 @@ const ProfileSecurityPage: React.FC = () => {
   const [passwordForm] = Form.useForm();
   const [phoneForm] = Form.useForm();
 
-  // 登录日志
-  const { data: logData, loading: logLoading } = useRequest(getLoginLogs);
-  const loginLogs = logData || [];
+  // 登录日志（使用 useState + useEffect + 直接调 API，隔离 useRequest 问题）
+  const [loginLogs, setLoginLogs] = useState<LoginLogVO[]>([]);
+  const [logLoading, setLogLoading] = useState(true);
+  const [logError, setLogError] = useState<string | null>(null);
+
+  const fetchLoginLogs = async () => {
+    console.log('[DEBUG] fetchLoginLogs 被调用');
+    setLogLoading(true);
+    setLogError(null);
+    try {
+      const result = await getLoginLogs();
+      console.log('[DEBUG] API 返回结果:', result);
+      console.log('[DEBUG] 数据类型:', typeof result, '，是否数组:', Array.isArray(result), '，长度:', (result as any)?.length);
+      if (Array.isArray(result)) {
+        console.log('[DEBUG] 第一条数据:', result[0]);
+        setLoginLogs(result as LoginLogVO[]);
+      } else {
+        console.warn('[DEBUG] 返回数据不是数组:', result);
+        setLoginLogs([]);
+      }
+    } catch (err: any) {
+      console.error('[DEBUG] 请求失败:', err);
+      console.error('[DEBUG] 错误消息:', err?.message);
+      console.error('[DEBUG] 错误堆栈:', err?.stack);
+      setLogError(err?.message || '请求失败');
+      setLoginLogs([]);
+    } finally {
+      setLogLoading(false);
+      console.log('[DEBUG] fetchLoginLogs 完成，loginLogs 状态:', loginLogs.length, '条');
+    }
+  };
+
+  useEffect(() => {
+    console.log('[DEBUG] useEffect 触发，开始 fetchLoginLogs');
+    fetchLoginLogs();
+  }, []);
 
   // ============ 修改密码 ============
 
@@ -123,8 +155,37 @@ const ProfileSecurityPage: React.FC = () => {
       width: 180,
       render: (t: string) => t || '-',
     },
-    { title: 'IP 地址', dataIndex: 'ipAddress', key: 'ipAddress', width: 140 },
-    { title: '设备信息', dataIndex: 'deviceInfo', key: 'deviceInfo', ellipsis: true },
+    { title: 'IP 地址', dataIndex: 'ip', key: 'ip', width: 140 },
+    {
+      title: '设备信息',
+      key: 'device',
+      width: 200,
+      render: (_: any, record: LoginLogVO) => {
+        const parts: string[] = [];
+        if (record.browser) parts.push(record.browser);
+        if (record.os) parts.push(record.os);
+        return parts.length > 0 ? parts.join(' / ') : '-';
+      },
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      width: 80,
+      render: (s: number) =>
+        s === 1 ? (
+          <Tag color="success">成功</Tag>
+        ) : (
+          <Tag color="error">失败</Tag>
+        ),
+    },
+    {
+      title: '错误信息',
+      dataIndex: 'errorMsg',
+      key: 'errorMsg',
+      ellipsis: true,
+      render: (t: string) => t || '-',
+    },
   ];
 
   // ============ 渲染 ============
@@ -165,14 +226,19 @@ const ProfileSecurityPage: React.FC = () => {
       </Card>
 
       {/* 登录日志 */}
-      <Card bordered={false} title="登录日志">
+      <Card bordered={false} title={`登录日志${loginLogs.length > 0 ? `（${loginLogs.length}条）` : ''}`}>
+        {logError && (
+          <div style={{ color: '#ff4d4f', marginBottom: 12, padding: 8, background: '#fff2f0', borderRadius: 4 }}>
+            请求出错：{logError}
+          </div>
+        )}
         {logLoading ? (
           <Spin />
         ) : (
           <Table
             dataSource={loginLogs}
             columns={logColumns}
-            rowKey="loginTime"
+            rowKey={(_, index) => index}
             pagination={{ pageSize: 10, showTotal: (t) => `共 ${t} 条` }}
             locale={{ emptyText: '暂无登录日志' }}
           />

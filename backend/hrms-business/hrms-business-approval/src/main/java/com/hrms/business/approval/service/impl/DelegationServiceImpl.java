@@ -9,6 +9,8 @@ import com.hrms.business.approval.mapper.ApprovalDelegationMapper;
 import com.hrms.business.approval.service.DelegationService;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
+import com.hrms.system.auth.entity.UserEntity;
+import com.hrms.system.auth.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -30,6 +32,7 @@ public class DelegationServiceImpl implements DelegationService {
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final ApprovalDelegationMapper delegationMapper;
+    private final UserMapper userMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -61,9 +64,9 @@ public class DelegationServiceImpl implements DelegationService {
         // 创建委托
         ApprovalDelegationEntity entity = new ApprovalDelegationEntity();
         entity.setDelegatorId(userId);
-        entity.setDelegatorName(String.valueOf(userId)); // TODO: 对接用户模块后替换为真实姓名
+        entity.setDelegatorName(getUserName(userId));
         entity.setDelegateToId(request.getDelegateeId());
-        entity.setDelegateToName(String.valueOf(request.getDelegateeId())); // TODO: 对接用户模块
+        entity.setDelegateToName(getUserName(request.getDelegateeId()));
         entity.setStartDate(startDate);
         entity.setEndDate(endDate);
         entity.setReason(request.getReason());
@@ -122,6 +125,15 @@ public class DelegationServiceImpl implements DelegationService {
     }
 
     // ========== 内部方法 ==========
+
+    /**
+     * 根据用户ID查询真实姓名
+     */
+    private String getUserName(Long userId) {
+        if (userId == null) return "";
+        UserEntity user = userMapper.selectById(userId);
+        return user != null ? user.getRealName() : String.valueOf(userId);
+    }
 
     private DelegationVO toVO(ApprovalDelegationEntity entity, LocalDateTime now) {
         DelegationVO vo = new DelegationVO();

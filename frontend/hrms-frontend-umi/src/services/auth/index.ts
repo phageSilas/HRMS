@@ -12,7 +12,6 @@ import request from '@/utils/request';
 export interface LoginRequest {
   username: string;
   password: string;
-  role?: string; // 开发阶段选择的角色
 }
 
 export interface LoginResult {
@@ -44,10 +43,9 @@ const ROLE_NAME_MAP = ROLE_LIST.reduce<Record<string, string>>((map, role) => {
 }, {});
 
 /**
- * 构建开发阶段本地登录用户
+ * 构建开发阶段本地登录用户（仅在网络不可达时降级使用）
  */
 function buildLocalUser(data: LoginRequest): CurrentUser {
-  const roleCode = data.role || RoleCode.ADMIN;
   return {
     userId: 1,
     username: data.username,
@@ -55,9 +53,9 @@ function buildLocalUser(data: LoginRequest): CurrentUser {
     realName: data.username === 'admin' ? '系统管理员' : data.username,
     deptId: 1,
     deptName: '人力资源部',
-    roleCode,
-    roleName: ROLE_NAME_MAP[roleCode] || '系统管理员',
-    permissions: ROLE_PERMISSIONS[roleCode] || ROLE_PERMISSIONS.ADMIN,
+    roleCode: RoleCode.ADMIN,
+    roleName: ROLE_NAME_MAP[RoleCode.ADMIN] || '系统管理员',
+    permissions: ROLE_PERMISSIONS[RoleCode.ADMIN] || [],
   };
 }
 
@@ -77,7 +75,7 @@ export async function login(data: LoginRequest): Promise<LoginResult> {
     });
 
     const { token, userInfo } = loginResult;
-    const roleCode = userInfo.roles?.[0]?.roleCode || data.role || RoleCode.ADMIN;
+    const roleCode = userInfo.roles?.[0]?.roleCode || RoleCode.ADMIN;
 
     const user: CurrentUser = {
       userId: userInfo.id,
@@ -104,21 +102,28 @@ export async function login(data: LoginRequest): Promise<LoginResult> {
       roleCode: user.roleCode,
       permissions: user.permissions,
     };
-  } catch {
-    // 后端不可用时降级到本地登录（开发/演示环境）
-    const localUser = buildLocalUser(data);
-    const token = `try-frontend-token-${Date.now()}`;
-    localStorage.setItem('token', token);
-    localStorage.setItem('userInfo', JSON.stringify(localUser));
+  } catch (error: any) {
+    // 仅在网络不可达时降级到本地登录（开发/演示环境）
+    // 业务错误（密码错误、账号锁定等）由拦截器抛出 plain Error，直接向上传递
+    const networkCodes = ['ECONNREFUSED', 'ERR_NETWORK', 'ECONNABORTED', 'ERR_CONNECTION_REFUSED', 'ETIMEDOUT'];
+    if (error?.code && networkCodes.includes(error.code)) {
+      const localUser = buildLocalUser(data);
+      const token = `try-frontend-token-${Date.now()}`;
+      localStorage.setItem('token', token);
+      localStorage.setItem('userInfo', JSON.stringify(localUser));
 
-    return {
-      token,
-      userId: localUser.userId,
-      username: localUser.username,
-      nickname: localUser.nickname,
-      roleCode: localUser.roleCode,
-      permissions: localUser.permissions,
-    };
+      return {
+        token,
+        userId: localUser.userId,
+        username: localUser.username,
+        nickname: localUser.nickname,
+        roleCode: localUser.roleCode,
+        permissions: localUser.permissions,
+      };
+    }
+
+    // 业务错误：直接抛出
+    throw error;
   }
 }
 
@@ -153,6 +158,15 @@ export async function getCurrentUser(): Promise<CurrentUser> {
  * 用户登出
  */
 export async function logout(): Promise<void> {
-  localStorage.removeItem('token');
-  localStorage.removeItem('userInfo');
+  try {
+    // 调用后端登出接口，使 Token 失效（后端加入黑名单）
+    await request.post('/api/v1/auth/logout');
+  } catch (error) {
+    // 静默处理：即使后端调用失败，也要确保本地清理
+    console.warn('调用后端登出接口失败:', error);
+  } finally {
+    // 清除本地存储
+    localStorage.removeItem('token');
+    localStorage.removeItem('userInfo');
+  }
 }
