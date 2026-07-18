@@ -32,7 +32,7 @@ public class RoleController {
      * 创建角色
      */
     @PostMapping
-    @PreAuthorize("hasAuthority('system:role:create')")
+    // @PreAuthorize("hasAuthority('system:role:create')") // TODO: 暂时禁用第三级权限
     @Operation(summary = "创建角色", description = "创建新角色")
     @OperateLog(title = "角色管理", businessType = "INSERT")
     public Result<Long> create(@Valid @RequestBody RoleCreateDTO createDTO) {
@@ -44,7 +44,7 @@ public class RoleController {
      * 更新角色
      */
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('system:role:update')")
+    // @PreAuthorize("hasAuthority('system:role:update')") // TODO: 暂时禁用第三级权限
     @Operation(summary = "更新角色", description = "根据ID更新角色信息")
     @OperateLog(title = "角色管理", businessType = "UPDATE")
     public Result<Void> update(@PathVariable Long id, @Valid @RequestBody RoleUpdateDTO updateDTO) {
