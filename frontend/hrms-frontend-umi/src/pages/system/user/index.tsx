@@ -16,18 +16,14 @@ import {
 import {
   Button,
   message,
-  Popconfirm,
   Tag,
   Space,
   Form,
-  Input,
-  Select,
   Typography,
 } from 'antd';
 import {
   PlusOutlined,
   EditOutlined,
-  DeleteOutlined,
   KeyOutlined,
   EyeOutlined,
 } from '@ant-design/icons';
@@ -35,7 +31,6 @@ import {
   getUserList,
   createUser,
   updateUser,
-  deleteUser,
   resetPassword,
   getRoleList,
 } from '@/services/system';
@@ -158,7 +153,7 @@ const UserPage: React.FC = () => {
       title: '操作',
       key: 'action',
       fixed: 'right',
-      width: 220,
+      width: 200,
       search: false,
       render: (_, record) => (
         <Space size={0}>
@@ -186,17 +181,25 @@ const UserPage: React.FC = () => {
           >
             重置
           </Button>
-          <Popconfirm
-            title="确认删除"
-            description={`确定要删除用户 "${record.username}" 吗？`}
-            onConfirm={() => handleDelete(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button type="link" danger size="small" icon={<DeleteOutlined />}>
-              删除
+          {/* 启用/禁用按钮 */}
+          {record.status === 1 ? (
+            <Button
+              type="link"
+              size="small"
+              danger
+              onClick={() => handleToggleStatus(record)}
+            >
+              禁用
             </Button>
-          </Popconfirm>
+          ) : (
+            <Button
+              type="link"
+              size="small"
+              onClick={() => handleToggleStatus(record)}
+            >
+              启用
+            </Button>
+          )}
         </Space>
       ),
     },
@@ -220,14 +223,16 @@ const UserPage: React.FC = () => {
     setEditModalVisible(true);
   };
 
-  // 删除用户
-  const handleDelete = async (id: number) => {
+  // 切换用户状态（启用/禁用）
+  const handleToggleStatus = async (record: UserItem) => {
+    const newStatus = record.status === 1 ? 0 : 1;
+    const actionText = newStatus === 1 ? '启用' : '禁用';
     try {
-      await deleteUser(id);
-      message.success('删除成功');
+      await updateUser(record.id, { status: newStatus });
+      message.success(`${actionText}成功`);
       actionRef.current?.reload();
     } catch (error: any) {
-      message.error(error.message || '删除失败');
+      message.error(error.message || `${actionText}失败`);
     }
   };
 
