@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.List;
 
 /**
  * 考勤组分页响应视图。
@@ -66,6 +67,46 @@ public class AttendanceGroupPageVO {
      * 状态文案。
      */
     private String statusText;
+
+    /**
+     * 适用范围类型：DEPT/POST/EMPLOYEE。
+     */
+    private String scopeType;
+
+    /**
+     * 适用范围原始值。
+     */
+    private String scopeValue;
+
+    /**
+     * 适用范围展示名称。
+     */
+    private String scopeName;
+
+    /**
+     * 当前成员人数。
+     */
+    private Integer memberCount;
+
+    /**
+     * 部门范围 ID 列表。
+     */
+    private List<Long> deptIds;
+
+    /**
+     * 指定员工模式下的部门 ID。
+     */
+    private Long deptId;
+
+    /**
+     * 职位范围 ID。
+     */
+    private Long postId;
+
+    /**
+     * 指定员工 ID 列表。
+     */
+    private List<Long> employeeIds;
 
     /**
      * 创建时间。
