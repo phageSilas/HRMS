@@ -77,7 +77,13 @@ public class AuthServiceImpl implements AuthService {
             throw new GlobalException(ErrorCode.NOT_FOUND, "用户不存在");
         }
 
-        // 3. 校验密码（BCrypt Cost=10）
+        // 检查用户状态（1-启用，0-禁用）
+        if (user.getStatus() == 0) {
+            recordLoginLog(user.getId(), username, 0, "账号已被禁用");
+            throw new GlobalException(ErrorCode.ACCOUNT_DISABLED, "账号已被禁用，请联系管理员");
+        }
+
+        // 校验密码（BCrypt Cost=10）
         if (!passwordEncoder.matches(password, user.getPassword())) {
              recordLoginFailed(username);
              // 记录登录失败日志
