@@ -12,6 +12,7 @@ import com.hrms.business.approval.dto.ApprovalDetailVO;
 import com.hrms.business.approval.service.ApprovalTaskService;
 import com.hrms.business.approval.service.ApprovalEngine;
 import com.hrms.business.attendance.cache.AttendanceCacheKeys;
+import com.hrms.business.attendance.convert.AttendanceCalendarSummaryEnricher;
 import com.hrms.business.attendance.convert.AttendanceGroupConvert;
 import com.hrms.business.attendance.dto.AttendanceClockRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceCorrectionCreateRequestDTO;
@@ -1288,10 +1289,15 @@ public class AttendanceServiceImpl implements AttendanceService {
         YearMonth parsedMonth = YearMonth.parse(yearMonth);
         String cacheKey = AttendanceCacheKeys.monthCalendar(employee.getId(), parsedMonth.toString());
         String cached = stringRedisTemplate.opsForValue().get(cacheKey);
+        AttendanceGroupEntity currentGroup = resolveCurrentAttendanceGroupOrNull(employee.getId(), LocalDate.now());
         if (StrUtil.isNotBlank(cached)) {
-            return JSONUtil.toBean(cached, AttendanceCalendarVO.class);
+            return AttendanceCalendarSummaryEnricher.enrich(
+                    JSONUtil.toBean(cached, AttendanceCalendarVO.class),
+                    currentGroup
+            );
         }
         AttendanceCalendarVO calendar = buildCalendarFromDatabase(employee.getId(), parsedMonth);
+        calendar = AttendanceCalendarSummaryEnricher.enrich(calendar, currentGroup);
         stringRedisTemplate.opsForValue().set(cacheKey, JSONUtil.toJsonStr(calendar), Duration.ofHours(6));
         return calendar;
     }
@@ -2163,6 +2169,25 @@ public class AttendanceServiceImpl implements AttendanceService {
             throw new GlobalException(ATTENDANCE_GROUP_NOT_FOUND, "当前员工未配置有效考勤组");
         }
         return group;
+    }
+
+    /**
+     * 解析员工当前生效考勤组，未配置时返回空。
+     *
+     * @param employeeId  员工ID
+     * @param targetDate 目标日期
+     * @return 当前生效考勤组，为空表示未配置
+     * 本方法使用的工具类: 无
+     */
+    private AttendanceGroupEntity resolveCurrentAttendanceGroupOrNull(Long employeeId, LocalDate targetDate) {
+        try {
+            return resolveEmployeeAttendanceGroup(employeeId, targetDate);
+        } catch (GlobalException ex) {
+            if (ATTENDANCE_GROUP_NOT_FOUND.getCode() == ex.getErrorCode().getCode()) {
+                return null;
+            }
+            throw ex;
+        }
     }
 
 //    /**

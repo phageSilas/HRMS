@@ -416,6 +416,13 @@ const AttendancePunchPage: React.FC = () => {
   const latestGpsText = formatGpsText(
     resolvedTodayRecord?.clockOutGps || resolvedTodayRecord?.clockInGps,
   );
+  const currentGroupName = calendarData?.groupName || '未配置考勤组';
+  const currentWorkStartTime = formatTime(
+    calendarData?.workStartTime as BackendDateValue,
+  );
+  const currentWorkEndTime = formatTime(
+    calendarData?.workEndTime as BackendDateValue,
+  );
   const clockInDone = Boolean(resolvedTodayRecord?.clockInTime);
   const clockOutDone = Boolean(resolvedTodayRecord?.clockOutTime);
   const nextClockType: ClockPeriod = clockInDone ? 'CLOCK_OUT' : 'CLOCK_IN';
@@ -442,7 +449,7 @@ const AttendancePunchPage: React.FC = () => {
               </div>
               <div className={styles.timeText}>{now.format('HH:mm')}</div>
               <div className={styles.groupLine}>
-                所属考勤组：<span className={styles.groupName}>标准工时组</span>
+                所属考勤组：<span className={styles.groupName}>{currentGroupName}</span>
               </div>
 
               <Row gutter={[24, 24]} className={styles.shiftCards}>
@@ -545,7 +552,7 @@ const AttendancePunchPage: React.FC = () => {
               </Button>
 
               <div className={styles.ruleLine}>
-                今日上班时间：09:00 | 规定下班时间：18:00
+                今日上班时间：{currentWorkStartTime} | 规定下班时间：{currentWorkEndTime}
               </div>
 
               <div className={styles.footerStatus}>

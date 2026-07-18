@@ -134,6 +134,10 @@ export interface AttendanceCalendarDayVO {
 export interface AttendanceCalendarVO {
   employeeId?: number;
   yearMonth: string;
+  groupId?: number;
+  groupName?: string;
+  workStartTime?: string | number[];
+  workEndTime?: string | number[];
   days: AttendanceCalendarDayVO[];
 }
 

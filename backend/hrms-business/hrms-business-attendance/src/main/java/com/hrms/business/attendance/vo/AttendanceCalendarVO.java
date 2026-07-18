@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalTime;
 import java.util.List;
 
 /**
@@ -25,6 +26,26 @@ public class AttendanceCalendarVO {
      * 月份，格式 yyyy-MM。
      */
     private String yearMonth;
+
+    /**
+     * 当前生效考勤组ID。
+     */
+    private Long groupId;
+
+    /**
+     * 当前生效考勤组名称。
+     */
+    private String groupName;
+
+    /**
+     * 当前生效考勤组上班时间。
+     */
+    private LocalTime workStartTime;
+
+    /**
+     * 当前生效考勤组下班时间。
+     */
+    private LocalTime workEndTime;
 
     /**
      * 每日考勤状态。
