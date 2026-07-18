@@ -36,6 +36,20 @@ const LoginPage: React.FC = () => {
   const [form] = Form.useForm();
   const { refresh } = useModel('@@initialState');
 
+  // 记住账号的存储 key
+  const REMEMBERED_USERNAME_KEY = 'hrms_remembered_username';
+
+  // 初始化：读取已保存的账号
+  useEffect(() => {
+    const savedUsername = localStorage.getItem(REMEMBERED_USERNAME_KEY);
+    if (savedUsername) {
+      form.setFieldsValue({
+        username: savedUsername,
+        remember: true,
+      });
+    }
+  }, [form]);
+
   useEffect(() => {
     let effect: VantaEffect | null = null;
     let disposed = false;
@@ -105,6 +119,13 @@ const LoginPage: React.FC = () => {
   const handleLogin = async (values: LoginRequest & { remember?: boolean }) => {
     setLoading(true);
     try {
+      // 处理记住账号
+      if (values.remember) {
+        localStorage.setItem(REMEMBERED_USERNAME_KEY, values.username);
+      } else {
+        localStorage.removeItem(REMEMBERED_USERNAME_KEY);
+      }
+
       await login(values);
       message.success('登录成功');
       await refresh();
