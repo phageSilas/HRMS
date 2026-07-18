@@ -348,45 +348,48 @@ const PostPage: React.FC = () => {
           showQuickJumper: true,
         }}
         toolBarRender={() => [
-          // 序列筛选标签
-          <Space key="sequence-filter" style={{ marginRight: 16 }}>
-            <Button
-              type={sequenceFilter === '' ? 'primary' : 'default'}
-              onClick={() => {
-                setSequenceFilter('');
-                actionRef.current?.reload();
-              }}
-            >
-              全部
-            </Button>
-            <Button
-              type={sequenceFilter === 'M' ? 'primary' : 'default'}
-              onClick={() => {
-                setSequenceFilter('M');
-                actionRef.current?.reload();
-              }}
-            >
-              管理序列
-            </Button>
-            <Button
-              type={sequenceFilter === 'P' ? 'primary' : 'default'}
-              onClick={() => {
-                setSequenceFilter('P');
-                actionRef.current?.reload();
-              }}
-            >
-              专业序列
-            </Button>
-            <Button
-              type={sequenceFilter === 'S' ? 'primary' : 'default'}
-              onClick={() => {
-                setSequenceFilter('S');
-                actionRef.current?.reload();
-              }}
-            >
-              支持序列
-            </Button>
-          </Space>,
+          // 序列筛选标签（左侧）
+          <div key="sequence-filter" style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
+            <Space>
+              <Button
+                type={sequenceFilter === '' ? 'primary' : 'default'}
+                onClick={() => {
+                  setSequenceFilter('');
+                  actionRef.current?.reload();
+                }}
+              >
+                全部
+              </Button>
+              <Button
+                type={sequenceFilter === 'M' ? 'primary' : 'default'}
+                onClick={() => {
+                  setSequenceFilter('M');
+                  actionRef.current?.reload();
+                }}
+              >
+                管理序列
+              </Button>
+              <Button
+                type={sequenceFilter === 'P' ? 'primary' : 'default'}
+                onClick={() => {
+                  setSequenceFilter('P');
+                  actionRef.current?.reload();
+                }}
+              >
+                专业序列
+              </Button>
+              <Button
+                type={sequenceFilter === 'S' ? 'primary' : 'default'}
+                onClick={() => {
+                  setSequenceFilter('S');
+                  actionRef.current?.reload();
+                }}
+              >
+                支持序列
+              </Button>
+            </Space>
+          </div>,
+          // 新增职位按钮（右侧）
           <Button
             key="add"
             type="primary"
