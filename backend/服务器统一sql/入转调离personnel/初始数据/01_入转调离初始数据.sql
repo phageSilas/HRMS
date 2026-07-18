@@ -1,0 +1,25 @@
+-- 自动生成的初始化数据，请勿手工零散修改
+USE `hrms`;
+
+INSERT INTO `hr_entry_application` (`id`, `candidate_name`, `gender`, `phone`, `email`, `id_card_no`, `dept_id`, `post_id`, `hire_type`, `probation_month`, `probation_salary_ratio`, `expected_hire_date`, `leader_id`, `approval_instance_id`, `approval_status`, `actual_hire_date`, `employee_id`, `employee_no`, `create_by`, `create_time`, `update_by`, `update_time`, `is_deleted`, `version`) VALUES
+(31001, '候选人周星语', 2, '13731000001', 'candidate01@hrms.local', 'ENTRY-31001', 2313, 3006, 1, 3, 80.00, '2026-07-25', 22002, NULL, 0, NULL, NULL, NULL, 11001, '2026-07-14 09:00:00', 11001, '2026-07-14 09:00:00', 0, 0),
+(31002, '候选人许北辰', 1, '13731000002', 'candidate02@hrms.local', 'ENTRY-31002', 2314, 3006, 1, 3, 80.00, '2026-07-28', 22002, 931002, 1, NULL, NULL, NULL, 11001, '2026-07-15 10:00:00', 11001, '2026-07-15 10:00:00', 0, 0),
+(31003, '候选人程雨森', 1, '13731000003', 'candidate03@hrms.local', 'ENTRY-31003', 2313, 3006, 1, 3, 80.00, '2026-07-10', 22002, 931003, 5, '2026-07-12', 25001, 'TEMP25001', 11001, '2026-07-08 09:00:00', 11001, '2026-07-12 09:00:00', 0, 0),
+(31004, '候选人秦诗涵', 2, '13731000004', 'candidate04@hrms.local', 'ENTRY-31004', 2321, 3008, 1, 3, 80.00, '2026-07-30', 22005, 931004, 3, NULL, NULL, NULL, 11002, '2026-07-16 09:00:00', 11002, '2026-07-16 18:00:00', 0, 0)
+ON DUPLICATE KEY UPDATE `candidate_name` = VALUES(`candidate_name`), `approval_instance_id` = VALUES(`approval_instance_id`), `approval_status` = VALUES(`approval_status`), `actual_hire_date` = VALUES(`actual_hire_date`), `employee_id` = VALUES(`employee_id`), `employee_no` = VALUES(`employee_no`), `update_by` = VALUES(`update_by`), `update_time` = VALUES(`update_time`), `is_deleted` = VALUES(`is_deleted`);
+
+INSERT INTO `hr_regular_application` (`id`, `employee_id`, `probation_start_date`, `probation_end_date`, `evaluate_result`, `extend_month`, `salary_adjustment`, `evaluate_opinion`, `approval_instance_id`, `approval_status`, `regular_date`, `create_by`, `create_time`, `update_by`, `update_time`, `is_deleted`, `version`, `remark`) VALUES
+(32001, 25002, '2026-04-10', '2026-07-10', 1, NULL, 800.00, '转正评估良好', 932001, 2, '2026-07-11', 11001, '2026-07-09 09:00:00', 11001, '2026-07-11 18:00:00', 0, 0, '临时员工转正样例'),
+(32002, 25003, '2026-05-01', '2026-08-01', 0, 1, 0.00, '需延长试用期观察', 932002, 1, NULL, 11002, '2026-07-16 11:00:00', 11002, '2026-07-16 11:00:00', 0, 0, '临时员工转正审批中')
+ON DUPLICATE KEY UPDATE `salary_adjustment` = VALUES(`salary_adjustment`), `evaluate_opinion` = VALUES(`evaluate_opinion`), `approval_instance_id` = VALUES(`approval_instance_id`), `approval_status` = VALUES(`approval_status`), `regular_date` = VALUES(`regular_date`), `update_by` = VALUES(`update_by`), `update_time` = VALUES(`update_time`), `is_deleted` = VALUES(`is_deleted`), `remark` = VALUES(`remark`);
+
+INSERT INTO `hr_transfer_application` (`id`, `employee_id`, `from_dept_id`, `to_dept_id`, `from_post_id`, `to_post_id`, `from_job_level`, `to_job_level`, `from_leader_id`, `to_leader_id`, `salary_adjustment`, `effective_date`, `reason`, `approval_instance_id`, `approval_status`, `create_by`, `create_time`, `update_by`, `update_time`, `is_deleted`, `version`) VALUES
+(33001, 25004, 2318, 2321, 3007, 3008, 'P4', 'P4', 22004, 22005, 500.00, '2026-07-20', '跨团队支援客户成功项目', 933001, 1, 11003, '2026-07-15 14:00:00', 11003, '2026-07-15 14:00:00', 0, 0),
+(33002, 25005, 2321, 2306, 3008, 3004, 'P3', 'P5', 22005, 23001, 1500.00, '2026-07-05', '岗位轮换至财务支持', 933002, 2, 11003, '2026-07-01 10:00:00', 11003, '2026-07-05 18:00:00', 0, 0)
+ON DUPLICATE KEY UPDATE `reason` = VALUES(`reason`), `approval_instance_id` = VALUES(`approval_instance_id`), `approval_status` = VALUES(`approval_status`), `effective_date` = VALUES(`effective_date`), `update_by` = VALUES(`update_by`), `update_time` = VALUES(`update_time`), `is_deleted` = VALUES(`is_deleted`);
+
+INSERT INTO `hr_leave_application` (`id`, `employee_id`, `leave_type`, `leave_reason`, `apply_date`, `expected_last_work_date`, `last_work_date`, `handover_employee_id`, `handover_status`, `handover_note`, `approval_instance_id`, `approval_status`, `create_by`, `create_time`, `update_by`, `update_time`, `is_deleted`, `version`, `remark`) VALUES
+(34001, 25005, 1, '个人职业规划调整申请离职', '2026-07-10', '2026-07-31', NULL, 25006, 1, '已开始移交项目文档', 934001, 1, 11004, '2026-07-10 09:30:00', 11004, '2026-07-10 09:30:00', 0, 0, '离职审批中样例'),
+(34002, 25006, 3, '合同到期不续签', '2026-06-20', '2026-07-05', '2026-07-05', 23001, 2, '已完成系统权限与资料交接', 934002, 2, 11004, '2026-06-20 09:00:00', 11004, '2026-07-05 18:00:00', 0, 0, '离职已完成样例')
+ON DUPLICATE KEY UPDATE `leave_reason` = VALUES(`leave_reason`), `approval_instance_id` = VALUES(`approval_instance_id`), `approval_status` = VALUES(`approval_status`), `handover_employee_id` = VALUES(`handover_employee_id`), `handover_status` = VALUES(`handover_status`), `handover_note` = VALUES(`handover_note`), `update_by` = VALUES(`update_by`), `update_time` = VALUES(`update_time`), `is_deleted` = VALUES(`is_deleted`), `remark` = VALUES(`remark`);
+
