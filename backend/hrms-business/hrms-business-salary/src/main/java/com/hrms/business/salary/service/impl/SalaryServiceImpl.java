@@ -17,6 +17,7 @@ import com.hrms.business.salary.dto.SalaryBatchAdjustmentRequestDTO;
 import com.hrms.business.salary.dto.SalaryBatchCreateRequestDTO;
 import com.hrms.business.salary.dto.SalaryManagePayslipQueryDTO;
 import com.hrms.business.salary.dto.SalaryManagePayslipVerifyRequestDTO;
+import com.hrms.business.salary.dto.SalaryPayslipPageQueryDTO;
 import com.hrms.business.salary.dto.SalaryPayslipVerifyRequestDTO;
 import com.hrms.business.salary.dto.SalaryTemplateCreateOrUpdateRequestDTO;
 import com.hrms.business.salary.dto.SalaryTemplateItemRequestDTO;
@@ -641,6 +642,30 @@ public class SalaryServiceImpl implements SalaryService {
      * @return 验证结果
      * 本方法使用的工具类: PasswordEncoder(spring-security-crypto),StringRedisTemplate(spring-data-redis),IdUtil(hutool)
      */
+    /**
+     * 分页查询当前员工工资条列表。
+     *
+     * @param queryDTO 查询参数
+     * @return 工资条分页结果
+     * 本方法使用的工具类: Page(MyBatis-Plus),PageResult(hrms-common),StringRedisTemplate(spring-data-redis)
+     */
+    @Override
+    public PageResult<SalaryPayslipListVO> pagePayslips(SalaryPayslipPageQueryDTO queryDTO) {
+        Long employeeId = getCurrentEmployeeId();
+        int pageNum = Optional.ofNullable(queryDTO.getPageNum()).orElse(1);
+        int pageSize = Optional.ofNullable(queryDTO.getPageSize()).orElse(10);
+        Page<SalaryPayslipListVO> page = salaryBatchItemMapper.selectEmployeePayslipPage(
+                Page.of(pageNum, pageSize), employeeId, queryDTO, PAYSLIP_VISIBLE_STATUS);
+        StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+        if (redisTemplate != null) {
+            page.getRecords().forEach(record -> record.setVerified(Boolean.TRUE.equals(redisTemplate.hasKey(
+                    SalaryCacheKeys.payslipVerify(employeeId, record.getSalaryMonth())))));
+        } else {
+            page.getRecords().forEach(record -> record.setVerified(false));
+        }
+        return PageResult.of(page.getRecords(), page.getTotal(), (int) page.getCurrent(), (int) page.getSize());
+    }
+
     @Override
     public SalaryPayslipVerifyVO verifyPayslip(SalaryPayslipVerifyRequestDTO requestDTO) {
         Long userId = SecurityContextHolder.getUserId();

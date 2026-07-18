@@ -2,6 +2,7 @@ package com.hrms.business.salary.controller;
 
 import com.hrms.business.salary.dto.SalaryManagePayslipVerifyRequestDTO;
 import com.hrms.business.salary.dto.SalaryManagePayslipQueryDTO;
+import com.hrms.business.salary.dto.SalaryPayslipPageQueryDTO;
 import com.hrms.business.salary.dto.SalaryPayslipVerifyRequestDTO;
 import com.hrms.business.salary.service.SalaryService;
 import com.hrms.business.salary.vo.SalaryPayslipDetailVO;
@@ -45,6 +46,18 @@ public class SalaryPayslipController {
     @GetMapping("/payslips")
     public Result<List<SalaryPayslipListVO>> listPayslips(@RequestParam(required = false) String month) {
         return Result.success(salaryService.listPayslips(month));
+    }
+
+    /**
+     * 分页查询当前员工工资条列表。
+     *
+     * @param queryDTO 查询参数
+     * @return 工资条分页结果
+     * 本方法使用的工具类: Result(hrms-common),PageResult(hrms-common)
+     */
+    @GetMapping("/payslips/page")
+    public Result<PageResult<SalaryPayslipListVO>> pagePayslips(@Valid SalaryPayslipPageQueryDTO queryDTO) {
+        return Result.success(salaryService.pagePayslips(queryDTO));
     }
 
     /**
