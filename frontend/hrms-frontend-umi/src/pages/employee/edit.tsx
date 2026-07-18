@@ -222,7 +222,18 @@ const EmployeeEditPage: React.FC = () => {
     } catch (err: any) {
       console.error('[EmployeeEdit] 提交失败:', err);
       if (err?.errorFields) return; // 表单校验错误，antd 会自动提示
-      // 拦截器已弹出具体错误，此处不再重复提示
+      // 尝试提取后端返回的校验错误信息（HTTP 400 时 error.response.data.message）
+      const backendMsg =
+        err?.response?.data?.message || err?.data?.message || '';
+      if (backendMsg) {
+        message.error(backendMsg);
+      } else if (
+        err?.message &&
+        err.message !== '服务器繁忙，请稍后重试' &&
+        err.message !== '网络错误，请稍后重试'
+      ) {
+        // 拦截器已弹出具体错误，此处不再重复提示
+      }
     } finally {
       setSubmitting(false);
     }

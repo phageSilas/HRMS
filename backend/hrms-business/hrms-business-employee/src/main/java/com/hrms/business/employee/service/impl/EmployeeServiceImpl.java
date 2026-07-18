@@ -637,6 +637,15 @@ public class EmployeeServiceImpl implements EmployeeService {
         if (existing != null && !existing.getId().equals(excludeId)) {
             throw new GlobalException(ErrorCode.EMPLOYEE_PHONE_EXISTS);
         }
+
+        // 清理已逻辑删除的同手机号记录，防止插入时触发数据库 uk_hr_employee_phone 唯一约束
+        // MyBatis-Plus @TableLogic 过滤了 is_deleted=1 的记录，但数据库唯一约束不考虑逻辑删除状态
+        // 将已删除记录的手机号改为 "deleted_<id>_<timestamp>" 释放原手机号
+        String newPhone = "deleted_" + System.currentTimeMillis();
+        int updatedRows = employeeMapper.releasePhoneForDeleted(phone, newPhone);
+        if (updatedRows > 0) {
+            log.info("已释放逻辑删除记录的手机号 {} → {}，共 {} 条", phone, newPhone, updatedRows);
+        }
     }
 
     /**
