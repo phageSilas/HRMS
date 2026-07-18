@@ -51,4 +51,11 @@ public interface PostService {
      */
     void deletePost(Long id);
 
+    /**
+     * 统计各序列职位数量
+     *
+     * @return 各序列职位数量统计
+     */
+    java.util.Map<String, Long> countBySequence();
+
 }

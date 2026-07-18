@@ -178,4 +178,30 @@ public class PostServiceImpl implements PostService {
         };
     }
 
+    @Override
+    public java.util.Map<String, Long> countBySequence() {
+        java.util.Map<String, Long> result = new java.util.HashMap<>();
+
+        // 初始化三个序列的计数
+        result.put("M", 0L);
+        result.put("P", 0L);
+        result.put("S", 0L);
+
+        // 查询各序列职位数量（只统计启用的职位）
+        LambdaQueryWrapper<PostEntity> wrapper = Wrappers.lambdaQuery();
+        wrapper.eq(PostEntity::getStatus, 1);
+
+        List<PostEntity> posts = postMapper.selectList(wrapper);
+
+        // 统计各序列数量
+        for (PostEntity post : posts) {
+            String sequenceCode = post.getSequenceCode();
+            if (sequenceCode != null && result.containsKey(sequenceCode)) {
+                result.put(sequenceCode, result.get(sequenceCode) + 1);
+            }
+        }
+
+        return result;
+    }
+
 }
