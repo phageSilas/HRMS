@@ -163,12 +163,12 @@ const PostPage: React.FC = () => {
       search: false,
       render: (_, record) => statusTag(record.status),
     },
-    {
-      title: '排序号',
-      dataIndex: 'sortNo',
-      width: 100,
-      search: false,
-    },
+    // {
+    //   title: '排序号',
+    //   dataIndex: 'sortNo',
+    //   width: 100,
+    //   search: false,
+    // },
     // {
     //   title: '创建时间',
     //   dataIndex: 'createTime',
