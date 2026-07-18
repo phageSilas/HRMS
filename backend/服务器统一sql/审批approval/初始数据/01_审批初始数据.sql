@@ -2,7 +2,7 @@
 USE `hrms`;
 
 INSERT INTO `hr_approval_instance` (`id`, `approval_no`, `approval_type`, `biz_id`, `title`, `applicant_user_id`, `applicant_employee_id`, `current_node_name`, `approval_status`, `form_json`, `apply_time`, `finish_time`, `create_time`, `update_time`, `is_deleted`, `version`) VALUES
-(931002, 'APR-ENTRY-31002', 'ENTRY', 31002, '候选人许北辰入职申请', 11001, 21001, 'HR负责人审批', 1, '{"candidate": "许北辰", "deptId": 2314}', '2026-07-15 10:00:00', NULL, '2026-07-15 10:00:00', '2026-07-15 10:00:00', 0, 0),
+(931002, 'APR-ENTRY-31002', 'ENTRY', 31002, '候选人许北辰入职申请', 11001, 21001, 'HR审批', 1, '{"candidate": "许北辰", "deptId": 2314}', '2026-07-15 10:00:00', NULL, '2026-07-15 10:00:00', '2026-07-15 10:00:00', 0, 0),
 (931003, 'APR-ENTRY-31003', 'ENTRY', 31003, '候选人程雨森入职申请', 11001, 21001, '审批完成', 2, '{"candidate": "程雨森", "employeeId": 25001}', '2026-07-08 09:00:00', '2026-07-10 16:00:00', '2026-07-08 09:00:00', '2026-07-10 16:00:00', 0, 0),
 (931004, 'APR-ENTRY-31004', 'ENTRY', 31004, '候选人秦诗涵入职申请', 11002, 21002, '审批驳回', 3, '{"candidate": "秦诗涵", "deptId": 2321}', '2026-07-16 09:00:00', '2026-07-16 18:00:00', '2026-07-16 09:00:00', '2026-07-16 18:00:00', 0, 0),
 (932001, 'APR-REG-32001', 'REGULAR', 32001, '入职转正临时员工02转正申请', 11001, 21001, '审批完成', 2, '{"employeeId": 25002, "salaryAdjustment": 800}', '2026-07-09 09:00:00', '2026-07-11 18:00:00', '2026-07-09 09:00:00', '2026-07-11 18:00:00', 0, 0),
@@ -41,7 +41,7 @@ INSERT INTO `hr_approval_instance` (`id`, `approval_no`, `approval_type`, `biz_i
 ON DUPLICATE KEY UPDATE `approval_status` = VALUES(`approval_status`), `current_node_name` = VALUES(`current_node_name`), `form_json` = VALUES(`form_json`), `finish_time` = VALUES(`finish_time`), `update_time` = VALUES(`update_time`), `is_deleted` = VALUES(`is_deleted`);
 
 INSERT INTO `hr_approval_task` (`id`, `instance_id`, `node_code`, `node_name`, `approver_user_id`, `original_approver_id`, `delegate_flag`, `task_status`, `approve_result`, `approve_comment`, `receive_time`, `approve_time`, `deadline_time`, `sort_no`, `create_time`, `update_time`) VALUES
-(960001, 931002, 'AUTO', 'HR负责人审批', 11001, NULL, 0, 0, NULL, NULL, '2026-07-15 10:00:00', NULL, '2026-07-20 18:00:00', 1, '2026-07-15 10:00:00', '2026-07-15 10:00:00'),
+(960001, 931002, 'AUTO', 'HR审批', 11001, NULL, 0, 0, NULL, NULL, '2026-07-15 10:00:00', NULL, '2026-07-20 18:00:00', 1, '2026-07-15 10:00:00', '2026-07-15 10:00:00'),
 (960002, 931003, 'AUTO', '审批完成', 11001, NULL, 0, 1, 1, '同意录用', '2026-07-08 09:00:00', '2026-07-10 16:00:00', '2026-07-20 18:00:00', 1, '2026-07-08 09:00:00', '2026-07-10 16:00:00'),
 (960003, 931004, 'AUTO', '审批驳回', 11001, NULL, 0, 0, 2, '岗位需求暂缓', '2026-07-16 09:00:00', '2026-07-16 18:00:00', '2026-07-20 18:00:00', 1, '2026-07-16 09:00:00', '2026-07-16 18:00:00'),
 (960004, 932001, 'AUTO', '审批完成', 12001, NULL, 0, 1, 1, '转正通过', '2026-07-09 09:00:00', '2026-07-11 18:00:00', '2026-07-20 18:00:00', 1, '2026-07-09 09:00:00', '2026-07-11 18:00:00'),

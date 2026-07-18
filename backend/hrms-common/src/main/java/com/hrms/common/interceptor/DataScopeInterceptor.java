@@ -25,6 +25,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
+import java.lang.reflect.Field;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
@@ -90,11 +91,14 @@ public class DataScopeInterceptor implements InnerInterceptor {
 
         if (!originalSql.equals(newSql)) {
             log.debug("数据权限 SQL 拦截: {} -> {}", originalSql, newSql);
-            // 修改 SQL
-            BoundSql newBoundSql = new BoundSql(ms.getConfiguration(), newSql, boundSql.getParameterMappings(),
-                    boundSql.getParameterObject());
-            // 复制额外参数
-            boundSql.getAdditionalParameters().forEach(newBoundSql::setAdditionalParameter);
+            // 通过反射修改原始 BoundSql 的 SQL，使数据权限过滤条件真正生效
+            try {
+                Field sqlField = BoundSql.class.getDeclaredField("sql");
+                sqlField.setAccessible(true);
+                sqlField.set(boundSql, newSql);
+            } catch (Exception e) {
+                log.error("应用数据权限 SQL 失败", e);
+            }
         }
     }
 
@@ -132,7 +136,7 @@ public class DataScopeInterceptor implements InnerInterceptor {
     /**
      * 获取用户的数据权限范围
      * <p>
-     * 从用户角色中查询最小的 data_scope 值（权限范围最小=最严格）
+     * 从用户角色中取最大的 data_scope 值（多角色时继承最宽的权限范围）
      * </p>
      */
     private int getUserDataScope(UserContext userContext) {

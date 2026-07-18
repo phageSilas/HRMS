@@ -4723,3 +4723,21 @@ INSERT INTO `hr_attendance_overtime` (`id`, `employee_id`, `overtime_date`, `dur
 (75043, 21005, '2026-06-16 19:00:00', 3.5, '苏瑾瑜项目加班支持', 920043, 2, 11005, '2026-06-16 21:00:00', 1, '2026-06-17 09:00:00', 0, 0, '加班测试数据'),
 (75044, 22004, '2026-06-17 19:00:00', 3.5, '高承泽项目加班支持', 920044, 2, 12004, '2026-06-17 21:00:00', 1, '2026-06-18 09:00:00', 0, 0, '加班测试数据')
 ON DUPLICATE KEY UPDATE `approval_instance_id` = VALUES(`approval_instance_id`), `approval_status` = VALUES(`approval_status`), `duration` = VALUES(`duration`), `reason` = VALUES(`reason`), `update_by` = VALUES(`update_by`), `update_time` = VALUES(`update_time`), `is_deleted` = VALUES(`is_deleted`), `remark` = VALUES(`remark`);
+
+
+
+#请假类型7中字典值
+INSERT INTO sys_dict_type (dict_name, dict_type, status, remark, is_deleted)
+VALUES ('请假类型', 'hr_leave_type', 1, '考勤模块请假类型', 0);
+
+INSERT INTO sys_dict_data (dict_type, dict_label, dict_value, sort, status, remark, is_deleted)
+VALUES
+    ('hr_leave_type', '年假', 'annual', 1, 1, '法定+公司福利', 0),
+    ('hr_leave_type', '病假', 'sick', 2, 1, '因病休假', 0),
+    ('hr_leave_type', '事假', 'personal', 3, 1, '因事请假', 0),
+    ('hr_leave_type', '婚假', 'marriage', 4, 1, '结婚休假', 0),
+    ('hr_leave_type', '产假', 'maternity', 5, 1, '生育休假', 0),
+    ('hr_leave_type', '丧假', 'bereavement', 6, 1, '直系亲属丧葬', 0),
+    ('hr_leave_type', '调休', 'compensatory', 7, 1, '加班调休', 0);
+
+

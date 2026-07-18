@@ -33,4 +33,7 @@ public class UserCreateDTO {
     @Schema(description = "关联员工ID", example = "null")
     private Long employeeId;
 
+    @Schema(description = "部门ID")
+    private Long deptId;
+
 }
