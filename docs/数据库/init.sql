@@ -940,7 +940,7 @@ CREATE TABLE `sys_login_log` (
 -- 公共模块:   3张
 -- ============================================================
 
-# 新增 hr_leave_balance，属于考勤管理模块, 专门存员工每年每类假期余额。
+-- # 新增 hr_leave_balance，属于考勤管理模块, 专门存员工每年每类假期余额。
 CREATE TABLE `hr_leave_balance` (
                                     `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
                                     `employee_id` bigint NOT NULL COMMENT '员工ID',
@@ -968,7 +968,7 @@ CREATE TABLE `hr_leave_balance` (
                                     KEY `idx_expire_date` (`expire_date`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='员工假期余额表';
 
-# 新增员工-考勤组生效关系表 hr_attendance_group_member，属于考勤管理模块, 支持后续调岗、换组、历史追溯。
+-- # 新增员工-考勤组生效关系表 hr_attendance_group_member，属于考勤管理模块, 支持后续调岗、换组、历史追溯。
 CREATE TABLE `hr_attendance_group_member` (
                                               `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
                                               `group_id` bigint NOT NULL COMMENT '考勤组ID',
@@ -1029,12 +1029,12 @@ ALTER TABLE `sys_user`
 ADD INDEX `idx_sys_user_dept_id` (`dept_id`);
 
 
-# 添加 hr_salary_template 表的 effective_date 字段，表示账套生效日期
+-- # 添加 hr_salary_template 表的 effective_date 字段，表示账套生效日期
 ALTER TABLE hr_salary_template
     ADD COLUMN effective_date DATE DEFAULT NULL COMMENT '账套生效日期'
         AFTER scope_value;
 
-# 添加 hr_salary_batch_adjustment 表，表示薪资批次人工调整表
+-- # 添加 hr_salary_batch_adjustment 表，表示薪资批次人工调整表
 CREATE TABLE IF NOT EXISTS `hr_salary_batch_adjustment` (
                                                             `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
                                                             `batch_id` BIGINT UNSIGNED NOT NULL COMMENT '薪资批次ID',
@@ -1054,7 +1054,7 @@ CREATE TABLE IF NOT EXISTS `hr_salary_batch_adjustment` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='薪资批次人工调整表';
 
 
-# 添加 hr_salary_payslip_view_record 表，表示工资条查看记录表
+-- # 添加 hr_salary_payslip_view_record 表，表示工资条查看记录表
 CREATE TABLE IF NOT EXISTS `hr_salary_payslip_view_record` (
                                                                `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
                                                                `payslip_item_id` BIGINT UNSIGNED NOT NULL COMMENT '工资条明细ID，对应hr_salary_batch_item.id',

@@ -2,6 +2,8 @@
  * 用户相关类型定义
  */
 
+import type { MenuItem } from './menu';
+
 /**
  * 用户信息
  */
@@ -16,6 +18,8 @@ export interface UserInfo {
   roleCode: string;
   roleName?: string;
   permissions: string[];
+  /** 用户菜单树 */
+  menus?: MenuItem[];
 }
 
 /**
