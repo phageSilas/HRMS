@@ -183,7 +183,8 @@ public class UserServiceImpl implements UserService {
         user.setPhone(createDTO.getPhone());
         user.setEmail(createDTO.getEmail());
         user.setStatus(1); // 默认启用
-        user.setEmployeeId(null); // 系统账号不关联员工档案
+        user.setDeptId(createDTO.getDeptId()); // 同步部门ID
+        user.setEmployeeId(createDTO.getEmployeeId()); // 关联员工档案
         user.setNeedChangePassword(1); // 首次登录强制修改密码
         user.setPasswordUpdateTime(LocalDateTime.now());
 
