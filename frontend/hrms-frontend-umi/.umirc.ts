@@ -291,7 +291,7 @@ export default defineConfig({
         {
           path: '/profile/leave',
           name: '我的请假',
-          redirect: '/attendance/leave',
+          component: '@/pages/attendance/leave',
         },
         {
           path: '/profile/salary',
