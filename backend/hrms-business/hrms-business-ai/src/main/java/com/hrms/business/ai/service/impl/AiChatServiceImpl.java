@@ -63,6 +63,8 @@ public class AiChatServiceImpl implements AiChatService {
         incrementMessageCount(conversationId);
 
         final Long cId = conversationId;
+        final boolean isNewConversation = request.getConversationId() == null;
+        final String firstUserMessage = request.getContent();
 
         // ========== 3. 创建 SseEmitter（超时后自动结束） ==========
         SseEmitter emitter = new SseEmitter(aiConfig.getTimeout());
@@ -96,12 +98,38 @@ public class AiChatServiceImpl implements AiChatService {
                                 .orderByAsc(MessageEntity::getCreateTime));
 
                 // 调用百炼应用 App Completion API（应用自动处理知识库检索 + LLM 生成）
-                String fullResponse = callDashScopeApp(emitter, history, request.getContent());
+                // 如果是新会话，会自动在回复末尾添加 ---TITLE--- 标记输出标题
+                String fullResponse = callDashScopeApp(emitter, history, request.getContent(), isNewConversation);
+                log.info("[AI_RESPONSE] 完整响应长度={}, 最后200字符=[{}]",
+                        fullResponse != null ? fullResponse.length() : 0,
+                        fullResponse != null && fullResponse.length() > 200 ? fullResponse.substring(fullResponse.length() - 200) : fullResponse);
 
                 // 解析路由建议（从 AI 回复中提取）
                 List<Map<String, String>> suggestions = parseSuggestions(fullResponse);
 
-                // 发送 end 事件（含路由建议）
+                // 如果是新会话，解析 AI 生成的标题
+                String aiTitle = null;
+                if (isNewConversation) {
+                    aiTitle = parseTitle(fullResponse);
+                    log.info("[AI_TITLE] 解析标题: {}", aiTitle);
+                }
+
+                // 保存 AI 回复到数据库（会自动去除 ---TITLE--- 标记）
+                saveAiResponse(finalConversationId, fullResponse, suggestions);
+
+                // 更新会话标题
+                if (aiTitle != null && !aiTitle.isBlank()) {
+                    ConversationEntity entity = conversationMapper.selectById(finalConversationId);
+                    if (entity != null) {
+                        entity.setTitle(aiTitle);
+                        conversationMapper.updateById(entity);
+                        log.info("[AI_TITLE] 更新会话标题: {} → {}",
+                                firstUserMessage.length() > 20 ? firstUserMessage.substring(0, 20) + "..." : firstUserMessage,
+                                aiTitle);
+                    }
+                }
+
+                // 再发送 end 事件（含路由建议）
                 Map<String, Object> endPayload = new HashMap<>();
                 endPayload.put("type", "end");
                 endPayload.put("reason", "stop");
@@ -111,9 +139,6 @@ public class AiChatServiceImpl implements AiChatService {
                 String endData = objectMapper.writeValueAsString(endPayload);
                 emitter.send(SseEmitter.event().name("message").data(endData));
                 emitter.complete();
-
-                // 保存 AI 回复（含路由建议）
-                saveAiResponse(finalConversationId, fullResponse, suggestions);
 
             } catch (Exception e) {
                 log.error("AI 对话流式处理异常", e);
@@ -147,7 +172,7 @@ public class AiChatServiceImpl implements AiChatService {
      * @return 完整 AI 回答文本
      */
     private String callDashScopeApp(SseEmitter emitter, List<MessageEntity> history,
-                                     String userContent) throws IOException {
+                                     String userContent, boolean isNewConversation) throws IOException {
         String apiKey = aiConfig.getApiKey();
         String appId = aiConfig.getAppId();
 
@@ -158,7 +183,7 @@ public class AiChatServiceImpl implements AiChatService {
 
         // 未配置 AppId 时回退到基础 LLM 对话
         if (appId == null || appId.isBlank()) {
-            return callDirectLLM(emitter, history, userContent);
+            return callDirectLLM(emitter, history, userContent, isNewConversation);
         }
 
         // ===== 构建对话历史字符串 =====
@@ -169,7 +194,12 @@ public class AiChatServiceImpl implements AiChatService {
             String roleLabel = "user".equals(msg.getRole()) ? "用户" : "助手";
             promptBuilder.append(roleLabel).append("：").append(msg.getContent()).append("\n");
         }
-        promptBuilder.append("用户：").append(userContent);
+        // 新会话：在用户消息后添加标题生成指令
+        String promptContent = userContent;
+        if (isNewConversation) {
+            promptContent = userContent + "\n\n（在回答结束时，用 ---TITLE--- 标记输出一个不超过10个字的对话标题，概括用户意图。直接输出标题文字，不要引号）";
+        }
+        promptBuilder.append("用户：").append(promptContent);
 
         // ===== 构建 App API 请求体 =====
         Map<String, Object> input = new HashMap<>();
@@ -220,20 +250,36 @@ public class AiChatServiceImpl implements AiChatService {
                     if (text == null || text.isEmpty()) return;
 
                     fullContent.append(text);
+                    log.debug("[SSE_CHUNK] text=[{}]", text);
 
-                    // 已经到达 SUGGESTIONS 标记，不再推送
-                    if (markerReached[0]) return;
+                    // 已经到达标记位置，不再推送
+                    if (markerReached[0]) {
+                        log.debug("[SSE_MARKER] 已到达标记，跳过推送 text=[{}]", text);
+                        return;
+                    }
 
-                    // 检测当前完整内容中是否包含 SUGGESTIONS 标记
+                    // 检测当前完整内容中是否包含 SUGGESTIONS 或 TITLE 标记
                     String currentFull = fullContent.toString();
-                    int markerIdx = currentFull.indexOf("---SUGGESTIONS---");
-                    if (markerIdx >= 0) {
+                    String foundMarker = null;
+                    String[] markers = {"---SUGGESTIONS---", "---TITLE---", "--TITLE---"};
+                    for (String m : markers) {
+                        if (currentFull.indexOf(m) >= 0) {
+                            foundMarker = m;
+                            break;
+                        }
+                    }
+                    if (foundMarker != null) {
                         markerReached[0] = true;
+                        log.debug("[SSE_MARKER] 找到标记 [{}] 在位置 {}, fullContent=[{}]",
+                                foundMarker, currentFull.indexOf(foundMarker),
+                                currentFull.length() > 200 ? currentFull.substring(currentFull.length() - 200) : currentFull);
                         // 只推送标记前的内容
+                        int markerIdx = currentFull.indexOf(foundMarker);
                         int prevLen = fullContent.length() - text.length();
                         if (markerIdx > prevLen) {
                             String safePart = text.substring(0, markerIdx - prevLen);
                             if (!safePart.isEmpty()) {
+                                log.debug("[SSE_MARKER] 推送标记前内容 [{}]", safePart);
                                 try {
                                     emitter.send(SseEmitter.event().name("message")
                                             .data(objectMapper.writeValueAsString(
@@ -242,19 +288,30 @@ public class AiChatServiceImpl implements AiChatService {
                                     eventSource.cancel();
                                 }
                             }
+                        } else {
+                            log.debug("[SSE_MARKER] 标记在当前 chunk 之前就已存在");
                         }
                         return;
                     }
 
-                    // 检查标记被跨 chunk 分割的情况
+                    // 检查标记被跨 chunk 分割的情况：
+                    // 计算所有 mark 中与当前内容的尾部匹配的最大重叠长度，全部截掉
                     String pushText = text;
-                    int maxOverlap = Math.min("---SUGGESTIONS---".length(), currentFull.length());
-                    for (int i = 1; i <= maxOverlap; i++) {
-                        String suffix = currentFull.substring(currentFull.length() - i);
-                        if ("---SUGGESTIONS---".startsWith(suffix)) {
-                            pushText = text.substring(0, text.length() - Math.min(i, text.length()));
-                            break;
+                    int maxOverlapLen = 0;
+                    for (String m : markers) {
+                        int limit = Math.min(m.length(), currentFull.length());
+                        for (int i = 1; i <= limit; i++) {
+                            String suffix = currentFull.substring(currentFull.length() - i);
+                            if (m.startsWith(suffix)) {
+                                maxOverlapLen = Math.max(maxOverlapLen, i);
+                            }
                         }
+                    }
+                    if (maxOverlapLen > 0) {
+                        pushText = text.substring(0, Math.max(0, text.length() - maxOverlapLen));
+                        log.debug("[SSE_CROSS] 尾部与标记重叠 {} 字符, text=[{}], pushText=[{}], currentFull尾=[{}]",
+                                maxOverlapLen, text, pushText,
+                                currentFull.substring(Math.max(0, currentFull.length() - 20)));
                     }
 
                     // 转发到前端 SSE
@@ -323,16 +380,19 @@ public class AiChatServiceImpl implements AiChatService {
      * 当未配置百炼应用 appId 时使用。
      */
     private String callDirectLLM(SseEmitter emitter, List<MessageEntity> history,
-                                  String userContent) throws IOException {
+                                  String userContent, boolean isNewConversation) throws IOException {
         String apiKey = aiConfig.getApiKey();
         if (apiKey == null || apiKey.isBlank()) {
             throw new GlobalException(AiErrorCode.AI_SERVICE_ERROR);
         }
 
         // 构建消息列表
+        String sysPrompt = "你是 HRMS（人力资源管理系统）的智能助手。请用中文简洁、专业地回答用户问题。";
+        if (isNewConversation) {
+            sysPrompt += "\n\n在回答结束时，用 ---TITLE--- 标记输出一个不超过10个字的对话标题，概括用户意图。直接输出标题文字，不要引号。";
+        }
         List<Map<String, String>> messages = new ArrayList<>();
-        messages.add(Map.of("role", "system", "content",
-                "你是 HRMS（人力资源管理系统）的智能助手。请用中文简洁、专业地回答用户问题。"));
+        messages.add(Map.of("role", "system", "content", sysPrompt));
 
         // 历史消息（最近 20 条 ≈ 10 轮）
         int startIdx = Math.max(0, history.size() - 20);
@@ -467,13 +527,55 @@ public class AiChatServiceImpl implements AiChatService {
     }
 
     /**
-     * 从 AI 完整回复中移除 SUGGESTIONS 标记和 JSON，返回纯文本
+     * 从 AI 完整回复中移除 SUGGESTIONS 和 TITLE 标记及后续内容，返回纯文本
      */
     private String stripSuggestions(String fullResponse) {
         if (fullResponse == null) return "";
-        int markerIdx = fullResponse.indexOf("---SUGGESTIONS---");
-        if (markerIdx < 0) return fullResponse;
-        return fullResponse.substring(0, markerIdx).trim();
+        String text = fullResponse;
+        // 先移除 ---TITLE--- 或 --TITLE--- 标记及之后内容
+        int titleIdx = text.indexOf("---TITLE---");
+        if (titleIdx < 0) titleIdx = text.indexOf("--TITLE---");
+        if (titleIdx >= 0) text = text.substring(0, titleIdx).trim();
+        // 再移除 ---SUGGESTIONS--- 标记及之后内容
+        int suggIdx = text.indexOf("---SUGGESTIONS---");
+        if (suggIdx >= 0) text = text.substring(0, suggIdx).trim();
+        return text;
+    }
+
+    /**
+     * 从 AI 完整回复中解析 ---TITLE---（或 --TITLE---）标记后的标题
+     */
+    private String parseTitle(String fullResponse) {
+        if (fullResponse == null) {
+            log.debug("[TITLE_PARSE] fullResponse 为 null");
+            return null;
+        }
+        // 兼容 3 短横线和 2 短横线变体
+        int markerIdx = fullResponse.indexOf("---TITLE---");
+        if (markerIdx < 0) {
+            markerIdx = fullResponse.indexOf("--TITLE---");
+        }
+        if (markerIdx < 0) {
+            log.debug("[TITLE_PARSE] 未找到任何 TITLE 标记, lastChars=[{}]",
+                    fullResponse.length() > 30 ? fullResponse.substring(fullResponse.length() - 30) : fullResponse);
+            return null;
+        }
+
+        // 确定实际使用的标记长度
+        String after;
+        if (fullResponse.substring(markerIdx).startsWith("---TITLE---")) {
+            after = fullResponse.substring(markerIdx + "---TITLE---".length()).trim();
+        } else {
+            after = fullResponse.substring(markerIdx + "--TITLE---".length()).trim();
+        }
+        // 取第一行（标题在一行内），去掉末尾标点
+        int endIdx = after.indexOf('\n');
+        if (endIdx > 0) after = after.substring(0, endIdx).trim();
+        // 去掉末尾的句号等标点
+        after = after.replaceAll("[。，！？.!?,;；]+$", "").trim();
+        if (after.length() > 20) after = after.substring(0, 20);
+        log.debug("[TITLE_PARSE] 从位置 {} 解析标题: [{}]", markerIdx, after);
+        return after.isBlank() ? null : after;
     }
 
     // ==================== 数据库操作 ====================
@@ -513,12 +615,16 @@ public class AiChatServiceImpl implements AiChatService {
     public void saveAiResponse(Long conversationId, String fullResponse,
                                List<Map<String, String>> suggestions) {
         if (fullResponse == null || fullResponse.isBlank()) {
+            log.warn("[SAVE_RESP] fullResponse 为空或空白，跳过保存, conversationId={}", conversationId);
             return;
         }
 
         // 去除 SUGGESTIONS 标记，只保存纯文本
         String cleanContent = stripSuggestions(fullResponse);
         if (cleanContent.isBlank()) {
+            log.warn("[SAVE_RESP] stripSuggestions 后内容为空, conversationId={}, fullResponse=[{}]",
+                    conversationId,
+                    fullResponse.length() > 100 ? fullResponse.substring(0, 100) + "..." : fullResponse);
             return;
         }
 
@@ -526,6 +632,10 @@ public class AiChatServiceImpl implements AiChatService {
         msg.setConversationId(conversationId);
         msg.setRole("assistant");
         msg.setContent(cleanContent);
+
+        log.info("[SAVE_RESP] 保存 AI 回复, conversationId={}, 内容长度={}, 前50字=[{}]",
+                conversationId, cleanContent.length(),
+                cleanContent.length() > 50 ? cleanContent.substring(0, 50) : cleanContent);
 
         // 如果有路由建议，存入 metadata
         if (!suggestions.isEmpty()) {

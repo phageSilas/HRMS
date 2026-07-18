@@ -25,7 +25,9 @@ import {
   ProTable,
 } from '@ant-design/pro-components';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
+import { useSearchParams } from '@umijs/max';
 import { Button, Card, Col, Row, Space, Tag, Typography, message } from 'antd';
+import React, { useEffect, useRef, useState } from 'react';
 import { formatProcessDateTime } from '../utils';
 import React, { useRef, useState } from 'react';
 
@@ -72,6 +74,19 @@ type TransferFormValues = TransferApplicationCreateRequest & {
 const TransferPage: React.FC = () => {
   const actionRef = useRef<ActionType>();
   const [modalOpen, setModalOpen] = useState(false);
+
+  // 从员工列表"调岗"按钮跳转时携带的参数
+  const [searchParams] = useSearchParams();
+  const employeeIdFromUrl = searchParams.get('employeeId');
+  const employeeNameFromUrl = searchParams.get('employeeName') || '';
+  const employeeNoFromUrl = searchParams.get('employeeNo') || '';
+
+  // 如果 URL 携带了员工 ID，自动打开创建弹窗
+  useEffect(() => {
+    if (employeeIdFromUrl) {
+      setModalOpen(true);
+    }
+  }, [employeeIdFromUrl]);
 
   const columns: ProColumns<TransferApplication>[] = [
     {
@@ -206,6 +221,11 @@ const TransferPage: React.FC = () => {
         onOpenChange={setModalOpen}
         modalProps={{ destroyOnClose: true, centered: true }}
         submitter={{ searchConfig: { submitText: '提交审批' } }}
+        initialValues={{
+          employeeId: employeeIdFromUrl ? Number(employeeIdFromUrl) : undefined,
+          employeeName: employeeNameFromUrl || undefined,
+          employeeNo: employeeNoFromUrl || undefined,
+        }}
         onFinish={async (values) => {
           const payload: TransferApplicationCreateRequest = {
             employeeId: values.employeeId,

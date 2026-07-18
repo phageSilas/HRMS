@@ -10,7 +10,6 @@ import type { DepartmentTree } from '@/services/organization';
 import { getPostList, type Post } from '@/services/organization';
 import type {
   Employee,
-  EmployeeCreateRequest,
   FieldPermissions,
 } from '@/services/employee';
 import {
@@ -179,8 +178,8 @@ const EmployeeEditPage: React.FC = () => {
   /** 判断字段是否可编辑 */
   const isFieldEditable = (fieldName: string): boolean => {
     if (!fieldPerms) return true; // 未加载权限时默认可编辑
-    if (fieldPerms.hiddenFields.includes(fieldName)) return false;
-    if (fieldPerms.flowFields.includes(fieldName)) return false;
+    // 流程必填字段不可直接编辑
+    if (fieldPerms.flowRequiredFields?.includes(fieldName)) return false;
     return true;
   };
 
@@ -190,18 +189,25 @@ const EmployeeEditPage: React.FC = () => {
       const values = await form.validateFields();
       setSubmitting(true);
 
-      const payload: EmployeeCreateRequest = {
-        ...values,
-        birthday: values.birthday
-          ? dayjs(values.birthday).format('YYYY-MM-DD')
-          : undefined,
-        hireDate: values.hireDate
-          ? dayjs(values.hireDate).format('YYYY-MM-DD')
-          : undefined,
-        contractExpireDate: values.contractExpireDate
-          ? dayjs(values.contractExpireDate).format('YYYY-MM-DD')
-          : undefined,
-      };
+      // 排除脱敏字段，防止将掩码数据写回后端
+      const payload: Record<string, any> = { ...values };
+      const DESENSITIZED_FIELDS = ['phone', 'idCardNo', 'bankAccount', 'emergencyPhone'];
+      DESENSITIZED_FIELDS.forEach((field) => {
+        if (payload[field] && typeof payload[field] === 'string' && payload[field].includes('*')) {
+          delete payload[field];
+        }
+      });
+
+      // 格式化日期字段
+      if (payload.birthday) {
+        payload.birthday = dayjs(payload.birthday).format('YYYY-MM-DD');
+      }
+      if (payload.hireDate) {
+        payload.hireDate = dayjs(payload.hireDate).format('YYYY-MM-DD');
+      }
+      if (payload.contractExpireDate) {
+        payload.contractExpireDate = dayjs(payload.contractExpireDate).format('YYYY-MM-DD');
+      }
 
       console.log('[EmployeeEdit] 提交数据:', JSON.stringify(payload, null, 2));
 
@@ -216,7 +222,18 @@ const EmployeeEditPage: React.FC = () => {
     } catch (err: any) {
       console.error('[EmployeeEdit] 提交失败:', err);
       if (err?.errorFields) return; // 表单校验错误，antd 会自动提示
-      // 拦截器已弹出具体错误，此处不再重复提示
+      // 尝试提取后端返回的校验错误信息（HTTP 400 时 error.response.data.message）
+      const backendMsg =
+        err?.response?.data?.message || err?.data?.message || '';
+      if (backendMsg) {
+        message.error(backendMsg);
+      } else if (
+        err?.message &&
+        err.message !== '服务器繁忙，请稍后重试' &&
+        err.message !== '网络错误，请稍后重试'
+      ) {
+        // 拦截器已弹出具体错误，此处不再重复提示
+      }
     } finally {
       setSubmitting(false);
     }

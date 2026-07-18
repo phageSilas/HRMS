@@ -8,6 +8,8 @@ import com.hrms.system.organization.entity.DeptEntity;
 import com.hrms.system.organization.mapper.DeptMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -21,11 +23,14 @@ import java.util.stream.Collectors;
  * 每天凌晨 2 点更新 sys_dept.employee_count 字段
  * 统计口径：包含本部门及所有下属部门中状态为试用期/正式的员工总数
  * </p>
+ * <p>
+ * 同时实现 ApplicationRunner，在项目启动时刷新一次部门人数
+ * </p>
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class DeptEmployeeCountSchedule {
+public class DeptEmployeeCountSchedule implements ApplicationRunner {
 
     private final EmployeeMapper employeeMapper;
     private final DeptMapper deptMapper;
@@ -80,6 +85,15 @@ public class DeptEmployeeCountSchedule {
         }
 
         log.info("部门人数缓存更新完成，共更新 {} 个部门", allDepts.size());
+    }
+
+    /**
+     * 项目启动时执行
+     */
+    @Override
+    public void run(ApplicationArguments args) {
+        log.info("项目启动，开始刷新部门人数...");
+        refreshDeptEmployeeCount();
     }
 
     /**

@@ -184,6 +184,10 @@ const EmployeePage: React.FC = () => {
                   key: 'transfer',
                   icon: <SwapOutlined />,
                   label: '调岗',
+                  onClick: () =>
+                    history.push(
+                      `/process/transfer?employeeId=${record.id}&employeeName=${encodeURIComponent(record.employeeName)}&employeeNo=${record.employeeNo || ''}`,
+                    ),
                 },
                 {
                   key: 'delete',

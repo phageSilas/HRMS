@@ -176,3 +176,10 @@ CREATE TABLE `hr_attendance_overtime` (
 
 ALTER TABLE `hr_attendance_correction`
     MODIFY COLUMN `record_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '打卡记录ID（补卡时可先无打卡记录）';
+
+
+
+ALTER TABLE hr_attendance_group
+    ADD COLUMN scope_type varchar(32) NULL COMMENT '适用范围类型：DEPT/POST/EMPLOYEE' AFTER monthly_correction_limit,
+    ADD COLUMN scope_value varchar(1000) NULL COMMENT '适用范围值，JSON字符串' AFTER scope_type;
+
