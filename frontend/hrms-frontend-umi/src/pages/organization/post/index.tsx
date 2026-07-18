@@ -320,7 +320,8 @@ const PostPage: React.FC = () => {
           labelWidth: 'auto',
           searchText: '搜索',
           resetText: '重置',
-          collapsed: true, // 默认收起搜索栏，隐藏展开按钮
+          collapsed: true,
+          collapseRender: false, // 隐藏展开/收起按钮
           span: {
             xs: 24,
             sm: 12,
