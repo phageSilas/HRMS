@@ -22,12 +22,15 @@ import com.hrms.business.personnel.enums.LeaveTypeEnum;
 import com.hrms.business.personnel.mapper.EmployeeSnapshotMapper;
 import com.hrms.business.personnel.mapper.LeaveApplicationMapper;
 import com.hrms.business.personnel.service.LeaveApplicationService;
+import com.hrms.business.personnel.service.PersonnelDisplayEnricher;
 import com.hrms.business.personnel.vo.LeaveApplicationCreateVO;
 import com.hrms.business.personnel.vo.LeaveApplicationPageVO;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
 import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
+import com.hrms.system.organization.service.DeptService;
+import com.hrms.system.organization.service.PostService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -66,6 +69,10 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
 
     private final ApprovalEngine approvalEngine;
 
+    private final DeptService deptService;
+
+    private final PostService postService;
+
     /**
      * 离职申请分页查询
      * @param queryDTO 离职申请查询参数
@@ -75,16 +82,21 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
     public PageResult<LeaveApplicationPageVO> pageLeaveApplications(LeaveApplicationQueryDTO queryDTO) {
         int pageNum = normalizePageNum(queryDTO.getPageNum());
         int pageSize = normalizePageSize(queryDTO.getPageSize());
+        PersonnelDisplayEnricher displayEnricher = new PersonnelDisplayEnricher(deptService, postService);
         Page<LeaveApplicationEntity> page = leaveApplicationMapper.selectPage(
                 Page.of(pageNum, pageSize),
                 buildLeaveApplicationWrapper(queryDTO)
         );
         Map<Long, EmployeeSnapshotEntity> employeeSnapshotMap = listEmployeeSnapshotMap(collectEmployeeIds(page.getRecords()));
         List<LeaveApplicationPageVO> records = page.getRecords().stream()
-                .map(entity -> LeaveApplicationConvert.toPageVO(
-                        entity,
-                        employeeSnapshotMap.get(entity.getEmployeeId()),
-                        employeeSnapshotMap.get(entity.getHandoverEmployeeId())))
+                .map(entity -> displayEnricher.enrichLeaveApplication(
+                        LeaveApplicationConvert.toPageVO(
+                                entity,
+                                employeeSnapshotMap.get(entity.getEmployeeId()),
+                                employeeSnapshotMap.get(entity.getHandoverEmployeeId())),
+                        employeeSnapshotMap.get(entity.getEmployeeId()) == null
+                                ? null
+                                : employeeSnapshotMap.get(entity.getEmployeeId()).getDeptId()))
                 .toList();
         return PageResult.of(records, page.getTotal(), pageNum, pageSize);
     }

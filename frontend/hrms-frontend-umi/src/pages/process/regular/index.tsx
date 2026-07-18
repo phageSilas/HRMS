@@ -23,6 +23,7 @@ import {
 } from '@ant-design/pro-components';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { Avatar, Button, Space, Tabs, Tag, Typography, message } from 'antd';
+import { formatProcessDateTime } from '../utils';
 import React, { useRef, useState } from 'react';
 
 const { Text } = Typography;
@@ -132,9 +133,9 @@ const RegularPage: React.FC = () => {
     {
       title: '申请时间',
       dataIndex: 'createTime',
-      valueType: 'dateTime',
       width: 170,
       search: false,
+      render: (_, record) => formatProcessDateTime(record.createTime),
     },
     {
       title: '操作',

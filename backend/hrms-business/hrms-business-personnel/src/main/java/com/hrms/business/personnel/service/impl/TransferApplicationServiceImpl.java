@@ -20,6 +20,7 @@ import com.hrms.business.personnel.entity.TransferApplicationEntity;
 import com.hrms.business.personnel.enums.ApplicationStatusEnum;
 import com.hrms.business.personnel.mapper.EmployeeSnapshotMapper;
 import com.hrms.business.personnel.mapper.TransferApplicationMapper;
+import com.hrms.business.personnel.service.PersonnelDisplayEnricher;
 import com.hrms.business.personnel.service.TransferApplicationService;
 import com.hrms.business.personnel.vo.TransferApplicationCreateVO;
 import com.hrms.business.personnel.vo.TransferApplicationPageVO;
@@ -27,6 +28,8 @@ import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
 import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
+import com.hrms.system.organization.service.DeptService;
+import com.hrms.system.organization.service.PostService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -64,6 +67,10 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
 
     private final ApprovalEngine approvalEngine;
 
+    private final DeptService deptService;
+
+    private final PostService postService;
+
     /**
      * 分页查询调岗申请。
      * @param queryDTO 调岗申请查询参数
@@ -73,6 +80,7 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
     public PageResult<TransferApplicationPageVO> pageTransferApplications(TransferApplicationQueryDTO queryDTO) {
         int pageNum = normalizePageNum(queryDTO.getPageNum());
         int pageSize = normalizePageSize(queryDTO.getPageSize());
+        PersonnelDisplayEnricher displayEnricher = new PersonnelDisplayEnricher(deptService, postService);
         Page<TransferApplicationEntity> page = transferApplicationMapper.selectPage(
                 Page.of(pageNum, pageSize),
                 buildTransferApplicationWrapper(queryDTO)
@@ -81,7 +89,12 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
                 page.getRecords().stream().map(TransferApplicationEntity::getEmployeeId).toList()
         );
         List<TransferApplicationPageVO> records = page.getRecords().stream()
-                .map(entity -> TransferApplicationConvert.toPageVO(entity, employeeSnapshotMap.get(entity.getEmployeeId())))
+                .map(entity -> displayEnricher.enrichTransferApplication(
+                        TransferApplicationConvert.toPageVO(entity, employeeSnapshotMap.get(entity.getEmployeeId())),
+                        entity.getFromDeptId(),
+                        entity.getFromPostId(),
+                        entity.getToDeptId(),
+                        entity.getToPostId()))
                 .toList();
         return PageResult.of(records, page.getTotal(), pageNum, pageSize);
     }
