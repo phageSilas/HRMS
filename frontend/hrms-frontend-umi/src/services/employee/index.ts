@@ -299,3 +299,25 @@ export async function getContractList(params: {
     params,
   });
 }
+
+/**
+ * 检查部门下是否有在职员工
+ * @param deptId 部门ID
+ * @returns true-有在职员工，false-无在职员工
+ */
+export async function hasEmployeesInDept(deptId: number) {
+  return request.get<boolean>('/api/v1/employees/check-dept', {
+    params: { deptId },
+  });
+}
+
+/**
+ * 检查职位下是否有在职员工
+ * @param postId 职位ID
+ * @returns true-有在职员工，false-无在职员工
+ */
+export async function hasEmployeesInPost(postId: number) {
+  return request.get<boolean>('/api/v1/employees/check-post', {
+    params: { postId },
+  });
+}
