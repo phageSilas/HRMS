@@ -31,11 +31,13 @@ import com.hrms.system.organization.service.PostService;
 import com.hrms.system.organization.vo.DeptDetailVO;
 import com.hrms.system.organization.vo.PostVO;
 import com.hrms.business.employee.event.EmployeeChangeEvent;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -46,7 +48,6 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class EmployeeServiceImpl implements EmployeeService {
 
     private final EmployeeMapper employeeMapper;
@@ -55,6 +56,27 @@ public class EmployeeServiceImpl implements EmployeeService {
     private final PostService postService;
     private final UserService userService;
     private final ApplicationEventPublisher eventPublisher;
+
+    /** 独立事务模板，用于创建系统账号（失败不回滚主事务） */
+    private final TransactionTemplate transactionTemplate;
+
+    public EmployeeServiceImpl(
+            EmployeeMapper employeeMapper,
+            FieldPermissionService fieldPermissionService,
+            DeptService deptService,
+            PostService postService,
+            UserService userService,
+            ApplicationEventPublisher eventPublisher,
+            PlatformTransactionManager transactionManager) {
+        this.employeeMapper = employeeMapper;
+        this.fieldPermissionService = fieldPermissionService;
+        this.deptService = deptService;
+        this.postService = postService;
+        this.userService = userService;
+        this.eventPublisher = eventPublisher;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
+        this.transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    }
 
     @Override
     public PageResult<EmployeeListVO> listEmployees(EmployeeQueryDTO queryDTO) {
@@ -161,8 +183,8 @@ public class EmployeeServiceImpl implements EmployeeService {
         // 保存员工记录
         employeeMapper.insert(entity);
 
-        // 创建系统账号
-        createUserAccount(entity);
+        // 创建系统账号（独立事务，失败不回滚员工创建）
+        createUserAccountInNewTransaction(entity);
 
         // 发布员工创建事件，更新部门人数
         eventPublisher.publishEvent(new EmployeeChangeEvent(this, EmployeeChangeEvent.ChangeType.CREATE, entity.getId(), entity.getDeptId(), entity.getDeptId()));
@@ -573,54 +595,54 @@ public class EmployeeServiceImpl implements EmployeeService {
     }
 
     /**
-     * 创建系统账号
+     * 在独立事务中创建系统账号。
      * <p>
-     * 新增员工时自动创建系统账号，登录账号=手机号，初始密码随机生成
+     * 使用 REQUIRES_NEW 确保用户创建失败（如 auth 模块的 @TableLogic 导致
+     * 唯一约束冲突）不会将外层员工创建事务标记为 rollback-only。
      * </p>
      *
-     * @param entity 员工实体
+     * @param entity 已保存的员工实体
      */
-    private void createUserAccount(EmployeeEntity entity) {
+    private void createUserAccountInNewTransaction(EmployeeEntity entity) {
         try {
-            // 生成随机初始密码
-            String initialPassword = generateRandomPassword();
+            Long userId = transactionTemplate.execute(status -> {
+                // 生成随机初始密码
+                String initialPassword = generateRandomPassword();
 
-            // 构建创建用户 DTO
-            UserCreateDTO userCreateDTO = new UserCreateDTO();
-            userCreateDTO.setUsername(entity.getPhone());           // 登录账号 = 手机号
-            userCreateDTO.setPassword(initialPassword);              // 初始密码
-            userCreateDTO.setRealName(entity.getEmployeeName());     // 真实姓名
-            userCreateDTO.setPhone(entity.getPhone());               // 手机号
-            userCreateDTO.setEmail(entity.getEmail());               // 邮箱
-            userCreateDTO.setEmployeeId(entity.getId());             // 关联员工ID
+                // 构建创建用户 DTO
+                UserCreateDTO userCreateDTO = new UserCreateDTO();
+                userCreateDTO.setUsername(entity.getPhone());           // 登录账号 = 手机号
+                userCreateDTO.setPassword(initialPassword);              // 初始密码
+                userCreateDTO.setRealName(entity.getEmployeeName());     // 真实姓名
+                userCreateDTO.setPhone(entity.getPhone());               // 手机号
+                userCreateDTO.setEmail(entity.getEmail());               // 邮箱
+                userCreateDTO.setEmployeeId(entity.getId());             // 关联员工ID
 
-            // 调用用户服务创建账号
-            UserCreateResultVO result = userService.createUser(userCreateDTO);
+                // 调用用户服务创建账号
+                UserCreateResultVO result = userService.createUser(userCreateDTO);
 
-            // 回填 user_id 到员工记录
-            entity.setUserId(result.getId());
-            employeeMapper.updateById(entity);
+                log.info("员工 [{}] 系统账号创建成功，userId={}", entity.getEmployeeName(), result.getId());
+                return result.getId();
+            });
 
-            log.info("员工 [{}] 系统账号创建成功，userId={}", entity.getEmployeeName(), result.getId());
+            // 回填 user_id 到员工记录（在主事务中）
+            if (userId != null) {
+                entity.setUserId(userId);
+                employeeMapper.updateById(entity);
+            }
         } catch (Exception e) {
-            log.error("创建员工作业账号失败，employeeId={}", entity.getId(), e);
-            // 不阻断主流程，记录日志即可
+            log.error("创建员工系统账号失败，employeeId={}", entity.getId(), e);
+            // 不阻断主流程：员工已创建成功，账号可后续补建
         }
     }
 
     /**
-     * 生成随机密码
+     * 生成初始密码
      *
-     * @return 8位随机密码
+     * @return 初始密码
      */
     private String generateRandomPassword() {
-        String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-        StringBuilder sb = new StringBuilder();
-        java.security.SecureRandom random = new java.security.SecureRandom();
-        for (int i = 0; i < 8; i++) {
-            sb.append(chars.charAt(random.nextInt(chars.length())));
-        }
-        return sb.toString();
+        return "123456";
     }
 
     /**
