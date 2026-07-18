@@ -28,6 +28,8 @@ import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { useSearchParams } from '@umijs/max';
 import { Button, Card, Col, Row, Space, Tag, Typography, message } from 'antd';
 import React, { useEffect, useRef, useState } from 'react';
+import { formatProcessDateTime } from '../utils';
+import React, { useRef, useState } from 'react';
 
 const { Text } = Typography;
 
@@ -163,9 +165,9 @@ const TransferPage: React.FC = () => {
     {
       title: '申请时间',
       dataIndex: 'createTime',
-      valueType: 'dateTime',
       width: 170,
       search: false,
+      render: (_, record) => formatProcessDateTime(record.createTime),
     },
   ];
 

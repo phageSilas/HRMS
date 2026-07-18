@@ -31,6 +31,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
 import remarkGfm from 'remark-gfm';
+import type { PageResult } from '@/types/api';
 import {
   type Conversation,
   type Message,
@@ -375,36 +376,58 @@ interface SseEndEventExt {
 
 const AiChatPage: React.FC = () => {
   // ---- 状态 ----
-  const [conversations, setConversations] = useState<Conversation[]>([]);
+  // conversations 由 useRequest(convData)+useMemo 管理（见下方数据加载）
   const [currentId, setCurrentId] = useState<number | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [listRefreshKey, setListRefreshKey] = useState(0);
 
   const messageListRef = useRef<HTMLDivElement>(null);
   const streamingRef = useRef('');
   const abortRef = useRef<(() => void) | null>(null);
+  const sseConversationIdRef = useRef<number | null>(null);
 
-  // ---- 数据加载 ----
+  // ---- 会话列表数据管理（手动管理，不用 useRequest 避免不可控） ----
 
-  const {
-    loading: convLoading,
-    error: convError,
-    refresh: refreshConversations,
-  } = useRequest(
-    () => getConversations({ pageNum: 1, pageSize: 50 }),
-    {
-      onSuccess: (data) => {
-        setConversations(data?.records || []);
-        if (data?.records?.length > 0 && !currentId) {
-          setCurrentId(data.records[0].id);
-        }
-      },
-      refreshDeps: [],
-    },
+  const [convData, setConvData] = useState<PageResult<Conversation> | null>(null);
+  const [convLoading, setConvLoading] = useState(false);
+  const [convError, setConvError] = useState<any>(null);
+
+  const fetchConversations = useCallback(async () => {
+    setConvLoading(true);
+    try {
+      const result = await getConversations({ pageNum: 1, pageSize: 50 });
+      setConvData(result);
+      setConvError(null);
+    } catch (err: any) {
+      setConvError(err);
+    } finally {
+      setConvLoading(false);
+    }
+  }, []);
+
+  // 初始加载
+  useEffect(() => { fetchConversations(); }, [fetchConversations]);
+  // listRefreshKey 变化时重新加载
+  useEffect(() => {
+    if (listRefreshKey > 0) fetchConversations();
+  }, [listRefreshKey, fetchConversations]);
+
+  // 用 useMemo 避免不必要的重渲染
+  const conversations = React.useMemo(
+    () => convData?.records || [],
+    [convData],
   );
+
+  // 数据加载后自动选中第一条会话（仅在无当前会话时）
+  useEffect(() => {
+    if (conversations.length > 0 && !currentId) {
+      setCurrentId(conversations[0].id);
+    }
+  }, [conversations, currentId]);
 
   const { loading: msgLoading, run: loadMessages } = useRequest(
     (id: number) => getMessages(id),
@@ -421,6 +444,15 @@ const AiChatPage: React.FC = () => {
   );
 
   useEffect(() => {
+    // 如果 currentId 的变化是由 SSE onStart 触发的（新会话），
+    // 跳过 loadMessages，因为 SSE 流式回调会自动填充消息。
+    // 注意不能用布尔标志 isSseActiveRef，因为 SSE 事件可能
+    // 在同一轮同步解析中完成（onStart→onContent→onEnd），
+    // 标志会被提前重置，导致守卫失效。
+    if (currentId && sseConversationIdRef.current === currentId) {
+      sseConversationIdRef.current = null;
+      return;
+    }
     if (currentId) {
       loadMessages(currentId);
       setStreamingContent('');
@@ -477,6 +509,7 @@ const AiChatPage: React.FC = () => {
     setError(null);
     streamingRef.current = '';
     abortRef.current = null;
+    sseConversationIdRef.current = null;
 
     const tempUserMsg: Message = {
       id: Date.now(),
@@ -494,6 +527,7 @@ const AiChatPage: React.FC = () => {
       {
         onStart: (conversationId) => {
           console.log('[SSE] onStart:', conversationId, 'currentId:', currentId);
+          sseConversationIdRef.current = conversationId;
           if (conversationId !== currentId) {
             setCurrentId(conversationId);
           }
@@ -539,10 +573,14 @@ const AiChatPage: React.FC = () => {
           setStreamingContent('');
           streamingRef.current = '';
           setIsStreaming(false);
-          refreshConversations();
+          console.log('[SSE] 刷新会话列表');
+          setListRefreshKey(k => k + 1);
         },
         onError: (code, msg) => {
+          console.log('[SSE] onError, code:', code, 'msg:', msg, '累计内容长度:', streamingRef.current.length);
           abortRef.current = null;
+          // 即使出错，已有消息已在数据库，刷新列表让新会话出现在侧边栏
+          setListRefreshKey(k => k + 1);
           antMsg.error(msg || 'AI 响应异常');
           setError(msg || 'AI 响应异常，请稍后重试');
           setStreamingContent('');
@@ -552,7 +590,7 @@ const AiChatPage: React.FC = () => {
       },
     );
     abortRef.current = abort;
-  }, [inputValue, isStreaming, currentId, refreshConversations]);
+  }, [inputValue, isStreaming, currentId, setListRefreshKey]);
 
   // ---- 键盘事件 ----
 
@@ -583,7 +621,7 @@ const AiChatPage: React.FC = () => {
         const remaining = conversations.filter((c) => c.id !== id);
         setCurrentId(remaining.length > 0 ? remaining[0].id : null);
       }
-      refreshConversations();
+      setListRefreshKey(k => k + 1);
     } catch {
       antMsg.error('删除失败');
     }
@@ -595,7 +633,7 @@ const AiChatPage: React.FC = () => {
     try {
       await updateTitle(id, title);
       antMsg.success('标题已更新');
-      refreshConversations();
+      setListRefreshKey(k => k + 1);
     } catch {
       antMsg.error('修改标题失败');
     }
@@ -604,6 +642,7 @@ const AiChatPage: React.FC = () => {
   // ---- 渲染 ----
 
   return (
+    <AiErrorBoundary>
     <div style={styles.container}>
       <style>{`
         @keyframes blink {
@@ -635,7 +674,7 @@ const AiChatPage: React.FC = () => {
           ) : convError ? (
             <div style={{ textAlign: 'center', padding: 40 }}>
               <Text type="warning">加载失败</Text>
-              <Button size="small" onClick={refreshConversations} style={{ marginTop: 8 }}>
+              <Button size="small" onClick={fetchConversations} style={{ marginTop: 8 }}>
                 重试
               </Button>
             </div>
@@ -707,16 +746,7 @@ const AiChatPage: React.FC = () => {
       {/* ===== 右侧：对话区 ===== */}
       <div style={styles.chatArea}>
         <div style={styles.chatHeader}>
-          <Title level={5} style={{ margin: 0 }}>
-            {currentId
-              ? (conversations.find((c) => c.id === currentId)?.title || '对话')
-              : 'AI 智能助手'}
-          </Title>
-          {currentId && (
-            <Text type="secondary" style={{ fontSize: 12, marginLeft: 12 }}>
-              双击标题可重命名
-            </Text>
-          )}
+          <Title level={5} style={{ margin: 0 }}>AI 智能助手</Title>
         </div>
 
         <div style={styles.messageList} ref={messageListRef}>
@@ -724,7 +754,19 @@ const AiChatPage: React.FC = () => {
             <div style={{ textAlign: 'center', padding: 60 }}>
               <Spin tip="加载消息中..." />
             </div>
-          ) : !currentId && messages.length === 0 ? (
+          ) : error ? (
+            <div style={{ textAlign: 'center', padding: 60 }}>
+              <Text type="warning">{error}</Text>
+              <br />
+              <Button
+                type="primary"
+                style={{ marginTop: 16 }}
+                onClick={() => currentId && loadMessages(currentId)}
+              >
+                重试
+              </Button>
+            </div>
+          ) : messages.length === 0 ? (
             <div style={styles.welcomeContainer}>
               <RobotOutlined style={{ fontSize: 64, color: '#1677ff', marginBottom: 24 }} />
               <Title level={4} style={{ margin: 0 }}>AI 智能助手</Title>
@@ -745,18 +787,6 @@ const AiChatPage: React.FC = () => {
                   </Button>
                 ))}
               </div>
-            </div>
-          ) : error && messages.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 60 }}>
-              <Text type="warning">{error}</Text>
-              <br />
-              <Button
-                type="primary"
-                style={{ marginTop: 16 }}
-                onClick={() => currentId && loadMessages(currentId)}
-              >
-                重试
-              </Button>
             </div>
           ) : (
             <>
@@ -844,7 +874,43 @@ const AiChatPage: React.FC = () => {
         </div>
       </div>
     </div>
+    </AiErrorBoundary>
   );
 };
 
 export default AiChatPage;
+
+// ============ 错误边界 ============
+
+class AiErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: any}> {
+  constructor(props: {children: React.ReactNode}) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: any, info: any) {
+    console.error('[AiChat Error]', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: 40, textAlign: 'center' }}>
+          <div style={{ color: '#ff4d4f', fontSize: 24, marginBottom: 12 }}>⚠️</div>
+          <div style={{ color: '#ff4d4f', marginBottom: 8 }}>页面渲染异常</div>
+          <div style={{ color: '#999', fontSize: 12 }}>
+            {this.state.error?.message || '未知错误'}
+          </div>
+          <button
+            onClick={() => window.location.reload()}
+            style={{ marginTop: 16, padding: '8px 24px', cursor: 'pointer' }}
+          >
+            刷新重试
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}

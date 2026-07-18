@@ -38,7 +38,7 @@ export interface EntryApplication {
   approvalStatus: ApprovalStatusValue;
   approvalStatusDesc?: string;
   approvalInstanceId?: number | null;
-  createTime?: string;
+  createTime?: string | number[];
 }
 
 export interface EntryApplicationQuery extends PageQuery {
@@ -94,7 +94,7 @@ export interface RegularApplication {
   evaluationStatus?: 'pending' | 'evaluated';
   approvalStatus?: number;
   approvalStatusDesc?: string;
-  createTime?: string;
+  createTime?: string | number[];
 }
 
 export interface RegularApplicationQuery extends PageQuery {
@@ -128,7 +128,7 @@ export interface TransferApplication {
   reason?: string;
   approvalStatus?: number;
   approvalStatusDesc?: string;
-  createTime?: string;
+  createTime?: string | number[];
 }
 
 export interface TransferApplicationQuery extends PageQuery {
@@ -166,7 +166,7 @@ export interface LeaveApplication {
   reason?: string;
   approvalStatus?: number;
   approvalStatusDesc?: string;
-  createTime?: string;
+  createTime?: string | number[];
 }
 
 export interface LeaveApplicationQuery extends PageQuery {

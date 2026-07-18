@@ -17,6 +17,7 @@ import com.hrms.business.personnel.dto.EntryApplicationQueryDTO;
 import com.hrms.business.personnel.entity.EntryApplicationEntity;
 import com.hrms.business.personnel.enums.ApplicationStatusEnum;
 import com.hrms.business.personnel.mapper.EntryApplicationMapper;
+import com.hrms.business.personnel.service.PersonnelDisplayEnricher;
 import com.hrms.business.personnel.service.EntryApplicationService;
 import com.hrms.business.personnel.vo.EntryApplicationConfirmVO;
 import com.hrms.business.personnel.vo.EntryApplicationPageVO;
@@ -25,6 +26,8 @@ import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
 import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
+import com.hrms.system.organization.service.DeptService;
+import com.hrms.system.organization.service.PostService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -67,6 +70,10 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
 
     private final EmployeeService employeeService;
 
+    private final DeptService deptService;
+
+    private final PostService postService;
+
     /**
      * 分页查询入职申请。
      * @param queryDTO 入职申请查询参数
@@ -76,12 +83,14 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
     public PageResult<EntryApplicationPageVO> pageEntryApplications(EntryApplicationQueryDTO queryDTO) {
         int pageNum = normalizePageNum(queryDTO.getPageNum());
         int pageSize = normalizePageSize(queryDTO.getPageSize());
+        PersonnelDisplayEnricher displayEnricher = new PersonnelDisplayEnricher(deptService, postService);
         Page<EntryApplicationEntity> page = entryApplicationMapper.selectPage(
                 Page.of(pageNum, pageSize),
                 buildPageQueryWrapper(queryDTO)
         );
         List<EntryApplicationPageVO> records = page.getRecords().stream()
                 .map(EntryApplicationConvert::toPageVO)
+                .map(displayEnricher::enrichEntryApplication)
                 .toList();
         return PageResult.of(records, page.getTotal(), pageNum, pageSize);
     }
@@ -97,7 +106,8 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         EntryApplicationEntity entity = EntryApplicationConvert.toEntity(requestDTO);
         entity.setApprovalStatus(ApplicationStatusEnum.DRAFT.getCode());
         entryApplicationMapper.insert(entity);
-        return EntryApplicationConvert.toPageVO(entity);
+        return new PersonnelDisplayEnricher(deptService, postService)
+                .enrichEntryApplication(EntryApplicationConvert.toPageVO(entity));
     }
 
     /**

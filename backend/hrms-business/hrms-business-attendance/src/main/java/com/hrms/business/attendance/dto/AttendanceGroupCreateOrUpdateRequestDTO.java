@@ -87,9 +87,9 @@ public class AttendanceGroupCreateOrUpdateRequestDTO {
     private Object locationRange;
 
     /**
-     * 成员范围，当前库无考勤组成员表，本字段暂不落库。
+     * 成员适用范围。
      */
-    private Object memberRange;
+    private AttendanceGroupMemberRangeDTO memberRange;
 
     /**
      * IP 白名单，逗号分隔或 JSON 字符串。

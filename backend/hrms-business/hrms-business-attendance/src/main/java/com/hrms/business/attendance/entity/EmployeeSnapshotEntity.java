@@ -35,6 +35,11 @@ public class EmployeeSnapshotEntity {
     private Long deptId;
 
     /**
+     * 职位ID。
+     */
+    private Long postId;
+
+    /**
      * 员工姓名。
      */
     private String employeeName;
@@ -48,4 +53,9 @@ public class EmployeeSnapshotEntity {
      * 入职日期。
      */
     private LocalDate hireDate;
+
+    /**
+     * 是否删除。
+     */
+    private Integer isDeleted;
 }

@@ -81,6 +81,16 @@ public class AttendanceGroupEntity extends BaseEntity {
     private Integer monthlyCorrectionLimit;
 
     /**
+     * 适用范围类型：DEPT/POST/EMPLOYEE。
+     */
+    private String scopeType;
+
+    /**
+     * 适用范围值，JSON 字符串。
+     */
+    private String scopeValue;
+
+    /**
      * 状态：1-启用，0-禁用。
      */
     private Integer status;

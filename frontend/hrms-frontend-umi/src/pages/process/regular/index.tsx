@@ -23,6 +23,7 @@ import {
 } from '@ant-design/pro-components';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { Avatar, Button, Space, Tabs, Tag, Typography, message } from 'antd';
+import { formatProcessDateTime } from '../utils';
 import React, { useRef, useState } from 'react';
 
 const { Text } = Typography;
@@ -39,6 +40,14 @@ const resultOptions = [
   { label: '延长试用', value: 'extend' },
   { label: '辞退', value: 'terminate' },
 ];
+
+const statusMeta: Record<number, { text: string; color: string }> = {
+  0: { text: '待转正', color: 'gold' },
+  1: { text: '审批中', color: 'processing' },
+  2: { text: '已通过', color: 'success' },
+  3: { text: '已驳回', color: 'error' },
+  4: { text: '已撤回', color: 'default' },
+};
 
 function getInitial(name?: string) {
   return name?.slice(0, 1) || '员';
@@ -120,40 +129,46 @@ const RegularPage: React.FC = () => {
       dataIndex: 'approvalStatus',
       width: 120,
       search: false,
-      render: (_, record) =>
-        activeTab === 'pending' ? (
-          <Tag color="gold">待转正</Tag>
-        ) : (
-          <Tag color={record.approvalStatus === 2 ? 'success' : 'processing'}>
-            {record.approvalStatusDesc || '已评估'}
-          </Tag>
-        ),
+      render: (_, record) => {
+        const meta = statusMeta[record.approvalStatus ?? 0] || {
+          text: record.approvalStatusDesc || '待转正',
+          color: 'default',
+        };
+        return <Tag color={meta.color}>{record.approvalStatusDesc || meta.text}</Tag>;
+      },
     },
     {
       title: '申请时间',
       dataIndex: 'createTime',
-      valueType: 'dateTime',
       width: 170,
       search: false,
+      render: (_, record) => formatProcessDateTime(record.createTime),
     },
     {
       title: '操作',
       valueType: 'option',
       width: 140,
-      render: (_, record) => (
-        <Button
-          size="small"
-          type={activeTab === 'pending' ? 'primary' : 'default'}
-          icon={<FileDoneOutlined />}
-          disabled={activeTab !== 'pending'}
-          onClick={() => {
-            setCurrentRow(record);
-            setDrawerOpen(true);
-          }}
-        >
-          发起转正
-        </Button>
-      ),
+      render: (_, record) => {
+        const disabled = activeTab !== 'pending' || record.approvalStatus === 1;
+        const buttonText = record.approvalStatus === 1 ? '审批中' : '发起转正';
+        return (
+          <Button
+            size="small"
+            type={activeTab === 'pending' ? 'primary' : 'default'}
+            icon={<FileDoneOutlined />}
+            disabled={disabled}
+            onClick={() => {
+              if (disabled) {
+                return;
+              }
+              setCurrentRow(record);
+              setDrawerOpen(true);
+            }}
+          >
+            {buttonText}
+          </Button>
+        );
+      },
     },
   ];
 

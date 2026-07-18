@@ -28,8 +28,25 @@ public final class RegularApplicationConvert {
      * 本方法使用的工具类: ChronoUnit(JDK)
      */
     public static RegularApplicationPageVO toPendingVO(EmployeeSnapshotEntity employeeSnapshot) {
+        return toPendingVO(employeeSnapshot, null);
+    }
+
+    /**
+     * 将试用期员工快照转换为待转正分页 VO，并在存在进行中申请时回填真实审批状态。
+     *
+     * @param employeeSnapshot 员工快照
+     * @param regularApplication 进行中的转正申请，可为空
+     * @return 转正分页 VO
+     * 本方法使用的工具类: ChronoUnit(JDK)
+     */
+    public static RegularApplicationPageVO toPendingVO(EmployeeSnapshotEntity employeeSnapshot,
+                                                       RegularApplicationEntity regularApplication) {
         LocalDate probationEndDate = calculateProbationEndDate(employeeSnapshot);
+        Integer approvalStatus = regularApplication == null
+                ? ApplicationStatusEnum.DRAFT.getCode()
+                : regularApplication.getApprovalStatus();
         return RegularApplicationPageVO.builder()
+                .id(regularApplication == null ? null : regularApplication.getId())
                 .employeeId(employeeSnapshot.getId())
                 .employeeName(employeeSnapshot.getEmployeeName())
                 .employeeNo(employeeSnapshot.getEmployeeNo())
@@ -41,9 +58,9 @@ public final class RegularApplicationConvert {
                 .probationEndDate(probationEndDate)
                 .remainingDays(probationEndDate == null ? null : ChronoUnit.DAYS.between(LocalDate.now(), probationEndDate))
                 .evaluationStatus(EVALUATION_PENDING)
-                .approvalStatus(ApplicationStatusEnum.DRAFT.getCode())
-                .approvalStatusDesc(ApplicationStatusEnum.DRAFT.getDesc())
-                .createTime(employeeSnapshot.getCreateTime())
+                .approvalStatus(approvalStatus)
+                .approvalStatusDesc(ApplicationStatusEnum.getDescByCode(approvalStatus))
+                .createTime(regularApplication == null ? employeeSnapshot.getCreateTime() : regularApplication.getCreateTime())
                 .build();
     }
 
