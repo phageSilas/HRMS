@@ -24,17 +24,19 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * AI 对话服务实现
  * <p>
- * 核心流程：保存用户消息 → 构建 Prompt → 调 DashScope 百炼（流式）→ 保存 AI 回复 → SSE 返回
+ * 核心流程：保存用户消息 → 调百炼 App Completion API（流式）→ 保存 AI 回复 → SSE 返回
  * <p>
  * DashScope（阿里云百炼）统一提供：
  * - LLM 对话生成（通义千问）
- * - 知识库 RAG 检索（百炼知识库，需配置 knowledgeBaseId）
+ * - 知识库 RAG 检索（百炼应用知识库，需在控制台创建应用并关联知识库）
  * <p>
- * 知识库未配置时不影响基础对话，AI 仅凭自身知识回答。
+ * 通过百炼 App Completion API，一个请求完成「检索知识库 → 构建 Prompt → LLM 生成」全过程。
+ * 未配置应用 ID 时自动回退到基础 LLM 对话。
  */
 @Slf4j
 @Service
@@ -60,8 +62,18 @@ public class AiChatServiceImpl implements AiChatService {
         saveUserMessage(conversationId, request.getContent());
         incrementMessageCount(conversationId);
 
-        // ========== 3. 创建 SseEmitter（无超时） ==========
-        SseEmitter emitter = new SseEmitter(0L);
+        final Long cId = conversationId;
+
+        // ========== 3. 创建 SseEmitter（超时后自动结束） ==========
+        SseEmitter emitter = new SseEmitter(aiConfig.getTimeout());
+
+        // 注册完成/超时/错误回调（确保最终清理）
+        emitter.onCompletion(() -> log.debug("SSE 连接完成, conversationId={}", cId));
+        emitter.onTimeout(() -> {
+            log.warn("SSE 连接超时, conversationId={}", cId);
+            emitter.complete();
+        });
+        emitter.onError(t -> log.error("SSE 连接异常, conversationId={}", cId, t));
 
         // ========== 4. 发送 start 事件 ==========
         try {
@@ -69,11 +81,11 @@ public class AiChatServiceImpl implements AiChatService {
                     Map.of("type", "start", "conversationId", conversationId));
             emitter.send(SseEmitter.event().name("message").data(startData));
         } catch (IOException e) {
-            emitter.completeWithError(e);
+            log.error("发送 start 事件失败", e);
             return emitter;
         }
 
-        // ========== 5. 异步调用 DashScope 百炼 ==========
+        // ========== 5. 异步调用百炼 API ==========
         Long finalConversationId = conversationId;
         CompletableFuture.runAsync(() -> {
             try {
@@ -83,11 +95,8 @@ public class AiChatServiceImpl implements AiChatService {
                                 .eq(MessageEntity::getConversationId, finalConversationId)
                                 .orderByAsc(MessageEntity::getCreateTime));
 
-                // DashScope 知识库检索（如未配置则返回空）
-                String knowledgeContext = retrieveKnowledge(request.getContent());
-
-                // 调用 DashScope 百炼流式生成
-                String fullResponse = callDashScope(emitter, history, request.getContent(), knowledgeContext);
+                // 调用百炼应用 App Completion API（应用自动处理知识库检索 + LLM 生成）
+                String fullResponse = callDashScopeApp(emitter, history, request.getContent());
 
                 // 解析路由建议（从 AI 回复中提取）
                 List<Map<String, String>> suggestions = parseSuggestions(fullResponse);
@@ -110,108 +119,125 @@ public class AiChatServiceImpl implements AiChatService {
                 log.error("AI 对话流式处理异常", e);
                 try {
                     String errorData = objectMapper.writeValueAsString(
-                            Map.of("type", "error", "code", 40121, "message", "AI 服务调用失败，请稍后重试"));
+                            Map.of("type", "error", "code", 40121, "message", e.getMessage() != null ? e.getMessage() : "AI 服务调用失败，请稍后重试"));
                     emitter.send(SseEmitter.event().name("message").data(errorData));
-                } catch (IOException ignored) {
+                } catch (IOException ex) {
+                    log.warn("发送 error 事件失败", ex);
                 }
-                emitter.completeWithError(e);
+                try {
+                    emitter.completeWithError(e);
+                } catch (Exception ignored) {
+                }
             }
         });
 
         return emitter;
     }
 
-    // ==================== DashScope 百炼调用 ====================
+    // ==================== 百炼 App Completion API 调用 ====================
 
     /**
-     * 调用 DashScope 百炼 API（OpenAI 兼容模式）流式生成回答
+     * 调用百炼 App Completion API（流式）
+     * <p>
+     * 应用已在百炼控制台配置了系统 Prompt 和知识库，
+     * 一个 API 请求完成：知识库检索 → Prompt 构建 → LLM 生成。
+     * <p>
+     * 未配置 appId 时自动回退到直接 LLM 对话（无知识库）。
      *
      * @return 完整 AI 回答文本
      */
-    private String callDashScope(SseEmitter emitter, List<MessageEntity> history,
-                                 String userContent, String knowledgeContext) throws IOException {
+    private String callDashScopeApp(SseEmitter emitter, List<MessageEntity> history,
+                                     String userContent) throws IOException {
         String apiKey = aiConfig.getApiKey();
+        String appId = aiConfig.getAppId();
+
+        // 校验 API Key
         if (apiKey == null || apiKey.isBlank()) {
             throw new GlobalException(AiErrorCode.AI_SERVICE_ERROR);
         }
 
-        // 构建消息列表
-        List<Map<String, String>> messages = new ArrayList<>();
-        messages.add(Map.of("role", "system", "content", buildSystemPrompt(knowledgeContext)));
+        // 未配置 AppId 时回退到基础 LLM 对话
+        if (appId == null || appId.isBlank()) {
+            return callDirectLLM(emitter, history, userContent);
+        }
 
-        // 历史消息（最近 20 条 ≈ 10 轮）
+        // ===== 构建对话历史字符串 =====
+        StringBuilder promptBuilder = new StringBuilder();
         int startIdx = Math.max(0, history.size() - 20);
         for (int i = startIdx; i < history.size(); i++) {
             MessageEntity msg = history.get(i);
-            messages.add(Map.of("role", msg.getRole(), "content", msg.getContent()));
+            String roleLabel = "user".equals(msg.getRole()) ? "用户" : "助手";
+            promptBuilder.append(roleLabel).append("：").append(msg.getContent()).append("\n");
         }
+        promptBuilder.append("用户：").append(userContent);
 
-        // 当前用户问题
-        messages.add(Map.of("role", "user", "content", userContent));
+        // ===== 构建 App API 请求体 =====
+        Map<String, Object> input = new HashMap<>();
+        input.put("prompt", promptBuilder.toString());
 
-        // 构建请求 JSON（OpenAI 兼容格式）
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put("incremental_output", true);
+
         Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("model", aiConfig.getModel());
-        requestBody.put("messages", messages);
-        requestBody.put("stream", true);
-        requestBody.put("temperature", 0.7);
+        requestBody.put("input", input);
+        requestBody.put("parameters", parameters);
+
         String jsonBody = objectMapper.writeValueAsString(requestBody);
 
-        // OkHttp 客户端
+        // ===== OkHttp 客户端 =====
         OkHttpClient httpClient = new OkHttpClient.Builder()
                 .callTimeout(java.time.Duration.ofMillis(aiConfig.getTimeout()))
                 .readTimeout(java.time.Duration.ofMillis(aiConfig.getTimeout()))
                 .build();
 
         Request request = new Request.Builder()
-                .url(aiConfig.getBaseUrl() + "/v1/chat/completions")
+                .url(aiConfig.getBaseUrl() + "/api/v1/apps/" + appId + "/completion")
                 .post(RequestBody.create(jsonBody, okhttp3.MediaType.parse("application/json")))
                 .header("Authorization", "Bearer " + apiKey)
+                .header("X-DashScope-SSE", "enable")
                 .build();
 
         StringBuilder fullContent = new StringBuilder();
-        boolean[] markerReached = {false}; // 使用数组以便在 lambda 中修改
-
-        // 使用锁同步等待流式完成
+        boolean[] markerReached = {false};
         Object lock = new Object();
+        AtomicReference<String> apiError = new AtomicReference<>(null);
 
+        // ===== SSE 流式接收 =====
         EventSource.Factory factory = EventSources.createFactory(httpClient);
         factory.newEventSource(request, new EventSourceListener() {
             @Override
             public void onEvent(EventSource eventSource, String id, String type, String data) {
-                if ("[DONE]".equals(data)) {
-                    return;
-                }
+                // App API 的事件类型为 "result"
+                if (!"result".equals(type)) return;
+
                 try {
                     @SuppressWarnings("unchecked")
-                    Map<String, Object> chunk = objectMapper.readValue(data, Map.class);
-                    List<Map<String, Object>> choices = (List<Map<String, Object>>) chunk.get("choices");
-                    if (choices == null || choices.isEmpty()) return;
+                    Map<String, Object> eventData = objectMapper.readValue(data, Map.class);
+                    Map<String, Object> output = (Map<String, Object>) eventData.get("output");
+                    if (output == null) return;
 
-                    Map<String, Object> choice = choices.get(0);
-                    Map<String, Object> delta = (Map<String, Object>) choice.get("delta");
-                    if (delta == null) return;
+                    String text = (String) output.get("text");
+                    if (text == null || text.isEmpty()) return;
 
-                    String chunkText = (String) delta.get("content");
-                    if (chunkText == null || chunkText.isEmpty()) return;
-
-                    fullContent.append(chunkText);
+                    fullContent.append(text);
 
                     // 已经到达 SUGGESTIONS 标记，不再推送
                     if (markerReached[0]) return;
 
+                    // 检测当前完整内容中是否包含 SUGGESTIONS 标记
                     String currentFull = fullContent.toString();
                     int markerIdx = currentFull.indexOf("---SUGGESTIONS---");
                     if (markerIdx >= 0) {
                         markerReached[0] = true;
-                        // 标记在此 chunk 中完成，只推送标记前的内容
-                        int prevLen = fullContent.length() - chunkText.length();
+                        // 只推送标记前的内容
+                        int prevLen = fullContent.length() - text.length();
                         if (markerIdx > prevLen) {
-                            String safePart = chunkText.substring(0, markerIdx - prevLen);
+                            String safePart = text.substring(0, markerIdx - prevLen);
                             if (!safePart.isEmpty()) {
                                 try {
                                     emitter.send(SseEmitter.event().name("message")
-                                            .data(objectMapper.writeValueAsString(Map.of("type", "content", "text", safePart))));
+                                            .data(objectMapper.writeValueAsString(
+                                                    Map.of("type", "content", "text", safePart))));
                                 } catch (IOException e) {
                                     eventSource.cancel();
                                 }
@@ -220,34 +246,47 @@ public class AiChatServiceImpl implements AiChatService {
                         return;
                     }
 
-                    // 检查当前 fullContent 末尾是否匹配 marker 的前缀（标记被跨 chunk 分割时）
-                    // 如以 "---" "---SUG" 结尾时，不推送重叠部分
-                    String pushText = chunkText;
+                    // 检查标记被跨 chunk 分割的情况
+                    String pushText = text;
                     int maxOverlap = Math.min("---SUGGESTIONS---".length(), currentFull.length());
                     for (int i = 1; i <= maxOverlap; i++) {
                         String suffix = currentFull.substring(currentFull.length() - i);
                         if ("---SUGGESTIONS---".startsWith(suffix)) {
-                            pushText = chunkText.substring(0, chunkText.length() - Math.min(i, chunkText.length()));
+                            pushText = text.substring(0, text.length() - Math.min(i, text.length()));
                             break;
                         }
                     }
 
+                    // 转发到前端 SSE
                     if (!pushText.isEmpty()) {
                         try {
                             emitter.send(SseEmitter.event().name("message")
-                                    .data(objectMapper.writeValueAsString(Map.of("type", "content", "text", pushText))));
+                                    .data(objectMapper.writeValueAsString(
+                                            Map.of("type", "content", "text", pushText))));
                         } catch (IOException e) {
                             eventSource.cancel();
                         }
                     }
+
                 } catch (JsonProcessingException e) {
-                    log.warn("解析 DashScope SSE 数据失败: {}", data, e);
+                    log.warn("解析 App API SSE 数据失败: {}", data, e);
                 }
             }
 
             @Override
             public void onFailure(EventSource eventSource, Throwable t, Response response) {
-                log.error("DashScope SSE 连接失败", t);
+                if (response != null) {
+                    try {
+                        String respBody = response.body() != null ? response.body().string() : "null";
+                        log.error("App API SSE 连接失败: HTTP {}, body={}", response.code(), respBody);
+                        apiError.set("HTTP " + response.code() + ": " + respBody);
+                    } catch (IOException ignored) {
+                        apiError.set(t.getMessage());
+                    }
+                } else {
+                    apiError.set(t.getMessage());
+                }
+                log.error("App API SSE 连接失败, 异常详情: ", t);
                 synchronized (lock) {
                     lock.notifyAll();
                 }
@@ -270,122 +309,125 @@ public class AiChatServiceImpl implements AiChatService {
             Thread.currentThread().interrupt();
         }
 
+        // 如果 API 调用失败，抛出异常让上层 catch 块向前端发送错误事件
+        String errMsg = apiError.get();
+        if (errMsg != null) {
+            throw new IOException("百炼应用 API 调用失败: " + errMsg);
+        }
+
         return fullContent.toString();
     }
 
-    // ==================== Prompt 构建 ====================
-
-    private String buildSystemPrompt(String knowledgeContext) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("你是 HRMS（人力资源管理系统）的智能助手。请严格遵守以下规则：\n\n");
-
-        sb.append("## 回答规则\n");
-        sb.append("1. 如果用户询问公司制度或政策，请优先使用提供的知识片段回答，并标注引用来源。\n");
-        sb.append("2. 如果知识片段不足以回答，请说明不确定，不要编造信息。\n");
-        sb.append("3. 回答应简洁、专业、友好，使用中文。\n");
-
-        sb.append("\n## 意图识别与路由建议\n");
-        sb.append("识别用户的操作意图，在回答末尾输出路由建议。格式如下：\n\n");
-        sb.append("---SUGGESTIONS---\n");
-        sb.append("[{\"label\":\"去请假管理\",\"path\":\"/attendance/leaveManage\"}]\n\n");
-        sb.append("### 可识别的意图与对应路由\n");
-        sb.append("- 请假管理相关 → /attendance/leaveManage\n");
-        sb.append("- 查工资/薪资/工资条 → /salary/payslip\n");
-        sb.append("- 查考勤记录 → /attendance/record\n");
-        sb.append("- 查加班 → /attendance/record\n");
-        sb.append("- 调岗/转岗 → /process/transfer\n");
-        sb.append("- 入职申请 → /process/entry\n");
-        sb.append("- 转正申请 → /process/regular\n");
-        sb.append("- 离职申请 → /process/leave\n");
-        sb.append("- 查员工信息 → /employee/list\n");
-        sb.append("- 查个人档案 → /profile/index\n");
-        sb.append("- 审批/待审批 → /approval/workspace\n\n");
-        sb.append("如果无法识别明确意图，不输出 SUGGESTIONS 块。\n");
-        sb.append("如果识别到多个意图，可以输出多条建议。\n");
-
-        if (knowledgeContext != null && !knowledgeContext.isBlank()) {
-            sb.append("\n## 知识库参考\n");
-            sb.append("以下是相关制度文档片段供参考：\n");
-            sb.append(knowledgeContext);
-        }
-
-        return sb.toString();
-    }
-
-    // ==================== 百炼知识库检索 ====================
-
     /**
-     * DashScope 百炼知识库检索
-     * <p>
-     * 调用 DashScope SearchMemory API 检索知识库，返回相关文档片段。
-     * 未配置 knowledgeBaseId 时返回空字符串。
+     * 回退：直接调用 DashScope LLM（OpenAI 兼容模式，无知识库）
+     * 当未配置百炼应用 appId 时使用。
      */
-    @SuppressWarnings("unchecked")
-    private String retrieveKnowledge(String query) {
+    private String callDirectLLM(SseEmitter emitter, List<MessageEntity> history,
+                                  String userContent) throws IOException {
         String apiKey = aiConfig.getApiKey();
-        String kbId = aiConfig.getKnowledgeBaseId();
-        if (apiKey == null || apiKey.isBlank() || kbId == null || kbId.isBlank()) {
-            return "";
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new GlobalException(AiErrorCode.AI_SERVICE_ERROR);
         }
 
-        try {
-            OkHttpClient client = new OkHttpClient.Builder()
-                    .callTimeout(java.time.Duration.ofMillis(aiConfig.getTimeout()))
-                    .readTimeout(java.time.Duration.ofMillis(aiConfig.getTimeout()))
-                    .build();
+        // 构建消息列表
+        List<Map<String, String>> messages = new ArrayList<>();
+        messages.add(Map.of("role", "system", "content",
+                "你是 HRMS（人力资源管理系统）的智能助手。请用中文简洁、专业地回答用户问题。"));
 
-            Map<String, Object> body = new HashMap<>();
-            body.put("memory_id", kbId);
-            body.put("query", query);
-            body.put("top_k", 5);
-            body.put("threshold", 0.5);
+        // 历史消息（最近 20 条 ≈ 10 轮）
+        int startIdx = Math.max(0, history.size() - 20);
+        for (int i = startIdx; i < history.size(); i++) {
+            MessageEntity msg = history.get(i);
+            messages.add(Map.of("role", msg.getRole(), "content", msg.getContent()));
+        }
+        messages.add(Map.of("role", "user", "content", userContent));
 
-            Request request = new Request.Builder()
-                    .url("https://dashscope.aliyuncs.com/api/v2/apps/memory/search")
-                    .post(RequestBody.create(objectMapper.writeValueAsString(body),
-                            okhttp3.MediaType.parse("application/json")))
-                    .header("Authorization", "Bearer " + apiKey)
-                    .build();
+        // 构建请求 JSON（OpenAI 兼容格式）
+        Map<String, Object> requestBody = new HashMap<>();
+        requestBody.put("model", aiConfig.getModel());
+        requestBody.put("messages", messages);
+        requestBody.put("stream", true);
+        requestBody.put("temperature", 0.7);
+        String jsonBody = objectMapper.writeValueAsString(requestBody);
 
-            try (Response response = client.newCall(request).execute()) {
-                if (!response.isSuccessful() || response.body() == null) {
-                    log.warn("DashScope 知识库检索失败: HTTP {}", response.code());
-                    return "";
+        OkHttpClient httpClient = new OkHttpClient.Builder()
+                .callTimeout(java.time.Duration.ofMillis(aiConfig.getTimeout()))
+                .readTimeout(java.time.Duration.ofMillis(aiConfig.getTimeout()))
+                .build();
+
+        Request request = new Request.Builder()
+                .url(aiConfig.getBaseUrl() + "/compatible-mode/v1/chat/completions")
+                .post(RequestBody.create(jsonBody, okhttp3.MediaType.parse("application/json")))
+                .header("Authorization", "Bearer " + apiKey)
+                .build();
+
+        StringBuilder fullContent = new StringBuilder();
+        Object lock = new Object();
+
+        EventSource.Factory factory = EventSources.createFactory(httpClient);
+        factory.newEventSource(request, new EventSourceListener() {
+            @Override
+            public void onEvent(EventSource eventSource, String id, String type, String data) {
+                if ("[DONE]".equals(data)) return;
+                try {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> chunk = objectMapper.readValue(data, Map.class);
+                    List<Map<String, Object>> choices = (List<Map<String, Object>>) chunk.get("choices");
+                    if (choices == null || choices.isEmpty()) return;
+
+                    Map<String, Object> choice = choices.get(0);
+                    Map<String, Object> delta = (Map<String, Object>) choice.get("delta");
+                    if (delta == null) return;
+
+                    String chunkText = (String) delta.get("content");
+                    if (chunkText == null || chunkText.isEmpty()) return;
+
+                    fullContent.append(chunkText);
+
+                    try {
+                        emitter.send(SseEmitter.event().name("message")
+                                .data(objectMapper.writeValueAsString(
+                                        Map.of("type", "content", "text", chunkText))));
+                    } catch (IOException e) {
+                        eventSource.cancel();
+                    }
+                } catch (JsonProcessingException e) {
+                    log.warn("解析 LLM SSE 数据失败: {}", data, e);
                 }
+            }
 
-                String respBody = response.body().string();
-                Map<String, Object> result = objectMapper.readValue(respBody, Map.class);
-
-                // 解析返回的 chunks
-                Map<String, Object> data = (Map<String, Object>) result.get("data");
-                if (data == null) return "";
-
-                List<Map<String, Object>> chunks = (List<Map<String, Object>>) data.get("chunks");
-                if (chunks == null || chunks.isEmpty()) return "";
-
-                StringBuilder context = new StringBuilder();
-                for (int i = 0; i < chunks.size(); i++) {
-                    Map<String, Object> chunk = chunks.get(i);
-                    String content = (String) chunk.get("content");
-                    String source = (String) chunk.get("source");
-                    if (content != null && !content.isBlank()) {
-                        context.append("\n[").append(i + 1).append("] ");
-                        if (source != null) {
-                            context.append("（来源：").append(source).append("）");
-                        }
-                        context.append(content).append("\n");
+            @Override
+            public void onFailure(EventSource eventSource, Throwable t, Response response) {
+                if (response != null) {
+                    try {
+                        String respBody = response.body() != null ? response.body().string() : "null";
+                        log.error("LLM SSE 连接失败: HTTP {}, body={}", response.code(), respBody);
+                    } catch (IOException ignored) {
                     }
                 }
-
-                if (context.length() > 0) {
-                    log.info("知识库检索成功，获取到 {} 个相关片段", chunks.size());
-                }
-                return context.toString();
+                log.error("LLM SSE 连接失败, 异常详情: ", t);
+                synchronized (lock) { lock.notifyAll(); }
             }
-        } catch (Exception e) {
-            log.error("DashScope 知识库检索异常", e);
-            return "";
+
+            @Override
+            public void onClosed(EventSource eventSource) {
+                synchronized (lock) { lock.notifyAll(); }
+            }
+        });
+
+        try {
+            synchronized (lock) {
+                lock.wait(aiConfig.getTimeout());
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
+
+        if (fullContent.length() == 0) {
+            log.warn("LLM 返回空内容，可能是 API 调用失败");
+        }
+
+        return fullContent.toString();
     }
 
     // ==================== 路由建议解析 ====================

@@ -12,6 +12,7 @@ import {
   RobotOutlined,
   SendOutlined,
   UserOutlined,
+  PauseCircleOutlined,
 } from '@ant-design/icons';
 import { useRequest } from '@umijs/max';
 import {
@@ -384,6 +385,7 @@ const AiChatPage: React.FC = () => {
 
   const messageListRef = useRef<HTMLDivElement>(null);
   const streamingRef = useRef('');
+  const abortRef = useRef<(() => void) | null>(null);
 
   // ---- 数据加载 ----
 
@@ -439,6 +441,31 @@ const AiChatPage: React.FC = () => {
     scrollToBottom();
   }, [messages, streamingContent, scrollToBottom]);
 
+  // ---- 暂停当前回答 ----
+
+  const handlePause = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current();
+      abortRef.current = null;
+    }
+    // 把已收到但未呈现的流式内容作为最终消息保存
+    const partialContent = streamingRef.current;
+    if (partialContent) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now(),
+          role: 'assistant',
+          content: partialContent + '\n\n*（回答已中止）*',
+          createTime: new Date().toISOString(),
+        },
+      ]);
+    }
+    setStreamingContent('');
+    streamingRef.current = '';
+    setIsStreaming(false);
+  }, []);
+
   // ---- SSE 发送消息 ----
 
   const handleSend = useCallback(async () => {
@@ -449,6 +476,7 @@ const AiChatPage: React.FC = () => {
     setIsStreaming(true);
     setError(null);
     streamingRef.current = '';
+    abortRef.current = null;
 
     const tempUserMsg: Message = {
       id: Date.now(),
@@ -461,19 +489,26 @@ const AiChatPage: React.FC = () => {
 
     let pendingSuggestions: Suggestion[] = [];
 
-    await sendChatMessage(
+    const { abort } = sendChatMessage(
       { conversationId: currentId || undefined, content },
       {
         onStart: (conversationId) => {
+          console.log('[SSE] onStart:', conversationId, 'currentId:', currentId);
           if (conversationId !== currentId) {
             setCurrentId(conversationId);
           }
         },
         onContent: (text) => {
+          console.log('[SSE] onContent, text长度:', text.length, '累计:', streamingRef.current.length + text.length);
           streamingRef.current += text;
           setStreamingContent(streamingRef.current);
         },
         onEnd: (reason, rawData) => {
+          console.log('[SSE] onEnd:', reason, '累计内容长度:', streamingRef.current.length);
+          abortRef.current = null;
+          // 如果用户手动中止，已由 handlePause 处理
+          if (reason === 'abort') return;
+
           // 解析 end 事件中的路由建议
           if (rawData) {
             try {
@@ -507,6 +542,7 @@ const AiChatPage: React.FC = () => {
           refreshConversations();
         },
         onError: (code, msg) => {
+          abortRef.current = null;
           antMsg.error(msg || 'AI 响应异常');
           setError(msg || 'AI 响应异常，请稍后重试');
           setStreamingContent('');
@@ -515,6 +551,7 @@ const AiChatPage: React.FC = () => {
         },
       },
     );
+    abortRef.current = abort;
   }, [inputValue, isStreaming, currentId, refreshConversations]);
 
   // ---- 键盘事件 ----
@@ -784,16 +821,26 @@ const AiChatPage: React.FC = () => {
             disabled={isStreaming}
             style={{ flex: 1, resize: 'none' }}
           />
-          <Button
-            type="primary"
-            icon={<SendOutlined />}
-            onClick={handleSend}
-            loading={isStreaming}
-            disabled={!inputValue.trim() || isStreaming}
-            style={{ height: 52 }}
-          >
-            发送
-          </Button>
+          {isStreaming ? (
+            <Button
+              danger
+              icon={<PauseCircleOutlined />}
+              onClick={handlePause}
+              style={{ height: 52 }}
+            >
+              暂停
+            </Button>
+          ) : (
+            <Button
+              type="primary"
+              icon={<SendOutlined />}
+              onClick={handleSend}
+              disabled={!inputValue.trim()}
+              style={{ height: 52 }}
+            >
+              发送
+            </Button>
+          )}
         </div>
       </div>
     </div>
