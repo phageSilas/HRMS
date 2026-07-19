@@ -4,6 +4,7 @@ import type { UserInfo } from '@/types/user';
 import {
   calculateSalaryBatch,
   createSalaryBatch,
+  exportSalaryBatch,
   getCurrentSalaryBatch,
   getSalaryBatchTrend,
   previewSalaryBatch,
@@ -12,6 +13,7 @@ import {
   submitSalaryBatch,
   type SalaryBatch,
   type SalaryBatchAdjustmentItem,
+  type SalaryBatchExportResult,
   type SalaryBatchItem,
   type SalaryBatchPreview,
   type SalaryBatchTrendItem,
@@ -248,6 +250,25 @@ function buildSocialFundData(items: SalaryBatchItem[]) {
   return Object.entries(totals).map(([type, amount]) => ({ type, amount }));
 }
 
+async function downloadExportFile(result: SalaryBatchExportResult) {
+  const token = localStorage.getItem('token');
+  const response = await fetch(result.downloadUrl, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!response.ok) {
+    throw new Error('文件下载失败');
+  }
+  const blob = await response.blob();
+  const blobUrl = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  link.download = result.fileName || '薪资核算.xlsx';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(blobUrl);
+}
+
 const SalaryBatchPage: React.FC = () => {
   const currentUser = getCurrentUserFromStorage();
   const canManage = isManagementRole(currentUser);
@@ -267,6 +288,7 @@ const SalaryBatchPage: React.FC = () => {
   const [creating, setCreating] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
   const [submittingApproval, setSubmittingApproval] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [adjustmentModalOpen, setAdjustmentModalOpen] = useState(false);
   const [adjustmentSubmitting, setAdjustmentSubmitting] = useState(false);
   const [adjustingItem, setAdjustingItem] = useState<SalaryBatchItem>();
@@ -471,6 +493,23 @@ const SalaryBatchPage: React.FC = () => {
     });
   };
 
+  const handleExportBatch = async () => {
+    if (!currentBatch?.id) {
+      return;
+    }
+    try {
+      setExporting(true);
+      const result = await exportSalaryBatch(currentBatch.id);
+      await downloadExportFile(result);
+      message.success('Excel 导出成功');
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'Excel 导出失败';
+      message.error(messageText);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const openAdjustmentModal = (item: SalaryBatchItem) => {
     setAdjustingItem(item);
     adjustmentForm.resetFields();
@@ -547,6 +586,8 @@ const SalaryBatchPage: React.FC = () => {
     canManage && currentBatch?.batchStatus === 'PENDING_REVIEW';
   const canSubmitApproval =
     canManage && currentBatch?.batchStatus === 'PENDING_REVIEW';
+  const canExportBatch =
+    canManage && ['APPROVED', 'RELEASED'].includes(currentBatch?.batchStatus || '');
 
   const filteredPreviewItems = useMemo(() => {
     const items = (previewData?.items || []).map((item) =>
@@ -1034,6 +1075,15 @@ const SalaryBatchPage: React.FC = () => {
                 </Col>
                 <Col xs={24} lg="auto">
                   <Space wrap>
+                    {canExportBatch ? (
+                      <Button
+                        icon={<FileDoneOutlined />}
+                        loading={exporting}
+                        onClick={() => void handleExportBatch()}
+                      >
+                        导出为Excel
+                      </Button>
+                    ) : null}
                     {canManage && currentBatch.batchStatus === 'PENDING_REVIEW' ? (
                       <Button
                         icon={<EditOutlined />}
