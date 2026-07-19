@@ -42,7 +42,7 @@ const resultOptions = [
 ];
 
 const statusMeta: Record<number, { text: string; color: string }> = {
-  0: { text: '待转正', color: 'gold' },
+  0: { text: '待审批', color: 'gold' },
   1: { text: '审批中', color: 'processing' },
   2: { text: '已通过', color: 'success' },
   3: { text: '已驳回', color: 'error' },
@@ -131,7 +131,7 @@ const RegularPage: React.FC = () => {
       search: false,
       render: (_, record) => {
         const meta = statusMeta[record.approvalStatus ?? 0] || {
-          text: record.approvalStatusDesc || '待转正',
+          text: record.approvalStatusDesc || '待审批',
           color: 'default',
         };
         return <Tag color={meta.color}>{record.approvalStatusDesc || meta.text}</Tag>;

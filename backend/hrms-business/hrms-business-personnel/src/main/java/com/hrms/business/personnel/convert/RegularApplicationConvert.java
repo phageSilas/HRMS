@@ -17,6 +17,8 @@ public final class RegularApplicationConvert {
 
     private static final String EVALUATION_EVALUATED = "evaluated";
 
+    private static final String PENDING_APPROVAL_DESC = "待审批";
+
     private RegularApplicationConvert() {
     }
 
@@ -59,7 +61,9 @@ public final class RegularApplicationConvert {
                 .remainingDays(probationEndDate == null ? null : ChronoUnit.DAYS.between(LocalDate.now(), probationEndDate))
                 .evaluationStatus(EVALUATION_PENDING)
                 .approvalStatus(approvalStatus)
-                .approvalStatusDesc(ApplicationStatusEnum.getDescByCode(approvalStatus))
+                .approvalStatusDesc(regularApplication == null
+                        ? PENDING_APPROVAL_DESC
+                        : ApplicationStatusEnum.getDescByCode(approvalStatus))
                 .createTime(regularApplication == null ? employeeSnapshot.getCreateTime() : regularApplication.getCreateTime())
                 .build();
     }
