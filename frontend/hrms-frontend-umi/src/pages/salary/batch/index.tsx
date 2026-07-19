@@ -1,4 +1,5 @@
 import { usePageAutoRefresh } from '@/hooks/usePageAutoRefresh';
+import { getDeptList, type DeptListItem } from '@/services/organization';
 import type { UserInfo } from '@/types/user';
 import {
   calculateSalaryBatch,
@@ -56,6 +57,7 @@ const { Text, Title } = Typography;
 
 const STORAGE_PREFIX = 'salary-batch-month';
 const MANAGEMENT_ROLES = new Set(['FINANCE', 'HR', 'HR_TEST', 'ADMIN', 'ROLE_ADMIN']);
+const PREVIEW_DEFAULT_PAGE_SIZE = 10;
 const ADJUSTMENT_ITEM_OPTIONS = [
   { label: '补贴', value: 'ALLOWANCE' },
   { label: '绩效奖金', value: 'PERFORMANCE_BONUS' },
@@ -250,6 +252,11 @@ const SalaryBatchPage: React.FC = () => {
   const [currentBatch, setCurrentBatch] = useState<SalaryBatch | null>();
   const [previewData, setPreviewData] = useState<SalaryBatchPreview>();
   const [trendData, setTrendData] = useState<SalaryBatchTrendItem[]>([]);
+  const [departmentOptions, setDepartmentOptions] = useState<DeptListItem[]>([]);
+  const [departmentLoading, setDepartmentLoading] = useState(false);
+  const [selectedDeptName, setSelectedDeptName] = useState<string>();
+  const [previewPageNum, setPreviewPageNum] = useState(1);
+  const [previewPageSize, setPreviewPageSize] = useState(PREVIEW_DEFAULT_PAGE_SIZE);
   const [loadingCurrent, setLoadingCurrent] = useState(false);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [loadingTrend, setLoadingTrend] = useState(false);
@@ -320,6 +327,20 @@ const SalaryBatchPage: React.FC = () => {
     }
   };
 
+  const loadDepartments = async () => {
+    setDepartmentLoading(true);
+    try {
+      const departments = await getDeptList();
+      setDepartmentOptions(departments || []);
+    } catch (error) {
+      const messageText =
+        error instanceof Error ? error.message : '部门列表加载失败';
+      message.error(messageText);
+    } finally {
+      setDepartmentLoading(false);
+    }
+  };
+
   const loadWorkspace = async (selectedMonth: string) => {
     const batch = await loadCurrentBatch(selectedMonth);
     if (batch?.id) {
@@ -337,6 +358,14 @@ const SalaryBatchPage: React.FC = () => {
   useEffect(() => {
     void loadWorkspace(month);
   }, [month]);
+
+  useEffect(() => {
+    void loadDepartments();
+  }, []);
+
+  useEffect(() => {
+    setPreviewPageNum(1);
+  }, [selectedDeptName, previewData?.batch?.id]);
 
   useEffect(() => {
     if (pollingRef.current) {
@@ -493,6 +522,19 @@ const SalaryBatchPage: React.FC = () => {
     canManage &&
     currentBatch?.batchStatus === 'PENDING_REVIEW' &&
     toNumber(currentBatch?.blockCount) === 0;
+
+  const filteredPreviewItems = useMemo(() => {
+    const items = previewData?.items || [];
+    if (!selectedDeptName) {
+      return items;
+    }
+    return items.filter((item) => item.deptName === selectedDeptName);
+  }, [previewData?.items, selectedDeptName]);
+
+  const pagedPreviewItems = useMemo(() => {
+    const startIndex = (previewPageNum - 1) * previewPageSize;
+    return filteredPreviewItems.slice(startIndex, startIndex + previewPageSize);
+  }, [filteredPreviewItems, previewPageNum, previewPageSize]);
 
   const columns: ColumnsType<SalaryBatchItem> = [
     {
@@ -723,6 +765,23 @@ const SalaryBatchPage: React.FC = () => {
               title="核算预览"
               extra={
                 <Space>
+                  <Select
+                    allowClear
+                    showSearch
+                    loading={departmentLoading}
+                    placeholder="按部门名称查询"
+                    optionFilterProp="label"
+                    style={{ width: 220 }}
+                    value={selectedDeptName}
+                    options={departmentOptions.map((item) => ({
+                      label: item.deptName,
+                      value: item.deptName,
+                    }))}
+                    onChange={(value) => {
+                      setSelectedDeptName(value);
+                      setPreviewPageNum(1);
+                    }}
+                  />
                   {toNumber(currentBatch.blockCount) > 0 ? (
                     <Tag color="error">存在阻断异常，需处理后才能提交审批</Tag>
                   ) : null}
@@ -735,9 +794,19 @@ const SalaryBatchPage: React.FC = () => {
               <Table<SalaryBatchItem>
                 rowKey={(record) => String(record.id || `${record.batchId}-${record.employeeId}`)}
                 columns={columns}
-                dataSource={previewData?.items || []}
+                dataSource={pagedPreviewItems}
                 scroll={{ x: 1480 }}
-                pagination={false}
+                pagination={{
+                  current: previewPageNum,
+                  pageSize: previewPageSize,
+                  total: filteredPreviewItems.length,
+                  showSizeChanger: true,
+                  showTotal: (total) => `共 ${total} 条`,
+                  onChange: (page, pageSize) => {
+                    setPreviewPageNum(page);
+                    setPreviewPageSize(pageSize);
+                  },
+                }}
                 onRow={(record) => ({
                   style:
                     record.warningLevel === 'BLOCK'
