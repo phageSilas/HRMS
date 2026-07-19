@@ -41,7 +41,7 @@ instance.interceptors.request.use(
 // 响应拦截器：处理 Result<T> 格式
 instance.interceptors.response.use(
   (response: AxiosResponse) => {
-    const { code, message: msg, data } = response.data;
+    const { code, message: msg, data } = response.data || {};
 
     // 成功：后端统一成功码为 20000，兼容早期前端 mock 的 0。
     if (code === 20000 || code === 0) {

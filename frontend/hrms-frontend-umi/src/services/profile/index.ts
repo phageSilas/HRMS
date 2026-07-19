@@ -47,6 +47,11 @@ export interface ProfileUpdateRequest {
   emergencyPhone?: string;
 }
 
+/** 考勤状态枚举 */
+export type AttendanceStatus =
+  | 'NORMAL' | 'LATE' | 'EARLY_LEAVE'
+  | 'MISSED' | 'LEAVE' | 'HOLIDAY' | 'ABSENT';
+
 /** 考勤日历中的某一天 */
 export interface AttendanceDayVO {
   date: string;
@@ -54,6 +59,9 @@ export interface AttendanceDayVO {
   statusDesc: string;
   clockInTime?: string;
   clockOutTime?: string;
+  leaveType?: string;
+  leaveTypeDesc?: string;
+  correctionStatus?: string;
 }
 
 /** 考勤日历 VO */
@@ -236,6 +244,17 @@ export interface OvertimeRecordVO {
   approvalStatusDesc: string;
   approvalInstanceId?: number;
   createTime: string;
+}
+
+/** 考勤统计数据映射（用于前端统计） */
+export interface AttendanceStats {
+  NORMAL: number;
+  LATE: number;
+  EARLY_LEAVE: number;
+  MISSED: number;
+  LEAVE: number;
+  HOLIDAY: number;
+  ABSENT: number;
 }
 
 /** 考勤统计 VO */

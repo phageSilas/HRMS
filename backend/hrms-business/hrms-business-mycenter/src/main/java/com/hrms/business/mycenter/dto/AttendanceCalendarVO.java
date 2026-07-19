@@ -36,5 +36,14 @@ public class AttendanceCalendarVO {
 
         @Schema(description = "下班打卡时间 HH:mm")
         private String clockOutTime;
+
+        @Schema(description = "请假类型，仅当 status=LEAVE 时有值")
+        private String leaveType;
+
+        @Schema(description = "请假类型描述")
+        private String leaveTypeDesc;
+
+        @Schema(description = "补卡状态：NONE/PENDING/APPROVED")
+        private String correctionStatus;
     }
 }
