@@ -27,4 +27,7 @@ public class DelegationVO {
 
     @Schema(description = "状态：active / expired / cancelled")
     private String status;
+
+    @Schema(description = "被委托人职位名称")
+    private String position;
 }
