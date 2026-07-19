@@ -142,6 +142,11 @@ function toRequestTime(value?: dayjs.Dayjs) {
   return value ? value.format('HH:mm:ss') : undefined;
 }
 
+function formatHolidayDateLabel(value: string) {
+  const parsed = dayjs(value, 'YYYY-MM-DD');
+  return parsed.isValid() ? parsed.format('YYYY/MM/DD') : value;
+}
+
 function parseLocationRange(value?: string) {
   if (!value) {
     return {};
@@ -771,7 +776,7 @@ const AttendanceGroupsPage: React.FC = () => {
                           );
                         }}
                       >
-                        {item}
+                        {formatHolidayDateLabel(item)}
                       </Tag>
                     ))}
                   </Space>
