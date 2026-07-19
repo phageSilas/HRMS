@@ -1,5 +1,6 @@
 import { usePageAutoRefresh } from '@/hooks/usePageAutoRefresh';
 import type {
+  AttendanceCalendarConfig,
   AttendanceGroup,
   AttendanceGroupRequest,
   AttendanceGroupScopeType,
@@ -7,7 +8,9 @@ import type {
 import {
   createAttendanceGroup,
   deleteAttendanceGroup,
+  getAttendanceCalendarConfig,
   getAttendanceGroups,
+  updateAttendanceCalendarConfig,
   updateAttendanceGroup,
 } from '@/services/attendance';
 import type { EmployeeBrief } from '@/services/employee';
@@ -25,9 +28,11 @@ import {
 import { PageContainer } from '@ant-design/pro-components';
 import { history } from '@umijs/max';
 import {
+  Calendar as AntCalendar,
   Button,
   Card,
   Col,
+  DatePicker,
   Drawer,
   Empty,
   Form,
@@ -100,7 +105,21 @@ const scopeTypeText: Record<AttendanceGroupScopeType, string> = {
   EMPLOYEE: '指定员工',
 };
 
-const weekDays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+const weekdayOptions = [
+  { label: '周一', value: 1 },
+  { label: '周二', value: 2 },
+  { label: '周三', value: 3 },
+  { label: '周四', value: 4 },
+  { label: '周五', value: 5 },
+  { label: '周六', value: 6 },
+  { label: '周日', value: 7 },
+];
+
+const defaultCalendarConfig: AttendanceCalendarConfig = {
+  year: dayjs().year(),
+  workdays: [1, 2, 3, 4, 5],
+  holidayDates: [],
+};
 
 function formatBackendTime(value?: string | number[]) {
   if (!value) return '--:--';
@@ -219,10 +238,26 @@ const AttendanceGroupsPage: React.FC = () => {
   const [postLoading, setPostLoading] = useState(false);
   const [employeeOptions, setEmployeeOptions] = useState<EmployeeBrief[]>([]);
   const [employeeLoading, setEmployeeLoading] = useState(false);
+  const [calendarConfigYear, setCalendarConfigYear] = useState(dayjs().year());
+  const [calendarConfigLoading, setCalendarConfigLoading] = useState(false);
+  const [calendarConfigSaving, setCalendarConfigSaving] = useState(false);
+  const [selectedWorkdays, setSelectedWorkdays] = useState<number[]>(
+    defaultCalendarConfig.workdays,
+  );
+  const [selectedHolidayDates, setSelectedHolidayDates] = useState<string[]>(
+    defaultCalendarConfig.holidayDates,
+  );
+  const [calendarPanelDate, setCalendarPanelDate] = useState(
+    dayjs(`${dayjs().year()}-01-01`, 'YYYY-MM-DD'),
+  );
 
   const departmentTreeData = useMemo(
     () => toTreeSelectData(departmentTree),
     [departmentTree],
+  );
+  const selectedHolidayDateSet = useMemo(
+    () => new Set(selectedHolidayDates),
+    [selectedHolidayDates],
   );
 
   const loadGroups = async () => {
@@ -239,6 +274,25 @@ const AttendanceGroupsPage: React.FC = () => {
       return groups;
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadCalendarConfig = async (year = calendarConfigYear) => {
+    setCalendarConfigLoading(true);
+    try {
+      const config = await getAttendanceCalendarConfig(year);
+      setSelectedWorkdays(
+        (config?.workdays?.length ? config.workdays : defaultCalendarConfig.workdays)
+          .slice()
+          .sort((left, right) => left - right),
+      );
+      setSelectedHolidayDates((config?.holidayDates || []).slice().sort());
+    } catch (error) {
+      const messageText =
+        error instanceof Error ? error.message : '工作日和节假日配置加载失败';
+      message.error(messageText);
+    } finally {
+      setCalendarConfigLoading(false);
     }
   };
 
@@ -302,8 +356,13 @@ const AttendanceGroupsPage: React.FC = () => {
     void loadGroups();
   }, [query]);
 
+  useEffect(() => {
+    void loadCalendarConfig(calendarConfigYear);
+  }, [calendarConfigYear]);
+
   usePageAutoRefresh(() => {
     void loadGroups();
+    void loadCalendarConfig(calendarConfigYear);
   });
 
   useEffect(() => {
@@ -325,6 +384,52 @@ const AttendanceGroupsPage: React.FC = () => {
     () => groups.filter((item) => item.status !== 0).length,
     [groups],
   );
+
+  const toggleWorkday = (value: number) => {
+    setSelectedWorkdays((previous) => {
+      if (previous.includes(value)) {
+        if (previous.length === 1) {
+          message.warning('至少保留一个工作日');
+          return previous;
+        }
+        return previous.filter((item) => item !== value);
+      }
+      return [...previous, value].sort((left, right) => left - right);
+    });
+  };
+
+  const toggleHolidayDate = (value: dayjs.Dayjs) => {
+    const dateText = value.format('YYYY-MM-DD');
+    if (value.year() !== calendarConfigYear) {
+      return;
+    }
+    setSelectedHolidayDates((previous) => {
+      if (previous.includes(dateText)) {
+        return previous.filter((item) => item !== dateText);
+      }
+      return [...previous, dateText].sort();
+    });
+    setCalendarPanelDate(value);
+  };
+
+  const handleSaveCalendarConfig = async () => {
+    try {
+      setCalendarConfigSaving(true);
+      await updateAttendanceCalendarConfig({
+        year: calendarConfigYear,
+        workdays: selectedWorkdays,
+        holidayDates: selectedHolidayDates,
+      });
+      message.success('工作日和节假日配置已保存');
+      await loadCalendarConfig(calendarConfigYear);
+    } catch (error) {
+      const messageText =
+        error instanceof Error ? error.message : '工作日和节假日配置保存失败';
+      message.error(messageText);
+    } finally {
+      setCalendarConfigSaving(false);
+    }
+  };
 
   useEffect(() => {
     if (!drawerOpen) return;
@@ -579,22 +684,107 @@ const AttendanceGroupsPage: React.FC = () => {
 
       <Row gutter={[16, 16]} className={styles.rulePanels}>
         <Col xs={24} lg={12}>
-          <Card bordered={false} className={styles.ruleCard}>
-            <Title level={5}>工作日设置</Title>
-            <Space wrap className={styles.weekLine}>
-              {weekDays.map((day, index) => (
-                <Tag
-                  key={day}
-                  color={index < 5 ? 'blue' : 'default'}
-                  className={styles.weekTag}
+          <Card
+            bordered={false}
+            className={styles.ruleCard}
+            extra={
+              <Space wrap>
+                <DatePicker
+                  picker="year"
+                  allowClear={false}
+                  value={dayjs(`${calendarConfigYear}`, 'YYYY')}
+                  onChange={(value) => {
+                    if (!value) {
+                      return;
+                    }
+                    const nextYear = value.year();
+                    setCalendarConfigYear(nextYear);
+                    setCalendarPanelDate(dayjs(`${nextYear}-01-01`, 'YYYY-MM-DD'));
+                  }}
+                />
+                <Button
+                  type="primary"
+                  loading={calendarConfigSaving}
+                  onClick={() => void handleSaveCalendarConfig()}
                 >
-                  {day}
-                </Tag>
-              ))}
-            </Space>
-            <div className={styles.tipBox}>
-              法定节假日需提前在系统中配置，配置后将自动排除在工作日之外。
-            </div>
+                  保存设置
+                </Button>
+              </Space>
+            }
+          >
+            <Spin spinning={calendarConfigLoading}>
+              <Title level={5}>工作日设置</Title>
+              <Space wrap className={styles.weekLine}>
+                {weekdayOptions.map((item) => {
+                  const selected = selectedWorkdays.includes(item.value);
+                  return (
+                    <Button
+                      key={item.value}
+                      type={selected ? 'primary' : 'default'}
+                      className={styles.weekdayButton}
+                      onClick={() => toggleWorkday(item.value)}
+                    >
+                      {item.label}
+                    </Button>
+                  );
+                })}
+              </Space>
+              <div className={styles.holidaySection}>
+                <div className={styles.holidayHeader}>
+                  <Text strong>法定节假日设置</Text>
+                  <Text type="secondary">{calendarConfigYear} 年</Text>
+                </div>
+                <AntCalendar
+                  fullscreen={false}
+                  validRange={[
+                    dayjs(`${calendarConfigYear}-01-01`, 'YYYY-MM-DD'),
+                    dayjs(`${calendarConfigYear}-12-31`, 'YYYY-MM-DD'),
+                  ]}
+                  value={calendarPanelDate}
+                  onPanelChange={(value) => setCalendarPanelDate(value)}
+                  onSelect={toggleHolidayDate}
+                  fullCellRender={(value) => {
+                    const dateText = value.format('YYYY-MM-DD');
+                    const selected = selectedHolidayDateSet.has(dateText);
+                    return (
+                      <div
+                        className={`${styles.calendarCell} ${
+                          selected ? styles.calendarCellSelected : ''
+                        }`}
+                      >
+                        {value.date()}
+                      </div>
+                    );
+                  }}
+                />
+                {selectedHolidayDates.length > 0 ? (
+                  <Space wrap className={styles.holidayTags}>
+                    {selectedHolidayDates.map((item) => (
+                      <Tag
+                        key={item}
+                        closable
+                        color="orange"
+                        onClose={(event) => {
+                          event.preventDefault();
+                          setSelectedHolidayDates((previous) =>
+                            previous.filter((date) => date !== item),
+                          );
+                        }}
+                      >
+                        {item}
+                      </Tag>
+                    ))}
+                  </Space>
+                ) : (
+                  <Text type="secondary" className={styles.holidayEmpty}>
+                    当前年份暂未选择法定节假日
+                  </Text>
+                )}
+              </div>
+              <div className={styles.tipBox}>
+                已选法定节假日将自动排除在工作日之外。
+              </div>
+            </Spin>
           </Card>
         </Col>
         <Col xs={24} lg={12}>
