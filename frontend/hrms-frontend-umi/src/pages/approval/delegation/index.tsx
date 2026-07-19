@@ -406,7 +406,7 @@ const DelegationPage: React.FC = () => {
         <Space>
           <CheckCircleFilled style={{ color: '#52c41a', fontSize: 16 }} />
           <Text strong style={{ fontSize: 14 }}>
-            当前有效委托
+            委托记录
           </Text>
         </Space>
         <Text type="secondary" style={{ fontSize: 13 }}>

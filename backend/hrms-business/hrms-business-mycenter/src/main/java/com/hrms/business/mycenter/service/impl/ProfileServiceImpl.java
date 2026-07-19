@@ -50,10 +50,24 @@ public class ProfileServiceImpl implements ProfileService {
             }
         }
 
+        // 在职状态描述（与 EmployeeEntity.employmentStatus 一致）
+        if (profile.getEmploymentStatus() != null) {
+            switch (profile.getEmploymentStatus()) {
+                case 1 -> profile.setEmploymentStatusDesc("试用期");
+                case 2 -> profile.setEmploymentStatusDesc("正式");
+                case 3 -> profile.setEmploymentStatusDesc("待离职");
+                case 4 -> profile.setEmploymentStatusDesc("已离职");
+                default -> profile.setEmploymentStatusDesc("未知");
+            }
+        }
+
         // 字段权限（静态配置，后续可对接 FieldPermissionService）
         ProfileVO.FieldPermissions fp = new ProfileVO.FieldPermissions();
-        fp.setEditableFields(Arrays.asList("email", "currentAddress", "emergencyContact"));
-        fp.setFlowRequiredFields(Arrays.asList("phone", "deptName", "postName"));
+        // 联系信息可编辑
+        fp.setEditableFields(Arrays.asList("email", "currentAddress", "emergencyContact", "emergencyPhone"));
+        // 需走流程（联系 HR）的字段
+        fp.setFlowRequiredFields(Arrays.asList("phone", "deptName", "postName", "employeeNo", "hireDate"));
+        // 完全锁定的字段
         fp.setLockedFields(Arrays.asList("idCard", "bankAccount"));
         profile.setFieldPermissions(fp);
 

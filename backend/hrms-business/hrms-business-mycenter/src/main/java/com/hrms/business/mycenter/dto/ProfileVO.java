@@ -66,6 +66,12 @@ public class ProfileVO {
     @Schema(description = "现居地址")
     private String currentAddress;
 
+    @Schema(description = "在职状态：1-试用期 2-正式 3-待离职 4-已离职")
+    private Integer employmentStatus;
+
+    @Schema(description = "在职状态描述")
+    private String employmentStatusDesc;
+
     @Schema(description = "字段权限")
     private FieldPermissions fieldPermissions;
 

@@ -28,6 +28,8 @@ export interface ProfileVO {
   jobLevel?: string;
   leaderId?: number;
   hireDate: string;
+  employmentStatus?: number;
+  employmentStatusDesc?: string;
   currentAddress?: string;
   fieldPermissions?: {
     editableFields: string[];
