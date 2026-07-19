@@ -96,6 +96,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -225,10 +226,14 @@ public class AttendanceServiceImpl implements AttendanceService {
     @Transactional(rollbackFor = Exception.class)
     public AttendanceGroupPageVO updateAttendanceGroup(Long id, AttendanceGroupCreateOrUpdateRequestDTO requestDTO) {
         AttendanceGroupEntity entity = getRequiredAttendanceGroup(id);
+        String previousScopeType = entity.getScopeType();
+        String previousScopeValue = entity.getScopeValue();
         AttendanceGroupConvert.fillEntity(entity, requestDTO);
         fillGroupScope(entity, requestDTO.getMemberRange());
         attendanceGroupMapper.updateById(entity);
-        rebuildGroupMembers(id, requestDTO.getMemberRange());
+        if (isGroupScopeChanged(previousScopeType, previousScopeValue, entity.getScopeType(), entity.getScopeValue())) {
+            rebuildGroupMembers(id, requestDTO.getMemberRange());
+        }
         evictGroupRuleCache(id);
         return fillAttendanceGroupScope(AttendanceGroupConvert.toPageVO(entity));
     }
@@ -373,6 +378,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                                                                    Map<Long, String> deptNameCache,
                                                                    AttendanceDateRange dateRange,
                                                                    AttendanceGroupRecordQueryDTO queryDTO) {
+        LocalDate today = LocalDate.now();
         List<LocalDate> dates = IntStream.rangeClosed(0, (int) ChronoUnit.DAYS.between(dateRange.startDate(), dateRange.endDate()))
                 .mapToObj(dateRange.startDate()::plusDays)
                 .toList();
@@ -387,6 +393,9 @@ public class AttendanceServiceImpl implements AttendanceService {
                 continue;
             }
             for (LocalDate date : dates) {
+                if (date.isAfter(today)) {
+                    continue;
+                }
                 if (!isMemberEffectiveOnDate(members, employeeId, date)) {
                     continue;
                 }
@@ -2625,6 +2634,51 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     /**
+     * 判断考勤组适用范围是否发生变化。
+     *
+     * @param previousScopeType 变更前范围类型
+     * @param previousScopeValue 变更前范围值
+     * @param currentScopeType 变更后范围类型
+     * @param currentScopeValue 变更后范围值
+     * @return 是否发生变化
+     * 本方法使用的工具类: Objects(JDK),JSONUtil(hutool)
+     */
+    private boolean isGroupScopeChanged(String previousScopeType,
+                                        String previousScopeValue,
+                                        String currentScopeType,
+                                        String currentScopeValue) {
+        String normalizedPreviousScopeType = normalizeScopeType(previousScopeType);
+        String normalizedCurrentScopeType = normalizeScopeType(currentScopeType);
+        if (!Objects.equals(normalizedPreviousScopeType, normalizedCurrentScopeType)) {
+            return true;
+        }
+        if (normalizedPreviousScopeType == null) {
+            return false;
+        }
+
+        JSONObject previousScopeJson = parseScopeValue(previousScopeValue);
+        JSONObject currentScopeJson = parseScopeValue(currentScopeValue);
+        return switch (normalizedPreviousScopeType) {
+            case GROUP_SCOPE_DEPT -> !Objects.equals(
+                    normalizeIds(getLongList(previousScopeJson, "deptIds")),
+                    normalizeIds(getLongList(currentScopeJson, "deptIds"))
+            );
+            case GROUP_SCOPE_POST -> !Objects.equals(
+                    previousScopeJson.getLong("postId"),
+                    currentScopeJson.getLong("postId")
+            );
+            case GROUP_SCOPE_EMPLOYEE -> !Objects.equals(
+                    previousScopeJson.getLong("deptId"),
+                    currentScopeJson.getLong("deptId")
+            ) || !Objects.equals(
+                    normalizeIds(getLongList(previousScopeJson, "employeeIds")),
+                    normalizeIds(getLongList(currentScopeJson, "employeeIds"))
+            );
+            default -> !Objects.equals(previousScopeJson.toString(), currentScopeJson.toString());
+        };
+    }
+
+    /**
      * 插入考勤组成员关系。
      *
      * @param groupId     考勤组ID
@@ -2739,6 +2793,20 @@ public class AttendanceServiceImpl implements AttendanceService {
             log.warn("parse attendance group scope value failed, scopeValue={}", scopeValue, ex);
             return new JSONObject();
         }
+    }
+
+    /**
+     * 规范化适用范围类型。
+     *
+     * @param scopeType 范围类型
+     * @return 规范化后的范围类型
+     * 本方法使用的工具类: StrUtil(hutool)
+     */
+    private String normalizeScopeType(String scopeType) {
+        if (StrUtil.isBlank(scopeType)) {
+            return null;
+        }
+        return scopeType.trim().toUpperCase();
     }
 
     /**
