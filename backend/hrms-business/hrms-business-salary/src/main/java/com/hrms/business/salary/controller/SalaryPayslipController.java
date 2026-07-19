@@ -4,7 +4,7 @@ import com.hrms.business.salary.dto.SalaryManagePayslipVerifyRequestDTO;
 import com.hrms.business.salary.dto.SalaryManagePayslipQueryDTO;
 import com.hrms.business.salary.dto.SalaryPayslipPageQueryDTO;
 import com.hrms.business.salary.dto.SalaryPayslipVerifyRequestDTO;
-import com.hrms.business.salary.service.SalaryService;
+import com.hrms.business.salary.service.PaySlipService;
 import com.hrms.business.salary.vo.SalaryPayslipDetailVO;
 import com.hrms.business.salary.vo.SalaryPayslipListVO;
 import com.hrms.business.salary.vo.SalaryPayslipVerifyVO;
@@ -34,7 +34,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SalaryPayslipController {
 
-    private final SalaryService salaryService;
+    private final PaySlipService paySlipService;
 
     /**
      * 查询当前员工工资条列表。
@@ -45,7 +45,7 @@ public class SalaryPayslipController {
      */
     @GetMapping("/payslips")
     public Result<List<SalaryPayslipListVO>> listPayslips(@RequestParam(required = false) String month) {
-        return Result.success(salaryService.listPayslips(month));
+        return Result.success(paySlipService.listPayslips(month));
     }
 
     /**
@@ -57,7 +57,7 @@ public class SalaryPayslipController {
      */
     @GetMapping("/payslips/page")
     public Result<PageResult<SalaryPayslipListVO>> pagePayslips(@Valid SalaryPayslipPageQueryDTO queryDTO) {
-        return Result.success(salaryService.pagePayslips(queryDTO));
+        return Result.success(paySlipService.pagePayslips(queryDTO));
     }
 
     /**
@@ -70,7 +70,7 @@ public class SalaryPayslipController {
     @PostMapping("/payslip/verify")
     public Result<SalaryPayslipVerifyVO> verifyPayslip(
             @Valid @RequestBody SalaryPayslipVerifyRequestDTO requestDTO) {
-        return Result.success(salaryService.verifyPayslip(requestDTO));
+        return Result.success(paySlipService.verifyPayslip(requestDTO));
     }
 
     /**
@@ -83,7 +83,7 @@ public class SalaryPayslipController {
     @PostMapping("/manage/payslip/verify")
     public Result<SalaryPayslipVerifyVO> verifyManagePayslip(
             @Valid @RequestBody SalaryManagePayslipVerifyRequestDTO requestDTO) {
-        return Result.success(salaryService.verifyManagePayslip(requestDTO));
+        return Result.success(paySlipService.verifyManagePayslip(requestDTO));
     }
 
     /**
@@ -96,7 +96,7 @@ public class SalaryPayslipController {
     @GetMapping("/manage/payslips")
     public Result<PageResult<SalaryManagePayslipPageVO>> pageManagePayslips(
             @Valid SalaryManagePayslipQueryDTO queryDTO) {
-        return Result.success(salaryService.pageManagePayslips(queryDTO));
+        return Result.success(paySlipService.pageManagePayslips(queryDTO));
     }
 
     /**
@@ -108,7 +108,7 @@ public class SalaryPayslipController {
      */
     @GetMapping("/manage/payslip/{id}")
     public Result<SalaryPayslipDetailVO> getManagePayslipDetail(@PathVariable Long id) {
-        return Result.success(salaryService.getManagePayslipDetail(id));
+        return Result.success(paySlipService.getManagePayslipDetail(id));
     }
 
     /**
@@ -120,7 +120,7 @@ public class SalaryPayslipController {
      */
     @GetMapping("/payslip/{id}")
     public Result<SalaryPayslipDetailVO> getPayslipDetail(@PathVariable Long id) {
-        return Result.success(salaryService.getPayslipDetail(id));
+        return Result.success(paySlipService.getPayslipDetail(id));
     }
 
     /**
@@ -131,6 +131,6 @@ public class SalaryPayslipController {
      */
     @GetMapping("/trend")
     public Result<List<SalaryTrendVO>> getTrend() {
-        return Result.success(salaryService.getTrend());
+        return Result.success(paySlipService.getTrend());
     }
 }

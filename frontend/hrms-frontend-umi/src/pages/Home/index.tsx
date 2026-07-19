@@ -195,6 +195,7 @@ const HomePage: React.FC = () => {
 
   const weatherType = normalizeWeatherType(weatherInfo.type);
   const WeatherIcon = WEATHER_ICON_MAP[weatherType] || OvercastIcon;
+  const isDefaultWeather = weatherInfo.weatherCode?.startsWith('default-');
 
   const welcomeName = useMemo(() => {
     return currentUser?.nickname || currentUser?.username || '同事';
@@ -216,7 +217,7 @@ const HomePage: React.FC = () => {
         setWeatherError(null);
       } else {
         setWeatherInfo(DEFAULT_HOME_WEATHER_INFO);
-        setWeatherError('获取天气失败，已展示默认天气');
+        setWeatherError(null);
       }
 
       setWeatherLoading(false);
@@ -298,7 +299,10 @@ const HomePage: React.FC = () => {
               <div className={styles.weatherType}>
                 {weatherInfo.rawWeatherText || weatherType}
               </div>
-              <div className={styles.weatherTip}>
+              <div
+                className={styles.weatherTip}
+                style={isDefaultWeather && !weatherLoading ? { display: 'none' } : undefined}
+              >
                 {weatherLoading
                   ? '正在同步郑州实时天气'
                   : weatherError || weatherInfo.tip}

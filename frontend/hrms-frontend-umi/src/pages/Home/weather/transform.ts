@@ -10,11 +10,11 @@ import type {
 } from './types';
 
 export const DEFAULT_HOME_WEATHER_INFO: HomeWeatherInfo = {
-  type: '多云',
-  temperature: '15°C',
-  tip: '带好常备轻薄外套',
-  weatherCode: 'default-cloudy',
-  rawWeatherText: '多云',
+  type: '晴天',
+  temperature: '32°C',
+  tip: '',
+  weatherCode: 'default-sunny',
+  rawWeatherText: '晴天',
 };
 
 const SUNNY_CODE_SET = new Set(['0', '00', '100', '900']);

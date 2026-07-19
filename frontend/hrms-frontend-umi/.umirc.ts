@@ -5,7 +5,7 @@ export default defineConfig({
   access: {},
   model: {},
   initialState: {},
-  请求: {},
+  request: {},
   layout: {
     title: 'HRMS 人资管理系统',
   },

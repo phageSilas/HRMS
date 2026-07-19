@@ -11,6 +11,7 @@ import com.hrms.business.salary.dto.SalaryTemplateCreateOrUpdateRequestDTO;
 import com.hrms.business.salary.dto.SalaryTemplateQueryDTO;
 import com.hrms.business.salary.vo.EmployeeSalaryProfileVO;
 import com.hrms.business.salary.vo.SalaryBatchItemVO;
+import com.hrms.business.salary.vo.SalaryBatchExportVO;
 import com.hrms.business.salary.vo.SalaryBatchPreviewVO;
 import com.hrms.business.salary.vo.SalaryBatchTrendVO;
 import com.hrms.business.salary.vo.SalaryBatchVO;
@@ -144,6 +145,14 @@ public interface SalaryService {
      * 本方法使用的工具类: 无
      */
     SalaryBatchPreviewVO previewBatch(Long batchId);
+
+    /**
+     * 导出薪资批次 Excel。
+     *
+     * @param batchId 批次 ID
+     * @return 导出结果
+     */
+    SalaryBatchExportVO exportBatch(Long batchId);
 
     /**
      * 提交薪资批次审批。

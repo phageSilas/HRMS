@@ -2,7 +2,7 @@ package com.hrms.business.salary.controller;
 
 import com.hrms.business.salary.dto.SalaryTemplateCreateOrUpdateRequestDTO;
 import com.hrms.business.salary.dto.SalaryTemplateQueryDTO;
-import com.hrms.business.salary.service.SalaryService;
+import com.hrms.business.salary.service.SalaryTemplateService;
 import com.hrms.business.salary.vo.SalaryTemplatePageVO;
 import com.hrms.common.web.PageResult;
 import com.hrms.common.web.Result;
@@ -26,7 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class SalaryTemplateController {
 
-    private final SalaryService salaryService;
+    private final SalaryTemplateService salaryTemplateService;
 
     /**
      * 分页查询薪资账套。
@@ -37,7 +37,7 @@ public class SalaryTemplateController {
      */
     @GetMapping
     public Result<PageResult<SalaryTemplatePageVO>> pageTemplates(@Valid SalaryTemplateQueryDTO queryDTO) {
-        return Result.success(salaryService.pageTemplates(queryDTO));
+        return Result.success(salaryTemplateService.pageTemplates(queryDTO));
     }
 
     /**
@@ -50,7 +50,7 @@ public class SalaryTemplateController {
     @PostMapping
     public Result<SalaryTemplatePageVO> createTemplate(
             @Valid @RequestBody SalaryTemplateCreateOrUpdateRequestDTO requestDTO) {
-        return Result.success(salaryService.createTemplate(requestDTO));
+        return Result.success(salaryTemplateService.createTemplate(requestDTO));
     }
 
     /**
@@ -65,6 +65,6 @@ public class SalaryTemplateController {
     public Result<SalaryTemplatePageVO> updateTemplate(
             @PathVariable Long id,
             @Valid @RequestBody SalaryTemplateCreateOrUpdateRequestDTO requestDTO) {
-        return Result.success(salaryService.updateTemplate(id, requestDTO));
+        return Result.success(salaryTemplateService.updateTemplate(id, requestDTO));
     }
 }

@@ -2,8 +2,9 @@ package com.hrms.business.salary.controller;
 
 import com.hrms.business.salary.dto.SalaryBatchCreateRequestDTO;
 import com.hrms.business.salary.dto.SalaryBatchAdjustmentRequestDTO;
-import com.hrms.business.salary.service.SalaryService;
+import com.hrms.business.salary.service.SalaryCalculateService;
 import com.hrms.business.salary.vo.SalaryBatchItemVO;
+import com.hrms.business.salary.vo.SalaryBatchExportVO;
 import com.hrms.business.salary.vo.SalaryBatchPreviewVO;
 import com.hrms.business.salary.vo.SalaryBatchTrendVO;
 import com.hrms.business.salary.vo.SalaryBatchVO;
@@ -30,7 +31,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SalaryBatchController {
 
-    private final SalaryService salaryService;
+    private final SalaryCalculateService salaryCalculateService;
 
     /**
      * 创建薪资批次。
@@ -41,7 +42,7 @@ public class SalaryBatchController {
      */
     @PostMapping
     public Result<SalaryBatchVO> createBatch(@Valid @RequestBody SalaryBatchCreateRequestDTO requestDTO) {
-        return Result.success(salaryService.createBatch(requestDTO));
+        return Result.success(salaryCalculateService.createBatch(requestDTO));
     }
 
     /**
@@ -57,7 +58,7 @@ public class SalaryBatchController {
     public Result<SalaryBatchVO> getCurrentBatch(@RequestParam String salaryMonth,
                                                  @RequestParam(required = false) String scopeType,
                                                  @RequestParam(required = false) String scopeValue) {
-        return Result.success(salaryService.getCurrentBatch(salaryMonth, scopeType, scopeValue));
+        return Result.success(salaryCalculateService.getCurrentBatch(salaryMonth, scopeType, scopeValue));
     }
 
     /**
@@ -75,7 +76,7 @@ public class SalaryBatchController {
                                                            @RequestParam(required = false) Integer months,
                                                            @RequestParam(required = false) String scopeType,
                                                            @RequestParam(required = false) String scopeValue) {
-        return Result.success(salaryService.listBatchTrend(anchorMonth, months, scopeType, scopeValue));
+        return Result.success(salaryCalculateService.listBatchTrend(anchorMonth, months, scopeType, scopeValue));
     }
 
     /**
@@ -89,7 +90,7 @@ public class SalaryBatchController {
     @PostMapping("/{id}/adjustments")
     public Result<SalaryBatchItemVO> saveBatchAdjustments(@PathVariable Long id,
                                                           @Valid @RequestBody SalaryBatchAdjustmentRequestDTO requestDTO) {
-        return Result.success(salaryService.saveBatchAdjustments(id, requestDTO));
+        return Result.success(salaryCalculateService.saveBatchAdjustments(id, requestDTO));
     }
 
     /**
@@ -101,7 +102,7 @@ public class SalaryBatchController {
      */
     @PostMapping("/{id}/recalculate")
     public Result<SalaryBatchVO> recalculateBatch(@PathVariable Long id) {
-        return Result.success(salaryService.recalculateBatch(id));
+        return Result.success(salaryCalculateService.recalculateBatch(id));
     }
 
     /**
@@ -113,7 +114,7 @@ public class SalaryBatchController {
      */
     @PostMapping("/{id}/calculate")
     public Result<SalaryBatchVO> calculateBatch(@PathVariable Long id) {
-        return Result.success(salaryService.calculateBatch(id));
+        return Result.success(salaryCalculateService.calculateBatch(id));
     }
 
     /**
@@ -125,7 +126,18 @@ public class SalaryBatchController {
      */
     @GetMapping("/{id}/preview")
     public Result<SalaryBatchPreviewVO> previewBatch(@PathVariable Long id) {
-        return Result.success(salaryService.previewBatch(id));
+        return Result.success(salaryCalculateService.previewBatch(id));
+    }
+
+    /**
+     * 导出薪资批次 Excel。
+     *
+     * @param id 批次 ID
+     * @return 导出结果
+     */
+    @PostMapping("/{id}/export")
+    public Result<SalaryBatchExportVO> exportBatch(@PathVariable Long id) {
+        return Result.success(salaryCalculateService.exportBatch(id));
     }
 
     /**
@@ -137,6 +149,6 @@ public class SalaryBatchController {
      */
     @PostMapping("/{id}/submit")
     public Result<SalaryBatchVO> submitBatch(@PathVariable Long id) {
-        return Result.success(salaryService.submitBatch(id));
+        return Result.success(salaryCalculateService.submitBatch(id));
     }
 }

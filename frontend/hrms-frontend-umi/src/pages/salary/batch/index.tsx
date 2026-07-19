@@ -4,6 +4,7 @@ import type { UserInfo } from '@/types/user';
 import {
   calculateSalaryBatch,
   createSalaryBatch,
+  exportSalaryBatch,
   getCurrentSalaryBatch,
   getSalaryBatchTrend,
   previewSalaryBatch,
@@ -12,6 +13,7 @@ import {
   submitSalaryBatch,
   type SalaryBatch,
   type SalaryBatchAdjustmentItem,
+  type SalaryBatchExportResult,
   type SalaryBatchItem,
   type SalaryBatchPreview,
   type SalaryBatchTrendItem,
@@ -155,6 +157,9 @@ function renderWarningTag(level?: string) {
   if (level === 'YELLOW') {
     return <Tag color="warning">待复核</Tag>;
   }
+  if (level === 'NONE') {
+    return <Tag color="success">无异常</Tag>;
+  }
   return <Tag>{level}</Tag>;
 }
 
@@ -245,6 +250,25 @@ function buildSocialFundData(items: SalaryBatchItem[]) {
   return Object.entries(totals).map(([type, amount]) => ({ type, amount }));
 }
 
+async function downloadExportFile(result: SalaryBatchExportResult) {
+  const token = localStorage.getItem('token');
+  const response = await fetch(result.downloadUrl, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!response.ok) {
+    throw new Error('文件下载失败');
+  }
+  const blob = await response.blob();
+  const blobUrl = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  link.download = result.fileName || '薪资核算.xlsx';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(blobUrl);
+}
+
 const SalaryBatchPage: React.FC = () => {
   const currentUser = getCurrentUserFromStorage();
   const canManage = isManagementRole(currentUser);
@@ -255,6 +279,7 @@ const SalaryBatchPage: React.FC = () => {
   const [departmentOptions, setDepartmentOptions] = useState<DeptListItem[]>([]);
   const [departmentLoading, setDepartmentLoading] = useState(false);
   const [selectedDeptName, setSelectedDeptName] = useState<string>();
+  const [onlyAbnormalPreview, setOnlyAbnormalPreview] = useState(false);
   const [previewPageNum, setPreviewPageNum] = useState(1);
   const [previewPageSize, setPreviewPageSize] = useState(PREVIEW_DEFAULT_PAGE_SIZE);
   const [loadingCurrent, setLoadingCurrent] = useState(false);
@@ -263,6 +288,7 @@ const SalaryBatchPage: React.FC = () => {
   const [creating, setCreating] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
   const [submittingApproval, setSubmittingApproval] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [adjustmentModalOpen, setAdjustmentModalOpen] = useState(false);
   const [adjustmentSubmitting, setAdjustmentSubmitting] = useState(false);
   const [adjustingItem, setAdjustingItem] = useState<SalaryBatchItem>();
@@ -365,7 +391,7 @@ const SalaryBatchPage: React.FC = () => {
 
   useEffect(() => {
     setPreviewPageNum(1);
-  }, [selectedDeptName, previewData?.batch?.id]);
+  }, [onlyAbnormalPreview, selectedDeptName, previewData?.batch?.id]);
 
   useEffect(() => {
     if (pollingRef.current) {
@@ -444,6 +470,46 @@ const SalaryBatchPage: React.FC = () => {
     }
   };
 
+  const handleSubmitApprovalAction = () => {
+    if (!currentBatch?.id) {
+      return;
+    }
+    if (toNumber(currentBatch.blockCount) > 0) {
+      Modal.warning({
+        title: '无法提交审批',
+        content: '当前批次存在阻断异常，请先处理完成后再提交审批。',
+        okText: '我知道了',
+      });
+      return;
+    }
+    Modal.confirm({
+      title: '是否提交审批',
+      content: '提交后将进入审批流程，确认继续提交当前薪资批次吗？',
+      okText: '是',
+      cancelText: '否',
+      onOk: async () => {
+        await handleSubmitApproval();
+      },
+    });
+  };
+
+  const handleExportBatch = async () => {
+    if (!currentBatch?.id) {
+      return;
+    }
+    try {
+      setExporting(true);
+      const result = await exportSalaryBatch(currentBatch.id);
+      await downloadExportFile(result);
+      message.success('Excel 导出成功');
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'Excel 导出失败';
+      message.error(messageText);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const openAdjustmentModal = (item: SalaryBatchItem) => {
     setAdjustingItem(item);
     adjustmentForm.resetFields();
@@ -519,17 +585,27 @@ const SalaryBatchPage: React.FC = () => {
   const canRecalculate =
     canManage && currentBatch?.batchStatus === 'PENDING_REVIEW';
   const canSubmitApproval =
-    canManage &&
-    currentBatch?.batchStatus === 'PENDING_REVIEW' &&
-    toNumber(currentBatch?.blockCount) === 0;
+    canManage && currentBatch?.batchStatus === 'PENDING_REVIEW';
+  const canExportBatch =
+    canManage && ['APPROVED', 'RELEASED'].includes(currentBatch?.batchStatus || '');
 
   const filteredPreviewItems = useMemo(() => {
-    const items = previewData?.items || [];
+    const items = (previewData?.items || []).map((item) =>
+      item.warningLevel === 'NONE'
+        ? {
+            ...item,
+            warningReason: undefined,
+          }
+        : item,
+    );
+    const abnormalFilteredItems = onlyAbnormalPreview
+      ? items.filter((item) => item.warningLevel && item.warningLevel !== 'NONE')
+      : items;
     if (!selectedDeptName) {
-      return items;
+      return abnormalFilteredItems;
     }
-    return items.filter((item) => item.deptName === selectedDeptName);
-  }, [previewData?.items, selectedDeptName]);
+    return abnormalFilteredItems.filter((item) => item.deptName === selectedDeptName);
+  }, [onlyAbnormalPreview, previewData?.items, selectedDeptName]);
 
   const pagedPreviewItems = useMemo(() => {
     const startIndex = (previewPageNum - 1) * previewPageSize;
@@ -765,6 +841,15 @@ const SalaryBatchPage: React.FC = () => {
               title="核算预览"
               extra={
                 <Space>
+                  <Button
+                    type={onlyAbnormalPreview ? 'primary' : 'default'}
+                    onClick={() => {
+                      setOnlyAbnormalPreview((previous) => !previous);
+                      setPreviewPageNum(1);
+                    }}
+                  >
+                    异常薪资
+                  </Button>
                   <Select
                     allowClear
                     showSearch
@@ -990,6 +1075,15 @@ const SalaryBatchPage: React.FC = () => {
                 </Col>
                 <Col xs={24} lg="auto">
                   <Space wrap>
+                    {canExportBatch ? (
+                      <Button
+                        icon={<FileDoneOutlined />}
+                        loading={exporting}
+                        onClick={() => void handleExportBatch()}
+                      >
+                        导出为Excel
+                      </Button>
+                    ) : null}
                     {canManage && currentBatch.batchStatus === 'PENDING_REVIEW' ? (
                       <Button
                         icon={<EditOutlined />}
@@ -1004,7 +1098,7 @@ const SalaryBatchPage: React.FC = () => {
                         type="primary"
                         icon={<CheckCircleOutlined />}
                         loading={submittingApproval}
-                        onClick={() => void handleSubmitApproval()}
+                        onClick={handleSubmitApprovalAction}
                       >
                         提交审批
                       </Button>

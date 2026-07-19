@@ -141,6 +141,12 @@ export interface AttendanceCalendarVO {
   days: AttendanceCalendarDayVO[];
 }
 
+export interface AttendanceCalendarConfig {
+  year: number;
+  workdays: number[];
+  holidayDates: Array<string | number[]>;
+}
+
 export interface AttendanceGroupQuery extends Partial<PageQuery> {
   groupName?: string;
   status?: number;
@@ -289,6 +295,18 @@ export async function getAttendanceGroups(params: AttendanceGroupQuery) {
   return request.get<PageResult<AttendanceGroup>>('/api/v1/attendance/groups', {
     params,
   });
+}
+
+export async function getAttendanceCalendarConfig(year: number) {
+  return request.get<AttendanceCalendarConfig>('/api/v1/attendance/calendar-config', {
+    params: { year },
+  });
+}
+
+export async function updateAttendanceCalendarConfig(
+  data: AttendanceCalendarConfig,
+) {
+  return request.put<AttendanceCalendarConfig>('/api/v1/attendance/calendar-config', data);
 }
 
 /**

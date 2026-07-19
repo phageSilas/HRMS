@@ -141,6 +141,12 @@ export interface SalaryBatchAdjustmentRequest {
   adjustments: SalaryBatchAdjustmentItem[];
 }
 
+export interface SalaryBatchExportResult {
+  fileId: number;
+  fileName?: string;
+  downloadUrl: string;
+}
+
 // ============ 工资条类型 ============
 
 export interface SalaryPayslipVerifyResult {
@@ -273,6 +279,10 @@ export async function recalculateSalaryBatch(batchId: number) {
 
 export async function submitSalaryBatch(batchId: number) {
   return request.post<SalaryBatch>(`/api/v1/salary/batches/${batchId}/submit`);
+}
+
+export async function exportSalaryBatch(batchId: number) {
+  return request.post<SalaryBatchExportResult>(`/api/v1/salary/batches/${batchId}/export`);
 }
 
 // ============ 员工端工资条接口 ============

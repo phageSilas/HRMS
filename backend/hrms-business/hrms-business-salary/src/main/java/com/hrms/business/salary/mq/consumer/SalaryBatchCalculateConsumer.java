@@ -2,7 +2,7 @@ package com.hrms.business.salary.mq.consumer;
 
 import com.hrms.business.salary.mq.event.SalaryBatchCalculateMessage;
 import com.hrms.business.salary.mq.constants.SalaryMqConstants;
-import com.hrms.business.salary.service.impl.SalaryServiceImpl;
+import com.hrms.business.salary.service.SalaryCalculateService;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
 import com.hrms.common.mq.MessageQueueIdempotentHandler;
@@ -19,7 +19,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class SalaryBatchCalculateConsumer {
 
-    private final SalaryServiceImpl salaryService;
+    private final SalaryCalculateService salaryCalculateService;
 
     private final MessageQueueIdempotentHandler messageQueueIdempotentHandler;
 
@@ -39,7 +39,7 @@ public class SalaryBatchCalculateConsumer {
             throw new GlobalException(ErrorCode.CONFLICT, "薪资批次核算消息正在消费中，等待 RabbitMQ 重试");
         }
         try {
-            salaryService.handleBatchCalculateMessage(message);
+            salaryCalculateService.handleBatchCalculateMessage(message);
             messageQueueIdempotentHandler.setAccomplish(messageId);
             log.info("consume salary.batch.calculate success, messageId={}, batchId={}",
                     messageId, message.getBatchId());

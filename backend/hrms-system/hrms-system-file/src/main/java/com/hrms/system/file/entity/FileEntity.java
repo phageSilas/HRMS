@@ -1,47 +1,98 @@
 package com.hrms.system.file.entity;
 
-import com.hrms.common.entity.BaseEntity;
+import com.baomidou.mybatisplus.annotation.FieldFill;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableLogic;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
+import java.io.Serializable;
+import java.time.LocalDateTime;
+
 /**
- * 附件实体
+ * 文件实体。
  */
 @Data
-public class FileEntity extends BaseEntity {
+@TableName("sys_file")
+public class FileEntity implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     /**
-     * 文件名
+     * 主键 ID。
+     */
+    @TableId(type = IdType.AUTO)
+    private Long id;
+
+    /**
+     * 原始文件名。
      */
     private String fileName;
 
     /**
-     * 文件路径
+     * 存储路径。
      */
     private String filePath;
 
     /**
-     * 文件类型
-     */
-    private String fileType;
-
-    /**
-     * 文件大小（字节）
+     * 文件大小（字节）。
      */
     private Long fileSize;
 
     /**
-     * 关联业务类型
+     * 文件类型。
      */
-    private String bizType;
+    private String fileType;
 
     /**
-     * 关联业务ID
+     * MIME 类型。
      */
-    private Long bizId;
+    private String mimeType;
 
     /**
-     * 状态：1-正常，0-删除
+     * 文件 MD5。
      */
-    private Integer status;
+    private String md5;
 
+    /**
+     * 业务类型。
+     */
+    private String businessType;
+
+    /**
+     * 业务 ID。
+     */
+    private Long businessId;
+
+    /**
+     * 创建人。
+     */
+    @TableField(fill = FieldFill.INSERT)
+    private Long createBy;
+
+    /**
+     * 创建时间。
+     */
+    @TableField(fill = FieldFill.INSERT)
+    private LocalDateTime createTime;
+
+    /**
+     * 更新人。
+     */
+    @TableField(fill = FieldFill.INSERT_UPDATE)
+    private Long updateBy;
+
+    /**
+     * 更新时间。
+     */
+    @TableField(fill = FieldFill.INSERT_UPDATE)
+    private LocalDateTime updateTime;
+
+    /**
+     * 逻辑删除。
+     */
+    @TableLogic
+    private Integer isDeleted;
 }
