@@ -124,6 +124,9 @@ export interface LeaveBalanceVO {
   annualTotal: number;
   annualUsed: number;
   annualRemaining: number;
+  sickTotal: number;
+  sickUsed: number;
+  sickRemaining: number;
   compassionateTotal: number;
   compassionateUsed: number;
   compassionateRemaining: number;

@@ -5,7 +5,9 @@ import com.hrms.business.approval.service.ApprovalService;
 import com.hrms.business.mycenter.dto.LeaveBalanceVO;
 import com.hrms.business.mycenter.dto.LeaveRequestDTO;
 import com.hrms.business.mycenter.dto.LeaveVO;
+import com.hrms.business.mycenter.entity.LeaveBalanceEntity;
 import com.hrms.business.mycenter.entity.LeaveRequestEntity;
+import com.hrms.business.mycenter.mapper.MyCenterLeaveBalanceMapper;
 import com.hrms.business.mycenter.mapper.MyCenterLeaveRequestMapper;
 import com.hrms.business.mycenter.service.LeaveService;
 import com.hrms.common.exception.ErrorCode;
@@ -29,6 +31,7 @@ import java.util.stream.Collectors;
 public class LeaveServiceImpl implements LeaveService {
 
     private final MyCenterLeaveRequestMapper leaveRequestMapper;
+    private final MyCenterLeaveBalanceMapper leaveBalanceMapper;
     private final ApprovalService approvalService;
 
     @Override
@@ -127,77 +130,62 @@ public class LeaveServiceImpl implements LeaveService {
     public LeaveBalanceVO getLeaveBalance(Long employeeId) {
         int currentYear = LocalDate.now().getYear();
 
-        // 统计本年已审批通过的年假天数
-        BigDecimal annualUsed = getApprovedSum(employeeId, "ANNUAL", currentYear);
-
-        // 统计本年已通过的调休小时数
-        BigDecimal compassionateUsed = getApprovedSumForCompassionate(employeeId, currentYear);
-
-        // 统计本年已申请的调休小时数（含审批中）
-        BigDecimal compassionatePending = getPendingCompassionate(employeeId, currentYear);
+        List<LeaveBalanceEntity> balances = leaveBalanceMapper.selectList(
+                new LambdaQueryWrapper<LeaveBalanceEntity>()
+                        .eq(LeaveBalanceEntity::getEmployeeId, employeeId)
+                        .eq(LeaveBalanceEntity::getBalanceYear, currentYear)
+                        .eq(LeaveBalanceEntity::getStatus, 1)
+        );
 
         LeaveBalanceVO vo = new LeaveBalanceVO();
-        // 年假：固定总额 15 天（简化，实际需对接工龄规则）
-        vo.setAnnualTotal(new BigDecimal("15"));
-        vo.setAnnualUsed(annualUsed);
-        vo.setAnnualRemaining(new BigDecimal("15").subtract(annualUsed));
 
-        // 调休：按已用+审批中计算剩余
-        BigDecimal totalCompassionate = new BigDecimal("40"); // 简化：40小时
-        BigDecimal compassionateTotalUsed = compassionateUsed.add(compassionatePending);
-        vo.setCompassionateTotal(totalCompassionate);
-        vo.setCompassionateUsed(compassionateTotalUsed);
-        vo.setCompassionateRemaining(totalCompassionate.subtract(compassionateTotalUsed));
+        // 年假
+        LeaveBalanceEntity annual = findBalance(balances, "ANNUAL");
+        if (annual != null) {
+            vo.setAnnualTotal(annual.getTotalDays());
+            vo.setAnnualUsed(annual.getUsedDays());
+            vo.setAnnualRemaining(annual.getRemainingDays());
+        } else {
+            vo.setAnnualTotal(BigDecimal.ZERO);
+            vo.setAnnualUsed(BigDecimal.ZERO);
+            vo.setAnnualRemaining(BigDecimal.ZERO);
+        }
+
+        // 病假
+        LeaveBalanceEntity sick = findBalance(balances, "SICK");
+        if (sick != null) {
+            vo.setSickTotal(sick.getTotalDays());
+            vo.setSickUsed(sick.getUsedDays());
+            vo.setSickRemaining(sick.getRemainingDays());
+        } else {
+            vo.setSickTotal(BigDecimal.ZERO);
+            vo.setSickUsed(BigDecimal.ZERO);
+            vo.setSickRemaining(BigDecimal.ZERO);
+        }
+
+        // 调休
+        LeaveBalanceEntity compassionate = findBalance(balances, "COMPASSIONATE");
+        if (compassionate != null) {
+            vo.setCompassionateTotal(compassionate.getTotalDays());
+            vo.setCompassionateUsed(compassionate.getUsedDays());
+            vo.setCompassionateRemaining(compassionate.getRemainingDays());
+        } else {
+            vo.setCompassionateTotal(BigDecimal.ZERO);
+            vo.setCompassionateUsed(BigDecimal.ZERO);
+            vo.setCompassionateRemaining(BigDecimal.ZERO);
+        }
 
         return vo;
     }
 
     /**
-     * 统计某年某类型已通过审批的总天数
+     * 从余额列表中查找指定类型的余额
      */
-    private BigDecimal getApprovedSum(Long employeeId, String leaveType, int year) {
-        List<LeaveRequestEntity> list = leaveRequestMapper.selectList(
-                new LambdaQueryWrapper<LeaveRequestEntity>()
-                        .eq(LeaveRequestEntity::getEmployeeId, employeeId)
-                        .eq(LeaveRequestEntity::getLeaveType, leaveType)
-                        .eq(LeaveRequestEntity::getApprovalStatus, 2) // 已通过
-                        .apply("YEAR(create_time) = {0}", year)
-        );
-        return list.stream()
-                .map(e -> e.getTotalDays() != null ? e.getTotalDays() : BigDecimal.ZERO)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-    }
-
-    /**
-     * 统计某年已通过调休总小时数
-     */
-    private BigDecimal getApprovedSumForCompassionate(Long employeeId, int year) {
-        List<LeaveRequestEntity> list = leaveRequestMapper.selectList(
-                new LambdaQueryWrapper<LeaveRequestEntity>()
-                        .eq(LeaveRequestEntity::getEmployeeId, employeeId)
-                        .eq(LeaveRequestEntity::getLeaveType, "COMPASSIONATE")
-                        .eq(LeaveRequestEntity::getApprovalStatus, 2) // 已通过
-                        .apply("YEAR(create_time) = {0}", year)
-        );
-        return list.stream()
-                .map(e -> e.getTotalHours() != null ? e.getTotalHours() : BigDecimal.ZERO)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-    }
-
-    /**
-     * 统计某年审批中的调休总小时数
-     */
-    private BigDecimal getPendingCompassionate(Long employeeId, int year) {
-        List<LeaveRequestEntity> list = leaveRequestMapper.selectList(
-                new LambdaQueryWrapper<LeaveRequestEntity>()
-                        .eq(LeaveRequestEntity::getEmployeeId, employeeId)
-                        .eq(LeaveRequestEntity::getLeaveType, "COMPASSIONATE")
-                        .in(LeaveRequestEntity::getApprovalStatus, 0, 1) // 草稿或审批中
-                        .apply("YEAR(create_time) = {0}", year)
-        );
-        return list.stream()
-                .map(e -> e.getTotalHours() != null ? e.getTotalHours() : BigDecimal.ZERO)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    private LeaveBalanceEntity findBalance(List<LeaveBalanceEntity> balances, String leaveType) {
+        return balances.stream()
+                .filter(b -> leaveType.equals(b.getLeaveType()))
+                .findFirst()
+                .orElse(null);
     }
 
     /**
