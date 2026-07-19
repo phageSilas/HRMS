@@ -22,6 +22,9 @@ public class PendingTaskQuery {
     @Schema(description = "结束时间")
     private String endDate;
 
+    @Schema(description = "筛选类型: pending-待审批(默认), today-approved-今日已审批, overdue-已逾期")
+    private String filterType;
+
     @Schema(description = "当前页码", example = "1")
     private Integer pageNum = 1;
 

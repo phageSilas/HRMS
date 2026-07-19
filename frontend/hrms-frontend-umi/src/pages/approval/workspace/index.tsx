@@ -1,29 +1,60 @@
 /**
- * 审批工作台页面
+ * 审批工作台页面（卡片式布局）
  *
- * 功能：待审批列表（含角标）、已审批列表、我发起的申请列表
- * 每个标签页支持搜索筛选和分页，点击行跳转审批详情
+ * 功能：统计卡片 + 搜索筛选 + 卡片式待办列表 + 审批操作
  */
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { history } from '@umijs/max';
-import { PageContainer, ProTable } from '@ant-design/pro-components';
-import type { ProColumns, ActionType } from '@ant-design/pro-components';
-import { Tabs, Tag, Badge, DatePicker, Space, Select, Button, Form, Input, message } from 'antd';
-import type { ApprovalTask, PendingQuery, MyApplicationQuery } from '@/services/approval';
+import { PageContainer } from '@ant-design/pro-components';
 import {
-  getPendingTasks,
+  Card,
+  Tag,
+  Space,
+  Select,
+  Button,
+  Input,
+  message,
+  Avatar,
+  Row,
+  Col,
+  Pagination,
+  Spin,
+  Empty,
+  Modal,
+  Form,
+} from 'antd';
+import {
+  SearchOutlined,
+  CheckCircleOutlined,
+  ClockCircleOutlined,
+  ExclamationCircleOutlined,
+  UserOutlined,
+  ReloadOutlined,
+} from '@ant-design/icons';
+import type { ApprovalTask, PendingQuery } from '@/services/approval';
+import {
+  getTasks,
   getPendingCount,
-  getHistoryTasks,
-  getMyApplications,
+  getTodayApprovedCount,
+  getOverdueCount,
+  operateApproval,
 } from '@/services/approval';
 
-const { RangePicker } = DatePicker;
+// ============ 业务类型标签颜色映射 ============
 
-// ============ 常量定义 ============
+const BUSINESS_TYPE_COLOR_MAP: Record<string, string> = {
+  ENTRY: 'green',        // 入职审批
+  REGULAR: 'blue',       // 转正审批
+  TRANSFER: 'purple',    // 调岗审批
+  LEAVE: 'red',          // 离职审批
+  LEAVE_REQUEST: 'orange', // 请假审批
+  CORRECTION: 'cyan',    // 补卡审批
+  OVERTIME: 'geekblue',  // 加班审批
+  SALARY: 'magenta',     // 薪资审批
+};
 
-/** 业务类型筛选选项（与后端 ApprovalTypeEnum 对齐） */
 const BUSINESS_TYPE_OPTIONS = [
-  { label: '全部', value: '' },
+  { label: '全部类型', value: '' },
   { label: '入职申请', value: 'ENTRY' },
   { label: '转正申请', value: 'REGULAR' },
   { label: '调岗申请', value: 'TRANSFER' },
@@ -34,416 +65,560 @@ const BUSINESS_TYPE_OPTIONS = [
   { label: '薪资批次审批', value: 'SALARY' },
 ];
 
-/** 审批状态筛选选项（用于「我发起的」标签页） */
-const STATUS_OPTIONS = [
-  { label: '全部', value: '' },
-  { label: '待审批', value: 'PENDING' },
-  { label: '已通过', value: 'APPROVED' },
-  { label: '已驳回', value: 'REJECTED' },
-];
-
-/** 状态 Tag 颜色映射（与后端 ApprovalStatusEnum 对齐） */
-const STATUS_COLOR_MAP: Record<string, string> = {
-  PENDING: 'processing',
-  APPROVED: 'success',
-  REJECTED: 'error',
-  DRAFT: 'default',
-  WITHDRAWN: 'warning',
-  CANCELLED: 'default',
-  EXPIRED: 'warning',
-};
-
-/** 状态码 → 中文名映射（用于后端未返回 statusName 时的降级） */
-const STATUS_LABEL_MAP: Record<string, string> = {
-  PENDING: '审批中',
-  APPROVED: '已通过',
-  REJECTED: '已驳回',
-  DRAFT: '草稿',
-  WITHDRAWN: '已撤回',
-  CANCELLED: '已取消',
-  EXPIRED: '已过期',
-};
-
-// ============ 工具函数 ============
-
-/**
- * 根据截止时间距现在的时长返回颜色
- * @param deadline - 截止时间字符串
- * @returns 颜色值或 undefined（无额外样式）
- *
- * 规则：
- *  - < 6 小时：红色 #f5222d（紧急）
- *  - < 24 小时：黄色 #faad14（即将到期）
- *  - 其他：无色
- */
-const getDeadlineColor = (deadline?: string | null): string | undefined => {
-  if (!deadline) return undefined; // 无截止时间时不标色（如我发起的 Tab）
-  const now = Date.now();
-  const deadlineTime = new Date(deadline).getTime();
-  const diffHours = (deadlineTime - now) / (1000 * 60 * 60);
-  if (diffHours < 6) return '#f5222d';
-  if (diffHours < 24) return '#faad14';
-  return undefined;
-};
-
-// ============ 表格列定义（三个标签页复用） ============
-
-const TABLE_COLUMNS: ProColumns<ApprovalTask>[] = [
-  { title: '申请标题', dataIndex: 'title', ellipsis: true },
-  { title: '申请人', dataIndex: 'applicantName', width: 120 },
-  { title: '业务类型', dataIndex: 'businessTypeName', width: 100 },
-  {
-    title: '申请时间',
-    dataIndex: 'createdAt',
-    width: 170,
-    valueType: 'dateTime',
-  },
-  {
-    title: '截止时间',
-    dataIndex: 'deadline',
-    width: 170,
-    valueType: 'dateTime',
-    render: (_, record) => (
-      <span style={{ color: getDeadlineColor(record.deadline) }}>
-        {record.deadline}
-      </span>
-    ),
-  },
-  {
-    title: '当前节点',
-    dataIndex: 'nodeName',
-    width: 120,
-    render: (_, record) => (
-      <span>
-        {record.nodeName}
-        {record.delegateFlag && record.delegateMark && (
-          <Tag color="orange" style={{ marginLeft: 4, fontSize: 11 }}>
-            {record.delegateMark}
-          </Tag>
-        )}
-      </span>
-    ),
-  },
-  {
-    title: '状态',
-    dataIndex: 'statusName',
-    width: 100,
-    render: (_, record) => (
-      <Tag color={STATUS_COLOR_MAP[record.status] || 'default'}>
-        {record.statusName || STATUS_LABEL_MAP[record.status] || record.status}
-      </Tag>
-    ),
-  },
-];
-
 // ============ 页面组件 ============
 
 const WorkspacePage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<string>('pending');
-  const [badgeCount, setBadgeCount] = useState<number>(0);
+  // ---- 统计卡片数据 ----
+  const [pendingCount, setPendingCount] = useState<number>(0);
+  const [todayApprovedCount, setTodayApprovedCount] = useState<number>(0);
+  const [overdueCount, setOverdueCount] = useState<number>(0);
+  const [statsLoading, setStatsLoading] = useState<boolean>(false);
 
-  // ProTable actionRef（用于手动触发刷新）
-  const pendingActionRef = useRef<ActionType>();
-  const historyActionRef = useRef<ActionType>();
+  // ---- 列表数据 ----
+  const [taskList, setTaskList] = useState<ApprovalTask[]>([]);
+  const [listLoading, setListLoading] = useState<boolean>(false);
+  const [listError, setListError] = useState<string | null>(null);
+  const [total, setTotal] = useState<number>(0);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
 
-  // 各标签页搜索参数（传递给 ProTable params 属性，变化时触发重新查询）
-  const [pendingSearch, setPendingSearch] = useState<Partial<PendingQuery>>({});
-  const [historySearch, setHistorySearch] = useState<Partial<PendingQuery>>({});
-  const [mySearch, setMySearch] = useState<Partial<MyApplicationQuery>>({});
+  // ---- 搜索筛选 ----
+  const [keyword, setKeyword] = useState<string>('');
+  const [businessType, setBusinessType] = useState<string>('');
+  /** 筛选类型（统计卡片点击控制）: pending / today-approved / overdue */
+  const [filterType, setFilterType] = useState<string>('pending');
+  /** 搜索版本号 — 递增时重新加载列表（解决同页重复搜索不触发的问题） */
+  const [searchVersion, setSearchVersion] = useState<number>(0);
 
-  // 搜索表单实例（保留表单状态，切换标签页时不清空）
-  const [pendingFormInstance] = Form.useForm();
-  const [historyFormInstance] = Form.useForm();
+  // ---- 操作弹窗 ----
+  const [operateModal, setOperateModal] = useState<{
+    visible: boolean;
+    action: 'approve' | 'reject';
+    taskId?: number;
+    taskTitle?: string;
+  }>({ visible: false, action: 'approve' });
+  const [operateLoading, setOperateLoading] = useState<boolean>(false);
+  const [operateForm] = Form.useForm();
 
-  // 搜索参数变化时主动触发 ProTable 刷新（比依赖 params 属性更可靠）
-  useEffect(() => {
-    pendingActionRef.current?.reload();
-  }, [pendingSearch]);
+  // ============ 数据加载 ============
 
-  useEffect(() => {
-    historyActionRef.current?.reload();
-  }, [historySearch]);
-
-  // ============ 生命周期 ============
-
-  /** 获取待审批角标数量 */
-  const fetchBadgeCount = useCallback(async () => {
+  /**
+   * 加载统计卡片数据
+   * 并行请求三个统计数据
+   */
+  const fetchStats = useCallback(async () => {
+    setStatsLoading(true);
     try {
-      const result = await getPendingCount();
-      setBadgeCount(result.count);
+      const [pendingRes, todayRes, overdueRes] = await Promise.all([
+        getPendingCount(),
+        getTodayApprovedCount(),
+        getOverdueCount(),
+      ]);
+      setPendingCount(pendingRes.count ?? 0);
+      setTodayApprovedCount(todayRes.count ?? 0);
+      setOverdueCount(overdueRes.count ?? 0);
     } catch {
-      // pending-count 接口暂未就绪时静默降级
-      setBadgeCount(0);
+      // 接口异常时使用默认值 0
+    } finally {
+      setStatsLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    fetchBadgeCount();
-  }, [fetchBadgeCount]);
-
-  // ============ 待审批搜索/重置 ============
-
-  /** 将 DatePicker 的 dateRange 值转为后端需要的 startDate/endDate */
-  const formatDateRange = (dateRange: any[]) => {
-    if (!dateRange || dateRange.length !== 2) return {};
-    return {
-      startDate: dateRange[0].format('YYYY-MM-DD HH:mm:ss'),
-      endDate: dateRange[1].format('YYYY-MM-DD HH:mm:ss'),
-    };
-  };
-
-  const handlePendingSearch = useCallback(() => {
-    const values = pendingFormInstance.getFieldsValue();
-    const params: Partial<PendingQuery> = {};
-    if (values.businessType) params.businessType = values.businessType;
-    if (values.keyword) params.keyword = values.keyword;
-    if (values.dateRange && values.dateRange.length === 2) {
-      Object.assign(params, formatDateRange(values.dateRange));
-    }
-    setPendingSearch(params);
-  }, [pendingFormInstance]);
-
-  const handlePendingReset = useCallback(() => {
-    pendingFormInstance.resetFields();
-    setPendingSearch({});
-  }, [pendingFormInstance]);
-
-  // ============ 已审批搜索/重置 ============
-
-  const handleHistorySearch = useCallback(() => {
-    const values = historyFormInstance.getFieldsValue();
-    const params: Partial<PendingQuery> = {};
-    if (values.businessType) params.businessType = values.businessType;
-    if (values.keyword) params.keyword = values.keyword;
-    if (values.dateRange && values.dateRange.length === 2) {
-      Object.assign(params, formatDateRange(values.dateRange));
-    }
-    setHistorySearch(params);
-  }, [historyFormInstance]);
-
-  const handleHistoryReset = useCallback(() => {
-    historyFormInstance.resetFields();
-    setHistorySearch({});
-  }, [historyFormInstance]);
-
-  // ============ 我发起的筛选/重置 ============
-
-  const handleMyStatusChange = useCallback(
-    (value: string | undefined) => {
-      setMySearch(value ? { status: value } : {});
+  /** 加载任务列表（所有参数显式传入，不依赖闭包） */
+  const fetchTaskList = useCallback(
+    async (params: { page: number; size: number; kw: string; biz: string; filter: string }) => {
+      setListLoading(true);
+      setListError(null);
+      try {
+        const query: PendingQuery = {
+          pageNum: params.page,
+          pageSize: params.size,
+          filterType: params.filter,
+        };
+        if (params.kw.trim()) query.keyword = params.kw.trim();
+        if (params.biz) query.businessType = params.biz;
+        const result = await getTasks(query);
+        setTaskList(result.records ?? []);
+        setTotal(result.total ?? 0);
+      } catch (err: any) {
+        setListError(err?.message || '加载失败');
+        setTaskList([]);
+      } finally {
+        setListLoading(false);
+      }
     },
     [],
   );
 
-  const handleMyReset = useCallback(() => {
-    setMySearch({});
+  // 初始化数据
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
+
+  // 列表加载：分页变化、主动搜索或筛选卡片切换时触发
+  useEffect(() => {
+    fetchTaskList({ page: currentPage, size: pageSize, kw: keyword, biz: businessType, filter: filterType });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, pageSize, searchVersion, filterType]);
+
+  // ============ 搜索操作 ============
+
+  const handleSearch = useCallback(() => {
+    // 重置到第一页 + 递增搜索版本号触发重新加载
+    setCurrentPage(1);
+    setSearchVersion((v) => v + 1);
   }, []);
 
-  // ============ ProTable request 回调 ============
+  const handleReset = useCallback(() => {
+    setKeyword('');
+    setBusinessType('');
+    setFilterType('pending');
+    setCurrentPage(1);
+    setSearchVersion((v) => v + 1);
+  }, []);
 
-  const pendingRequest = useCallback(async (params: Record<string, any>) => {
-    const { current, pageSize, ...filters } = params;
+  // ============ 审批操作 ============
+
+  const showOperateModal = (action: 'approve' | 'reject', task: ApprovalTask) => {
+    operateForm.resetFields();
+    setOperateModal({
+      visible: true,
+      action,
+      taskId: task.taskId ?? task.id,
+      taskTitle: task.title,
+    });
+  };
+
+  const closeOperateModal = () => {
+    setOperateModal({ visible: false, action: 'approve' });
+    operateForm.resetFields();
+  };
+
+  const handleOperate = useCallback(async () => {
+    const { taskId, action } = operateModal;
+    if (!taskId) return;
     try {
-      const result = await getPendingTasks({
-        pageNum: current,
-        pageSize,
-        ...filters,
-      } as PendingQuery);
-      return { data: result.records, success: true, total: result.total };
-    } catch {
-      return { data: [], success: false, total: 0 };
+      const values = await operateForm.validateFields();
+      setOperateLoading(true);
+      await operateApproval(taskId, {
+        action,
+        comment: values.comment,
+      });
+      message.success(action === 'approve' ? '已通过' : '已拒绝');
+      closeOperateModal();
+      // 刷新统计数据
+      fetchStats();
+      // 刷新列表（使用当前分页和搜索参数）
+      fetchTaskList({ page: currentPage, size: pageSize, kw: keyword, biz: businessType, filter: filterType });
+    } catch (error: any) {
+      if (error?.errorFields) return;
+      message.error(error?.message || '操作失败');
+    } finally {
+      setOperateLoading(false);
     }
-  }, []);
+  }, [operateModal, operateForm, fetchStats, fetchTaskList, currentPage, pageSize, keyword, businessType]);
 
-  const historyRequest = useCallback(async (params: Record<string, any>) => {
-    const { current, pageSize, ...filters } = params;
-    try {
-      const result = await getHistoryTasks({
-        pageNum: current,
-        pageSize,
-        ...filters,
-      } as PendingQuery);
-      return { data: result.records, success: true, total: result.total };
-    } catch {
-      return { data: [], success: false, total: 0 };
+  // ============ 页面变化 ============
+
+  const handlePageChange = (page: number, size: number) => {
+    setCurrentPage(page);
+    setPageSize(size);
+  };
+
+  // ============ 动态空状态文案 ============
+
+  const emptyMessage = useMemo(() => {
+    switch (filterType) {
+      case 'today-approved':
+        return '今日暂无已审批事项';
+      case 'overdue':
+        return '暂无逾期事项';
+      default:
+        return '暂无待审批事项';
     }
-  }, []);
+  }, [filterType]);
 
-  const myRequest = useCallback(async (params: Record<string, any>) => {
-    const { current, pageSize, ...filters } = params;
-    try {
-      const result = await getMyApplications({
-        pageNum: current,
-        pageSize,
-        ...filters,
-      } as MyApplicationQuery);
-      return { data: result.records, success: true, total: result.total };
-    } catch {
-      return { data: [], success: false, total: 0 };
-    }
-  }, []);
+  // ============ 统计卡片配置 ============
 
-  // ============ ProTable 公共配置 ============
-
-  const commonProTableProps = {
-    columns: TABLE_COLUMNS,
-    rowKey: 'id' as const,
-    search: false as const,
-    pagination: {
-      showSizeChanger: true,
-      showTotal: (total: number) => `共 ${total} 条`,
+  const STAT_CARDS = [
+    {
+      key: 'pending',
+      label: '待审批',
+      count: pendingCount,
+      icon: <ClockCircleOutlined />,
+      bgGradient: 'linear-gradient(135deg, #fffbe6 0%, #fff7cc 100%)',
+      iconBg: '#faad14',
+      color: '#faad14',
+      activeBorder: '#faad14',
     },
-    onRow: (record: ApprovalTask) => ({
-      onClick: () => history.push(`/approval/detail/${record.id}`),
-      style: { cursor: 'pointer' } as React.CSSProperties,
-    }),
+    {
+      key: 'today-approved',
+      label: '今日已审批',
+      count: todayApprovedCount,
+      icon: <CheckCircleOutlined />,
+      bgGradient: 'linear-gradient(135deg, #f6ffed 0%, #d9f7be 100%)',
+      iconBg: '#52c41a',
+      color: '#52c41a',
+      activeBorder: '#52c41a',
+    },
+    {
+      key: 'overdue',
+      label: '已逾期',
+      count: overdueCount,
+      icon: <ExclamationCircleOutlined />,
+      bgGradient: 'linear-gradient(135deg, #fff2f0 0%, #ffd8d2 100%)',
+      iconBg: '#ff4d4f',
+      color: '#ff4d4f',
+      activeBorder: '#ff4d4f',
+    },
+  ] as const;
+
+  // ============ 渲染统计卡片 ============
+
+  const renderStatCards = () => (
+    <Row gutter={[24, 24]} style={{ marginBottom: 24 }}>
+      {STAT_CARDS.map((card) => {
+        const isActive = filterType === card.key;
+        return (
+          <Col span={8} key={card.key}>
+            <Card
+              hoverable
+              style={{
+                background: card.bgGradient,
+                borderRadius: 12,
+                border: isActive ? `2px solid ${card.activeBorder}` : 'none',
+                boxShadow: isActive
+                  ? `0 4px 12px ${card.activeBorder}33`
+                  : '0 2px 8px rgba(0,0,0,0.06)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+              bodyStyle={{ padding: '20px 24px' }}
+              onClick={() => {
+                if (filterType === card.key) {
+                  // 再次点击已选中卡片 → 重置为 pending（显示全部待审批）
+                  setFilterType('pending');
+                } else {
+                  setFilterType(card.key);
+                }
+                setCurrentPage(1);
+                setSearchVersion((v) => v + 1);
+              }}
+            >
+              <Spin spinning={statsLoading} size="small">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 12,
+                      background: card.iconBg,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {React.cloneElement(card.icon as React.ReactElement, {
+                      style: { fontSize: 24, color: '#fff' },
+                    })}
+                  </div>
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 32,
+                        fontWeight: 700,
+                        color: card.color,
+                        lineHeight: 1.2,
+                      }}
+                    >
+                      {card.count}
+                    </div>
+                    <div style={{ fontSize: 14, color: '#8c8c8c' }}>{card.label}</div>
+                  </div>
+                </div>
+              </Spin>
+            </Card>
+          </Col>
+        );
+      })}
+    </Row>
+  );
+
+  // ============ 渲染搜索筛选区 ============
+
+  const renderSearchBar = () => (
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 20,
+        flexWrap: 'wrap',
+        gap: 12,
+      }}
+    >
+      <Input
+        placeholder="搜索申请人或单号..."
+        prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
+        value={keyword}
+        onChange={(e) => setKeyword(e.target.value)}
+        onPressEnter={handleSearch}
+        style={{ width: 320, borderRadius: 8 }}
+        allowClear
+      />
+      <Space size={12}>
+        <Select
+          value={businessType}
+          onChange={setBusinessType}
+          style={{ width: 140, borderRadius: 8 }}
+          options={BUSINESS_TYPE_OPTIONS}
+        />
+        <Button type="primary" onClick={handleSearch} style={{ borderRadius: 8 }}>
+          查询
+        </Button>
+        <Button onClick={handleReset} style={{ borderRadius: 8 }}>
+          重置
+        </Button>
+      </Space>
+    </div>
+  );
+
+  // ============ 渲染业务类型标签 ============
+
+  const renderBusinessTypeTag = (type: string, name: string) => {
+    const color = BUSINESS_TYPE_COLOR_MAP[type] || 'default';
+    return <Tag color={color} style={{ borderRadius: 4 }}>{name || type}</Tag>;
+  };
+
+  // ============ 渲染任务卡片 ============
+
+  const renderTaskCard = (task: ApprovalTask) => {
+    const isOverdue = task.overdue ?? false;
+
+    return (
+      <Card
+        key={task.id}
+        style={{
+          marginBottom: 16,
+          borderRadius: 12,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+          border: '1px solid #f0f0f0',
+        }}
+        bodyStyle={{ padding: '20px 24px' }}
+        hoverable
+      >
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+          {/* 左侧：头像 + 姓名 + 标签 */}
+          <div style={{ minWidth: 180, flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+              <Avatar
+                size={40}
+                icon={<UserOutlined />}
+                src={task.applicantAvatar}
+                style={{
+                  backgroundColor: task.applicantAvatar ? undefined : '#1890ff',
+                  flexShrink: 0,
+                }}
+              >
+                {task.applicantName?.[0]}
+              </Avatar>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: '#262626' }}>
+                  {task.applicantName}
+                </div>
+                {task.applicantDeptName && (
+                  <Tag
+                    color="green"
+                    style={{ borderRadius: 4, fontSize: 12, marginTop: 2 }}
+                  >
+                    {task.applicantDeptName}
+                  </Tag>
+                )}
+              </div>
+            </div>
+            <div>{renderBusinessTypeTag(task.businessType, task.businessTypeName)}</div>
+          </div>
+
+          {/* 中间：时间信息 + 节点 */}
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ fontSize: 13, color: '#8c8c8c', lineHeight: 2 }}>
+              <div>
+                申请：{task.createdAt}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span>截止：{task.deadline || '-'}</span>
+                {isOverdue && (
+                  <Tag color="red" style={{ borderRadius: 4, fontSize: 11 }}>
+                    已逾期
+                  </Tag>
+                )}
+              </div>
+              <div style={{ color: '#bfbfbf' }}>
+                当前节点：{task.nodeName}
+              </div>
+            </div>
+          </div>
+
+          {/* 右侧：操作按钮 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, justifyContent: 'center', minWidth: 100 }}>
+            <Button
+              type="default"
+              style={{
+                borderRadius: 8,
+                borderColor: '#d9d9d9',
+              }}
+              onClick={() => history.push(`/approval/detail/${task.id}`)}
+            >
+              查看详情
+            </Button>
+            {isOverdue ? (
+              <Button
+                disabled
+                style={{
+                  borderRadius: 8,
+                  color: '#ff4d4f',
+                  borderColor: '#ff4d4f',
+                  cursor: 'not-allowed',
+                }}
+              >
+                已逾期，无法操作
+              </Button>
+            ) : (
+              <>
+                <Button
+                  type="primary"
+                  style={{
+                    borderRadius: 8,
+                    background: '#52c41a',
+                    borderColor: '#52c41a',
+                  }}
+                  onClick={() => showOperateModal('approve', task)}
+                >
+                  通过
+                </Button>
+                <Button
+                  danger
+                  style={{ borderRadius: 8 }}
+                  onClick={() => showOperateModal('reject', task)}
+                >
+                  拒绝
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      </Card>
+    );
+  };
+
+  // ============ 渲染列表区域 ============
+
+  const renderTaskList = () => {
+    if (listLoading && taskList.length === 0) {
+      return (
+        <div style={{ textAlign: 'center', padding: '80px 0' }}>
+          <Spin size="large" />
+        </div>
+      );
+    }
+
+    if (listError) {
+      return (
+        <Card style={{ borderRadius: 12, textAlign: 'center', padding: '40px 0' }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>😵</div>
+          <div style={{ fontSize: 16, color: '#999', marginBottom: 16 }}>{listError}</div>
+          <Button
+            icon={<ReloadOutlined />}
+            onClick={() => fetchTaskList({ page: currentPage, size: pageSize, kw: keyword, biz: businessType, filter: filterType })}
+            style={{ borderRadius: 8 }}
+          >
+            重新加载
+          </Button>
+        </Card>
+      );
+    }
+
+    if (taskList.length === 0) {
+      return (
+        <Card style={{ borderRadius: 12 }}>
+          <Empty
+            description={emptyMessage}
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+          />
+        </Card>
+      );
+    }
+
+    return (
+      <>
+        {taskList.map(renderTaskCard)}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+          <Pagination
+            current={currentPage}
+            pageSize={pageSize}
+            total={total}
+            onChange={handlePageChange}
+            showSizeChanger
+            showTotal={(t) => `共 ${t} 条`}
+          />
+        </div>
+      </>
+    );
   };
 
   // ============ 渲染 ============
 
   return (
     <PageContainer>
-      <Tabs
-        activeKey={activeTab}
-        onChange={setActiveTab}
-        // destroyInactiveTabPane 默认为 false，切换 Tab 时保留筛选条件和分页状态
-        items={[
-          {
-            key: 'pending',
-            label: (
-              <span>
-                待审批
-                {badgeCount > 0 && (
-                  <Badge
-                    count={badgeCount}
-                    size="small"
-                    style={{ marginInlineStart: 4 }}
-                  />
-                )}
-              </span>
-            ),
-            children: (
-              <>
-                {/* 待审批搜索栏 */}
-                <Form
-                  form={pendingFormInstance}
-                  layout="inline"
-                  style={{ marginBottom: 16 }}
-                >
-                  <Form.Item name="businessType" label="业务类型">
-                    <Select
-                      options={BUSINESS_TYPE_OPTIONS}
-                      style={{ width: 140 }}
-                      placeholder="选择业务类型"
-                      allowClear
-                    />
-                  </Form.Item>
-                  <Form.Item name="keyword" label="关键词">
-                    <Input
-                      placeholder="申请标题/申请人"
-                      style={{ width: 240 }}
-                      allowClear
-                    />
-                  </Form.Item>
-                  <Form.Item name="dateRange" label="申请时间">
-                    <RangePicker />
-                  </Form.Item>
-                  <Form.Item>
-                    <Space>
-                      <Button type="primary" onClick={handlePendingSearch}>
-                        查询
-                      </Button>
-                      <Button onClick={handlePendingReset}>重置</Button>
-                    </Space>
-                  </Form.Item>
-                </Form>
-                {/* 待审批列表 */}
-                <ProTable<ApprovalTask>
-                  {...commonProTableProps}
-                  actionRef={pendingActionRef}
-                  request={pendingRequest}
-                  params={pendingSearch}
-                />
-              </>
-            ),
-          },
-          {
-            key: 'history',
-            label: '已审批',
-            children: (
-              <>
-                {/* 已审批搜索栏 */}
-                <Form
-                  form={historyFormInstance}
-                  layout="inline"
-                  style={{ marginBottom: 16 }}
-                >
-                  <Form.Item name="businessType" label="业务类型">
-                    <Select
-                      options={BUSINESS_TYPE_OPTIONS}
-                      style={{ width: 140 }}
-                      placeholder="选择业务类型"
-                      allowClear
-                    />
-                  </Form.Item>
-                  <Form.Item name="keyword" label="关键词">
-                    <Input
-                      placeholder="申请标题/申请人"
-                      style={{ width: 240 }}
-                      allowClear
-                    />
-                  </Form.Item>
-                  <Form.Item name="dateRange" label="申请时间">
-                    <RangePicker />
-                  </Form.Item>
-                  <Form.Item>
-                    <Space>
-                      <Button type="primary" onClick={handleHistorySearch}>
-                        查询
-                      </Button>
-                      <Button onClick={handleHistoryReset}>重置</Button>
-                    </Space>
-                  </Form.Item>
-                </Form>
-                {/* 已审批列表 */}
-                <ProTable<ApprovalTask>
-                  {...commonProTableProps}
-                  actionRef={historyActionRef}
-                  request={historyRequest}
-                  params={historySearch}
-                />
-              </>
-            ),
-          },
-          {
-            key: 'my',
-            label: '我发起的',
-            children: (
-              <>
-                {/* 我发起的筛选栏（仅状态筛选） */}
-                <Space style={{ marginBottom: 16 }}>
-                  <span>状态：</span>
-                  <Select
-                    allowClear
-                    placeholder="选择审批状态"
-                    style={{ width: 140 }}
-                    options={STATUS_OPTIONS}
-                    value={mySearch.status}
-                    onChange={handleMyStatusChange}
-                  />
-                  <Button onClick={handleMyReset}>重置</Button>
-                </Space>
-                {/* 我发起的列表 */}
-                <ProTable<ApprovalTask>
-                  {...commonProTableProps}
-                  request={myRequest}
-                  params={mySearch}
-                />
-              </>
-            ),
-          },
-        ]}
-      />
+      {/* 页面标题 */}
+      <div style={{ marginBottom: 24 }}>
+        <h2 style={{ margin: 0, fontSize: 22, fontWeight: 600, color: '#262626' }}>
+          审批工作台
+        </h2>
+        <p style={{ margin: '4px 0 0', color: '#8c8c8c', fontSize: 14 }}>
+          管理和处理所有待审批事项
+        </p>
+      </div>
+
+      {/* 统计卡片 */}
+      {renderStatCards()}
+
+      {/* 搜索筛选 */}
+      {renderSearchBar()}
+
+      {/* 任务列表 */}
+      {renderTaskList()}
+
+      {/* 审批操作弹窗 */}
+      <Modal
+        title={operateModal.action === 'approve' ? '审批通过' : '审批拒绝'}
+        open={operateModal.visible}
+        onOk={handleOperate}
+        onCancel={closeOperateModal}
+        confirmLoading={operateLoading}
+        destroyOnClose
+      >
+        <Form form={operateForm} layout="vertical">
+          <Form.Item
+            name="comment"
+            label="审批意见"
+            rules={
+              operateModal.action === 'reject'
+                ? [{ required: true, message: '拒绝时必须填写意见' }]
+                : []
+            }
+          >
+            <Input.TextArea
+              rows={4}
+              placeholder={
+                operateModal.action === 'reject'
+                  ? '请填写拒绝原因'
+                  : '可选填写审批意见'
+              }
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
     </PageContainer>
   );
 };
