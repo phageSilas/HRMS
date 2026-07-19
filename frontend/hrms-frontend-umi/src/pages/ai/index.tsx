@@ -6,13 +6,22 @@
  */
 
 import {
+  deleteConversation,
+  getConversations,
+  getMessages,
+  sendChatMessage,
+  updateTitle,
+  type Conversation,
+  type Message,
+} from '@/services/ai';
+import type { PageResult } from '@/types/api';
+import {
   DeleteOutlined,
-  EditOutlined,
+  PauseCircleOutlined,
   PlusOutlined,
   RobotOutlined,
   SendOutlined,
   UserOutlined,
-  PauseCircleOutlined,
 } from '@ant-design/icons';
 import { useRequest } from '@umijs/max';
 import {
@@ -21,33 +30,25 @@ import {
   Card,
   Input,
   List,
-  message as antMsg,
   Popconfirm,
   Spin,
   Tag,
   Typography,
+  message as antMsg,
 } from 'antd';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
 import remarkGfm from 'remark-gfm';
-import type { PageResult } from '@/types/api';
-import {
-  type Conversation,
-  type Message,
-  deleteConversation,
-  getConversations,
-  getMessages,
-  sendChatMessage,
-  updateTitle,
-} from '@/services/ai';
 
 const { Text, Title } = Typography;
 const { TextArea } = Input;
+const HOME_AI_PENDING_PROMPT_STORAGE_KEY = 'hrms-ai-pending-prompt';
 
 // ============ 欢迎语 + 推荐问题 ============
 
-const WELCOME_MESSAGE = '你好！我是 HRMS 智能助手，可以帮你解答制度问题、查询流程、提供操作引导。';
+const WELCOME_MESSAGE =
+  '你好！我是 HRMS 智能助手，可以帮你解答制度问题、查询流程、提供操作引导。';
 
 const SUGGESTED_QUESTIONS = [
   '今年的年假政策是什么？',
@@ -110,7 +111,6 @@ const styles = {
     gap: 12,
   } as React.CSSProperties,
   messageBubble: {
-    maxWidth: '70%',
     padding: '12px 16px',
     borderRadius: 12,
     lineHeight: 1.6,
@@ -211,7 +211,10 @@ const SuggestionCards: React.FC<SuggestionCardsProps> = ({ suggestions }) => {
 
   return (
     <div style={{ marginTop: 12, marginBottom: 4 }}>
-      <Text type="secondary" style={{ fontSize: 12, marginBottom: 6, display: 'block' }}>
+      <Text
+        type="secondary"
+        style={{ fontSize: 12, marginBottom: 6, display: 'block' }}
+      >
         推荐操作：
       </Text>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -229,7 +232,12 @@ const SuggestionCards: React.FC<SuggestionCardsProps> = ({ suggestions }) => {
               cursor: 'pointer',
               minWidth: 100,
             }}
-            bodyStyle={{ padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 6 }}
+            bodyStyle={{
+              padding: '6px 12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
           >
             <Tag color="blue" style={{ marginRight: 0, fontSize: 12 }}>
               {s.label}
@@ -248,7 +256,10 @@ interface MessageBubbleProps {
   isStreaming?: boolean;
 }
 
-const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isStreaming }) => {
+const MessageBubble: React.FC<MessageBubbleProps> = ({
+  message,
+  isStreaming,
+}) => {
   const isUser = message.role === 'user';
 
   // 解析 metadata 中的路由建议
@@ -265,7 +276,12 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isStreaming }) =
   }
 
   return (
-    <div style={{ ...styles.messageRow, flexDirection: isUser ? 'row-reverse' : 'row' }}>
+    <div
+      style={{
+        ...styles.messageRow,
+        flexDirection: isUser ? 'row-reverse' : 'row',
+      }}
+    >
       <Avatar
         size={36}
         icon={isUser ? <UserOutlined /> : <RobotOutlined />}
@@ -274,14 +290,25 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isStreaming }) =
           flexShrink: 0,
         }}
       />
-      <div style={{ maxWidth: '70%' }}>
+      <div
+        style={{
+          maxWidth: '70%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: isUser ? 'flex-end' : 'flex-start',
+        }}
+      >
         <div
           style={{
             ...styles.messageBubble,
+            width: 'fit-content',
+            maxWidth: '100%',
             backgroundColor: isUser ? '#1677ff' : '#f5f5f5',
             color: isUser ? '#fff' : '#333',
             borderTopLeftRadius: isUser ? 12 : 4,
             borderTopRightRadius: isUser ? 4 : 12,
+            whiteSpace: isUser ? 'pre-wrap' : 'normal',
+            overflowWrap: 'break-word',
           }}
         >
           {isUser ? (
@@ -372,6 +399,12 @@ interface SseEndEventExt {
   suggestions?: Suggestion[];
 }
 
+interface PendingHomePromptPayload {
+  content: string;
+  createdAt: string;
+  source?: 'home';
+}
+
 // ============ 主页面组件 ============
 
 const AiChatPage: React.FC = () => {
@@ -384,15 +417,22 @@ const AiChatPage: React.FC = () => {
   const [streamingContent, setStreamingContent] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [listRefreshKey, setListRefreshKey] = useState(0);
+  const [pendingHomePrompt, setPendingHomePrompt] = useState<string | null>(
+    null,
+  );
 
   const messageListRef = useRef<HTMLDivElement>(null);
   const streamingRef = useRef('');
   const abortRef = useRef<(() => void) | null>(null);
   const sseConversationIdRef = useRef<number | null>(null);
+  const pendingHomePromptConsumedRef = useRef(false);
+  const creatingNewConversationRef = useRef(false);
 
   // ---- 会话列表数据管理（手动管理，不用 useRequest 避免不可控） ----
 
-  const [convData, setConvData] = useState<PageResult<Conversation> | null>(null);
+  const [convData, setConvData] = useState<PageResult<Conversation> | null>(
+    null,
+  );
   const [convLoading, setConvLoading] = useState(false);
   const [convError, setConvError] = useState<any>(null);
 
@@ -410,7 +450,29 @@ const AiChatPage: React.FC = () => {
   }, []);
 
   // 初始加载
-  useEffect(() => { fetchConversations(); }, [fetchConversations]);
+  useEffect(() => {
+    fetchConversations();
+  }, [fetchConversations]);
+
+  useEffect(() => {
+    const rawValue = sessionStorage.getItem(HOME_AI_PENDING_PROMPT_STORAGE_KEY);
+    if (!rawValue) {
+      return;
+    }
+
+    sessionStorage.removeItem(HOME_AI_PENDING_PROMPT_STORAGE_KEY);
+
+    try {
+      const parsed = JSON.parse(rawValue) as PendingHomePromptPayload;
+      const content = parsed.content?.trim();
+      if (content) {
+        setPendingHomePrompt(content);
+      }
+    } catch {
+      console.warn('[AI] 首页待发送消息解析失败');
+    }
+  }, []);
+
   // listRefreshKey 变化时重新加载
   useEffect(() => {
     if (listRefreshKey > 0) fetchConversations();
@@ -424,6 +486,9 @@ const AiChatPage: React.FC = () => {
 
   // 数据加载后自动选中第一条会话（仅在无当前会话时）
   useEffect(() => {
+    if (creatingNewConversationRef.current) {
+      return;
+    }
     if (conversations.length > 0 && !currentId) {
       setCurrentId(conversations[0].id);
     }
@@ -451,6 +516,9 @@ const AiChatPage: React.FC = () => {
     // 标志会被提前重置，导致守卫失效。
     if (currentId && sseConversationIdRef.current === currentId) {
       sseConversationIdRef.current = null;
+      return;
+    }
+    if (!currentId && creatingNewConversationRef.current) {
       return;
     }
     if (currentId) {
@@ -500,97 +568,162 @@ const AiChatPage: React.FC = () => {
 
   // ---- SSE 发送消息 ----
 
-  const handleSend = useCallback(async () => {
-    const content = inputValue.trim();
-    if (!content || isStreaming) return;
+  const sendMessageByContent = useCallback(
+    async (
+      rawContent: string,
+      options?: { forceNewConversation?: boolean },
+    ) => {
+      const content = rawContent.trim();
+      if (!content || isStreaming) return;
 
-    setInputValue('');
-    setIsStreaming(true);
-    setError(null);
-    streamingRef.current = '';
-    abortRef.current = null;
-    sseConversationIdRef.current = null;
+      const shouldCreateNewConversation =
+        options?.forceNewConversation ?? false;
 
-    const tempUserMsg: Message = {
-      id: Date.now(),
-      role: 'user',
-      content,
-      createTime: new Date().toISOString(),
-    };
+      if (shouldCreateNewConversation) {
+        creatingNewConversationRef.current = true;
+        setCurrentId(null);
+        setMessages([]);
+        setStreamingContent('');
+        setError(null);
+      }
 
-    setMessages((prev) => [...prev, tempUserMsg]);
+      setInputValue('');
+      setIsStreaming(true);
+      setError(null);
+      streamingRef.current = '';
+      abortRef.current = null;
+      sseConversationIdRef.current = null;
 
-    let pendingSuggestions: Suggestion[] = [];
+      const tempUserMsg: Message = {
+        id: Date.now(),
+        role: 'user',
+        content,
+        createTime: new Date().toISOString(),
+      };
 
-    const { abort } = sendChatMessage(
-      { conversationId: currentId || undefined, content },
-      {
-        onStart: (conversationId) => {
-          console.log('[SSE] onStart:', conversationId, 'currentId:', currentId);
-          sseConversationIdRef.current = conversationId;
-          if (conversationId !== currentId) {
-            setCurrentId(conversationId);
-          }
-        },
-        onContent: (text) => {
-          console.log('[SSE] onContent, text长度:', text.length, '累计:', streamingRef.current.length + text.length);
-          streamingRef.current += text;
-          setStreamingContent(streamingRef.current);
-        },
-        onEnd: (reason, rawData) => {
-          console.log('[SSE] onEnd:', reason, '累计内容长度:', streamingRef.current.length);
-          abortRef.current = null;
-          // 如果用户手动中止，已由 handlePause 处理
-          if (reason === 'abort') return;
+      setMessages((prev) => [...prev, tempUserMsg]);
 
-          // 解析 end 事件中的路由建议
-          if (rawData) {
-            try {
-              const parsed: SseEndEventExt = JSON.parse(rawData);
-              if (parsed.suggestions) {
-                pendingSuggestions = parsed.suggestions;
-              }
-            } catch {
-              // ignore
+      let pendingSuggestions: Suggestion[] = [];
+      const targetConversationId = shouldCreateNewConversation
+        ? undefined
+        : currentId || undefined;
+
+      const { abort } = sendChatMessage(
+        { conversationId: targetConversationId, content },
+        {
+          onStart: (conversationId) => {
+            console.log(
+              '[SSE] onStart:',
+              conversationId,
+              'currentId:',
+              currentId,
+            );
+            sseConversationIdRef.current = conversationId;
+            creatingNewConversationRef.current = false;
+            if (conversationId !== currentId) {
+              setCurrentId(conversationId);
             }
-          }
+          },
+          onContent: (text) => {
+            console.log(
+              '[SSE] onContent, text长度:',
+              text.length,
+              '累计:',
+              streamingRef.current.length + text.length,
+            );
+            streamingRef.current += text;
+            setStreamingContent(streamingRef.current);
+          },
+          onEnd: (reason, rawData) => {
+            console.log(
+              '[SSE] onEnd:',
+              reason,
+              '累计内容长度:',
+              streamingRef.current.length,
+            );
+            abortRef.current = null;
+            // 如果用户手动中止，已由 handlePause 处理
+            if (reason === 'abort') return;
 
-          const finalContent = streamingRef.current;
-          if (finalContent) {
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: Date.now(),
-                role: 'assistant',
-                content: finalContent,
-                metadata: pendingSuggestions.length > 0
-                  ? JSON.stringify({ suggestions: pendingSuggestions })
-                  : undefined,
-                createTime: new Date().toISOString(),
-              },
-            ]);
-          }
-          setStreamingContent('');
-          streamingRef.current = '';
-          setIsStreaming(false);
-          console.log('[SSE] 刷新会话列表');
-          setListRefreshKey(k => k + 1);
+            // 解析 end 事件中的路由建议
+            if (rawData) {
+              try {
+                const parsed: SseEndEventExt = JSON.parse(rawData);
+                if (parsed.suggestions) {
+                  pendingSuggestions = parsed.suggestions;
+                }
+              } catch {
+                // ignore
+              }
+            }
+
+            const finalContent = streamingRef.current;
+            if (finalContent) {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: Date.now(),
+                  role: 'assistant',
+                  content: finalContent,
+                  metadata:
+                    pendingSuggestions.length > 0
+                      ? JSON.stringify({ suggestions: pendingSuggestions })
+                      : undefined,
+                  createTime: new Date().toISOString(),
+                },
+              ]);
+            }
+            setStreamingContent('');
+            streamingRef.current = '';
+            setIsStreaming(false);
+            console.log('[SSE] 刷新会话列表');
+            setListRefreshKey((k) => k + 1);
+          },
+          onError: (code, msg) => {
+            console.log(
+              '[SSE] onError, code:',
+              code,
+              'msg:',
+              msg,
+              '累计内容长度:',
+              streamingRef.current.length,
+            );
+            abortRef.current = null;
+            creatingNewConversationRef.current = false;
+            // 即使出错，已有消息已在数据库，刷新列表让新会话出现在侧边栏
+            setListRefreshKey((k) => k + 1);
+            antMsg.error(msg || 'AI 响应异常');
+            setError(msg || 'AI 响应异常，请稍后重试');
+            setStreamingContent('');
+            streamingRef.current = '';
+            setIsStreaming(false);
+          },
         },
-        onError: (code, msg) => {
-          console.log('[SSE] onError, code:', code, 'msg:', msg, '累计内容长度:', streamingRef.current.length);
-          abortRef.current = null;
-          // 即使出错，已有消息已在数据库，刷新列表让新会话出现在侧边栏
-          setListRefreshKey(k => k + 1);
-          antMsg.error(msg || 'AI 响应异常');
-          setError(msg || 'AI 响应异常，请稍后重试');
-          setStreamingContent('');
-          streamingRef.current = '';
-          setIsStreaming(false);
-        },
-      },
-    );
-    abortRef.current = abort;
-  }, [inputValue, isStreaming, currentId, setListRefreshKey]);
+      );
+      abortRef.current = abort;
+    },
+    [inputValue, isStreaming, currentId, setListRefreshKey],
+  );
+
+  const handleSend = useCallback(async () => {
+    await sendMessageByContent(inputValue);
+  }, [inputValue, sendMessageByContent]);
+
+  useEffect(() => {
+    if (
+      !pendingHomePrompt ||
+      pendingHomePromptConsumedRef.current ||
+      isStreaming
+    ) {
+      return;
+    }
+
+    pendingHomePromptConsumedRef.current = true;
+    void sendMessageByContent(pendingHomePrompt, {
+      forceNewConversation: true,
+    });
+    setPendingHomePrompt(null);
+  }, [isStreaming, pendingHomePrompt, sendMessageByContent]);
 
   // ---- 键盘事件 ----
 
@@ -604,10 +737,12 @@ const AiChatPage: React.FC = () => {
   // ---- 新建会话 ----
 
   const handleNewConversation = () => {
+    creatingNewConversationRef.current = false;
     setCurrentId(null);
     setMessages([]);
     setStreamingContent('');
     setError(null);
+    setInputValue('');
   };
 
   // ---- 删除会话 ----
@@ -621,7 +756,7 @@ const AiChatPage: React.FC = () => {
         const remaining = conversations.filter((c) => c.id !== id);
         setCurrentId(remaining.length > 0 ? remaining[0].id : null);
       }
-      setListRefreshKey(k => k + 1);
+      setListRefreshKey((k) => k + 1);
     } catch {
       antMsg.error('删除失败');
     }
@@ -633,7 +768,7 @@ const AiChatPage: React.FC = () => {
     try {
       await updateTitle(id, title);
       antMsg.success('标题已更新');
-      setListRefreshKey(k => k + 1);
+      setListRefreshKey((k) => k + 1);
     } catch {
       antMsg.error('修改标题失败');
     }
@@ -643,8 +778,8 @@ const AiChatPage: React.FC = () => {
 
   return (
     <AiErrorBoundary>
-    <div style={styles.container}>
-      <style>{`
+      <div style={styles.container}>
+        <style>{`
         @keyframes blink {
           0%, 100% { opacity: 1; }
           50% { opacity: 0; }
@@ -652,228 +787,265 @@ const AiChatPage: React.FC = () => {
         ${markdownStyles}
       `}</style>
 
-      {/* ===== 左侧：会话列表 ===== */}
-      <div style={styles.sidebar}>
-        <div style={styles.sidebarHeader}>
-          <Text strong style={{ fontSize: 16 }}>历史对话</Text>
-          <Button
-            type="primary"
-            size="small"
-            icon={<PlusOutlined />}
-            onClick={handleNewConversation}
-          >
-            新建
-          </Button>
-        </div>
-
-        <div style={styles.sidebarList}>
-          {convLoading ? (
-            <div style={{ textAlign: 'center', padding: 40 }}>
-              <Spin />
-            </div>
-          ) : convError ? (
-            <div style={{ textAlign: 'center', padding: 40 }}>
-              <Text type="warning">加载失败</Text>
-              <Button size="small" onClick={fetchConversations} style={{ marginTop: 8 }}>
-                重试
-              </Button>
-            </div>
-          ) : conversations.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 40 }}>
-              <Text type="secondary">暂无历史对话</Text>
-              <br />
-              <Text type="secondary" style={{ fontSize: 12 }}>点击「新建」开始对话</Text>
-            </div>
-          ) : (
-            <List
-              dataSource={conversations}
-              renderItem={(item) => (
-                <List.Item
-                  key={item.id}
-                  onClick={() => setCurrentId(item.id)}
-                  style={{
-                    cursor: 'pointer',
-                    padding: '10px 16px',
-                    backgroundColor: currentId === item.id ? '#e6f4ff' : 'transparent',
-                    borderLeft: currentId === item.id ? '3px solid #1677ff' : '3px solid transparent',
-                    transition: 'all 0.2s',
-                  }}
-                  actions={[
-                    <Popconfirm
-                      key="delete"
-                      title="确认删除此对话？"
-                      onConfirm={() => handleDeleteConversation(item.id)}
-                    >
-                      <DeleteOutlined style={{ color: '#999', fontSize: 12 }} />
-                    </Popconfirm>,
-                  ]}
-                >
-                  <List.Item.Meta
-                    title={
-                      currentId === item.id ? (
-                        <EditableTitle
-                          value={item.title}
-                          onSave={(newTitle) => handleRenameConversation(item.id, newTitle)}
-                        />
-                      ) : (
-                        <Text
-                          style={{ fontSize: 14 }}
-                          ellipsis={{ tooltip: item.title }}
-                        >
-                          {item.title}
-                        </Text>
-                      )
-                    }
-                    description={
-                      <div>
-                        <Text
-                          type="secondary"
-                          style={{ fontSize: 12 }}
-                          ellipsis
-                        >
-                          {item.lastMessage || `${item.messageCount} 条消息`}
-                        </Text>
-                      </div>
-                    }
-                  />
-                </List.Item>
-              )}
-            />
-          )}
-        </div>
-      </div>
-
-      {/* ===== 右侧：对话区 ===== */}
-      <div style={styles.chatArea}>
-        <div style={styles.chatHeader}>
-          <Title level={5} style={{ margin: 0 }}>AI 智能助手</Title>
-        </div>
-
-        <div style={styles.messageList} ref={messageListRef}>
-          {msgLoading ? (
-            <div style={{ textAlign: 'center', padding: 60 }}>
-              <Spin tip="加载消息中..." />
-            </div>
-          ) : error ? (
-            <div style={{ textAlign: 'center', padding: 60 }}>
-              <Text type="warning">{error}</Text>
-              <br />
-              <Button
-                type="primary"
-                style={{ marginTop: 16 }}
-                onClick={() => currentId && loadMessages(currentId)}
-              >
-                重试
-              </Button>
-            </div>
-          ) : messages.length === 0 ? (
-            <div style={styles.welcomeContainer}>
-              <RobotOutlined style={{ fontSize: 64, color: '#1677ff', marginBottom: 24 }} />
-              <Title level={4} style={{ margin: 0 }}>AI 智能助手</Title>
-              <Text type="secondary" style={{ marginTop: 12, maxWidth: 480 }}>
-                {WELCOME_MESSAGE}
-              </Text>
-              <div style={{ marginTop: 32, display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center' }}>
-                {SUGGESTED_QUESTIONS.map((q) => (
-                  <Button
-                    key={q}
-                    type="default"
-                    shape="round"
-                    onClick={() => {
-                      setInputValue(q);
-                    }}
-                  >
-                    {q}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <>
-              {messages.map((msg) => (
-                <MessageBubble key={msg.id} message={msg} />
-              ))}
-
-              {isStreaming && streamingContent && (
-                <MessageBubble
-                  message={{ id: 0, role: 'assistant', content: streamingContent, createTime: '' }}
-                  isStreaming
-                />
-              )}
-
-              {isStreaming && !streamingContent && (
-                <div style={{ ...styles.messageRow, flexDirection: 'row' }}>
-                  <Avatar
-                    size={36}
-                    icon={<RobotOutlined />}
-                    style={{ backgroundColor: '#52c41a', flexShrink: 0 }}
-                  />
-                  <div
-                    style={{
-                      ...styles.messageBubble,
-                      backgroundColor: '#f5f5f5',
-                      color: '#999',
-                      borderTopLeftRadius: 4,
-                    }}
-                  >
-                    <Spin size="small" /> 思考中...
-                  </div>
-                </div>
-              )}
-
-              {error && messages.length > 0 && (
-                <div style={{ textAlign: 'center', padding: 12 }}>
-                  <Text type="danger" style={{ fontSize: 12 }}>{error}</Text>
-                  <Button
-                    size="small"
-                    type="link"
-                    onClick={() => {
-                      setError(null);
-                      handleSend();
-                    }}
-                  >
-                    重试
-                  </Button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        <div style={styles.inputArea}>
-          <TextArea
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="输入你的问题，按 Enter 发送，Shift+Enter 换行"
-            rows={2}
-            maxLength={2000}
-            disabled={isStreaming}
-            style={{ flex: 1, resize: 'none' }}
-          />
-          {isStreaming ? (
-            <Button
-              danger
-              icon={<PauseCircleOutlined />}
-              onClick={handlePause}
-              style={{ height: 52 }}
-            >
-              暂停
-            </Button>
-          ) : (
+        {/* ===== 左侧：会话列表 ===== */}
+        <div style={styles.sidebar}>
+          <div style={styles.sidebarHeader}>
+            <Text strong style={{ fontSize: 16 }}>
+              历史对话
+            </Text>
             <Button
               type="primary"
-              icon={<SendOutlined />}
-              onClick={handleSend}
-              disabled={!inputValue.trim()}
-              style={{ height: 52 }}
+              size="small"
+              icon={<PlusOutlined />}
+              onClick={handleNewConversation}
             >
-              发送
+              新建
             </Button>
-          )}
+          </div>
+
+          <div style={styles.sidebarList}>
+            {convLoading ? (
+              <div style={{ textAlign: 'center', padding: 40 }}>
+                <Spin />
+              </div>
+            ) : convError ? (
+              <div style={{ textAlign: 'center', padding: 40 }}>
+                <Text type="warning">加载失败</Text>
+                <Button
+                  size="small"
+                  onClick={fetchConversations}
+                  style={{ marginTop: 8 }}
+                >
+                  重试
+                </Button>
+              </div>
+            ) : conversations.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 40 }}>
+                <Text type="secondary">暂无历史对话</Text>
+                <br />
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  点击「新建」开始对话
+                </Text>
+              </div>
+            ) : (
+              <List
+                dataSource={conversations}
+                renderItem={(item) => (
+                  <List.Item
+                    key={item.id}
+                    onClick={() => setCurrentId(item.id)}
+                    style={{
+                      cursor: 'pointer',
+                      padding: '10px 16px',
+                      backgroundColor:
+                        currentId === item.id ? '#e6f4ff' : 'transparent',
+                      borderLeft:
+                        currentId === item.id
+                          ? '3px solid #1677ff'
+                          : '3px solid transparent',
+                      transition: 'all 0.2s',
+                    }}
+                    actions={[
+                      <Popconfirm
+                        key="delete"
+                        title="确认删除此对话？"
+                        onConfirm={() => handleDeleteConversation(item.id)}
+                      >
+                        <DeleteOutlined
+                          style={{ color: '#999', fontSize: 12 }}
+                        />
+                      </Popconfirm>,
+                    ]}
+                  >
+                    <List.Item.Meta
+                      title={
+                        currentId === item.id ? (
+                          <EditableTitle
+                            value={item.title}
+                            onSave={(newTitle) =>
+                              handleRenameConversation(item.id, newTitle)
+                            }
+                          />
+                        ) : (
+                          <Text
+                            style={{ fontSize: 14 }}
+                            ellipsis={{ tooltip: item.title }}
+                          >
+                            {item.title}
+                          </Text>
+                        )
+                      }
+                      description={
+                        <div>
+                          <Text
+                            type="secondary"
+                            style={{ fontSize: 12 }}
+                            ellipsis
+                          >
+                            {item.lastMessage || `${item.messageCount} 条消息`}
+                          </Text>
+                        </div>
+                      }
+                    />
+                  </List.Item>
+                )}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* ===== 右侧：对话区 ===== */}
+        <div style={styles.chatArea}>
+          <div style={styles.chatHeader}>
+            <Title level={5} style={{ margin: 0 }}>
+              AI 智能助手
+            </Title>
+          </div>
+
+          <div style={styles.messageList} ref={messageListRef}>
+            {msgLoading ? (
+              <div style={{ textAlign: 'center', padding: 60 }}>
+                <Spin tip="加载消息中..." />
+              </div>
+            ) : error ? (
+              <div style={{ textAlign: 'center', padding: 60 }}>
+                <Text type="warning">{error}</Text>
+                <br />
+                <Button
+                  type="primary"
+                  style={{ marginTop: 16 }}
+                  onClick={() => currentId && loadMessages(currentId)}
+                >
+                  重试
+                </Button>
+              </div>
+            ) : messages.length === 0 ? (
+              <div style={styles.welcomeContainer}>
+                <RobotOutlined
+                  style={{ fontSize: 64, color: '#1677ff', marginBottom: 24 }}
+                />
+                <Title level={4} style={{ margin: 0 }}>
+                  AI 智能助手
+                </Title>
+                <Text type="secondary" style={{ marginTop: 12, maxWidth: 480 }}>
+                  {WELCOME_MESSAGE}
+                </Text>
+                <div
+                  style={{
+                    marginTop: 32,
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: 12,
+                    justifyContent: 'center',
+                  }}
+                >
+                  {SUGGESTED_QUESTIONS.map((q) => (
+                    <Button
+                      key={q}
+                      type="default"
+                      shape="round"
+                      onClick={() => {
+                        setInputValue(q);
+                      }}
+                    >
+                      {q}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <>
+                {messages.map((msg) => (
+                  <MessageBubble key={msg.id} message={msg} />
+                ))}
+
+                {isStreaming && streamingContent && (
+                  <MessageBubble
+                    message={{
+                      id: 0,
+                      role: 'assistant',
+                      content: streamingContent,
+                      createTime: '',
+                    }}
+                    isStreaming
+                  />
+                )}
+
+                {isStreaming && !streamingContent && (
+                  <div style={{ ...styles.messageRow, flexDirection: 'row' }}>
+                    <Avatar
+                      size={36}
+                      icon={<RobotOutlined />}
+                      style={{ backgroundColor: '#52c41a', flexShrink: 0 }}
+                    />
+                    <div
+                      style={{
+                        ...styles.messageBubble,
+                        backgroundColor: '#f5f5f5',
+                        color: '#999',
+                        borderTopLeftRadius: 4,
+                      }}
+                    >
+                      <Spin size="small" /> 思考中...
+                    </div>
+                  </div>
+                )}
+
+                {error && messages.length > 0 && (
+                  <div style={{ textAlign: 'center', padding: 12 }}>
+                    <Text type="danger" style={{ fontSize: 12 }}>
+                      {error}
+                    </Text>
+                    <Button
+                      size="small"
+                      type="link"
+                      onClick={() => {
+                        setError(null);
+                        handleSend();
+                      }}
+                    >
+                      重试
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          <div style={styles.inputArea}>
+            <TextArea
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="输入你的问题，按 Enter 发送，Shift+Enter 换行"
+              rows={2}
+              maxLength={2000}
+              disabled={isStreaming}
+              style={{ flex: 1, resize: 'none' }}
+            />
+            {isStreaming ? (
+              <Button
+                danger
+                icon={<PauseCircleOutlined />}
+                onClick={handlePause}
+                style={{ height: 52 }}
+              >
+                暂停
+              </Button>
+            ) : (
+              <Button
+                type="primary"
+                icon={<SendOutlined />}
+                onClick={handleSend}
+                disabled={!inputValue.trim()}
+                style={{ height: 52 }}
+              >
+                发送
+              </Button>
+            )}
+          </div>
         </div>
       </div>
-    </div>
     </AiErrorBoundary>
   );
 };
@@ -882,8 +1054,11 @@ export default AiChatPage;
 
 // ============ 错误边界 ============
 
-class AiErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: any}> {
-  constructor(props: {children: React.ReactNode}) {
+class AiErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: any }
+> {
+  constructor(props: { children: React.ReactNode }) {
     super(props);
     this.state = { hasError: false, error: null };
   }
@@ -897,7 +1072,9 @@ class AiErrorBoundary extends React.Component<{children: React.ReactNode}, {hasE
     if (this.state.hasError) {
       return (
         <div style={{ padding: 40, textAlign: 'center' }}>
-          <div style={{ color: '#ff4d4f', fontSize: 24, marginBottom: 12 }}>⚠️</div>
+          <div style={{ color: '#ff4d4f', fontSize: 24, marginBottom: 12 }}>
+            ⚠️
+          </div>
           <div style={{ color: '#ff4d4f', marginBottom: 8 }}>页面渲染异常</div>
           <div style={{ color: '#999', fontSize: 12 }}>
             {this.state.error?.message || '未知错误'}
