@@ -111,7 +111,6 @@ const styles = {
     gap: 12,
   } as React.CSSProperties,
   messageBubble: {
-    maxWidth: '70%',
     padding: '12px 16px',
     borderRadius: 12,
     lineHeight: 1.6,
@@ -291,14 +290,25 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           flexShrink: 0,
         }}
       />
-      <div style={{ maxWidth: '70%' }}>
+      <div
+        style={{
+          maxWidth: '70%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: isUser ? 'flex-end' : 'flex-start',
+        }}
+      >
         <div
           style={{
             ...styles.messageBubble,
+            width: 'fit-content',
+            maxWidth: '100%',
             backgroundColor: isUser ? '#1677ff' : '#f5f5f5',
             color: isUser ? '#fff' : '#333',
             borderTopLeftRadius: isUser ? 12 : 4,
             borderTopRightRadius: isUser ? 4 : 12,
+            whiteSpace: isUser ? 'pre-wrap' : 'normal',
+            overflowWrap: 'break-word',
           }}
         >
           {isUser ? (
