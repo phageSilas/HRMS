@@ -81,11 +81,14 @@ public class AccountServiceImpl implements AccountService {
             throw new GlobalException(ErrorCode.NOT_FOUND, "用户不存在");
         }
 
-        // TODO: 校验短信验证码（接口已预留 verifyCode，短信服务未对接）
+        // 校验当前登录密码
+        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            throw new GlobalException(ErrorCode.UNAUTHORIZED, "密码错误，更换手机失败");
+        }
 
         user.setPhone(request.getPhone());
         userMapper.updateById(user);
-        log.info("用户 {} 绑定手机号成功", userId);
+        log.info("用户 {} 更换手机号成功 → {}", userId, request.getPhone());
     }
 
     @Override

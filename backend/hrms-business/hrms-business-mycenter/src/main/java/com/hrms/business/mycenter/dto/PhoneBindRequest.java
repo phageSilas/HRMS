@@ -15,7 +15,7 @@ public class PhoneBindRequest {
     @Schema(description = "新手机号")
     private String phone;
 
-    @NotBlank(message = "验证码不能为空")
-    @Schema(description = "短信验证码")
-    private String verifyCode;
+    @NotBlank(message = "密码不能为空")
+    @Schema(description = "当前登录密码（用于身份验证）")
+    private String password;
 }
