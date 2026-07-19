@@ -17,7 +17,6 @@ import {
 import {
   Button,
   message,
-  Popconfirm,
   Tag,
   Space,
   Form,
@@ -29,12 +28,11 @@ import {
 import {
   PlusOutlined,
   EditOutlined,
-  DeleteOutlined,
   FolderOutlined,
   FileOutlined,
   BarsOutlined,
 } from '@ant-design/icons';
-import { getMenuList, createMenu, updateMenu, deleteMenu } from '@/services/system';
+import { getMenuList, createMenu, updateMenu } from '@/services/system';
 import type { MenuItem } from '@/types/system';
 
 const MenuPage: React.FC = () => {
@@ -180,17 +178,25 @@ const MenuPage: React.FC = () => {
           >
             编辑
           </Button>
-          <Popconfirm
-            title="确认删除"
-            description={`确定要删除菜单 "${record.menuName}" 吗？删除后其下所有子菜单也将被删除。`}
-            onConfirm={() => handleDelete(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button type="link" danger size="small" icon={<DeleteOutlined />} style={{ padding: '0 2px' }}>
-              删除
+          {/* 启用/禁用按钮 */}
+          {record.status === 1 ? (
+            <Button
+              type="link"
+              size="small"
+              danger
+              onClick={() => handleToggleStatus(record)}
+            >
+              禁用
             </Button>
-          </Popconfirm>
+          ) : (
+            <Button
+              type="link"
+              size="small"
+              onClick={() => handleToggleStatus(record)}
+            >
+              启用
+            </Button>
+          )}
         </Space>
       ),
     },
@@ -215,15 +221,17 @@ const MenuPage: React.FC = () => {
     setEditModalVisible(true);
   };
 
-  // 删除菜单
-  const handleDelete = async (id: number) => {
+  // 切换菜单状态（启用/禁用）
+  const handleToggleStatus = async (record: MenuItem) => {
+    const newStatus = record.status === 1 ? 0 : 1;
+    const actionText = newStatus === 1 ? '启用' : '禁用';
     try {
-      await deleteMenu(id);
-      message.success('删除成功');
+      await updateMenu(record.id, { status: newStatus });
+      message.success(`${actionText}成功`);
       fetchMenuList();
       actionRef.current?.reload();
     } catch (error: any) {
-      message.error(error.message || '删除失败');
+      message.error(error.message || `${actionText}失败`);
     }
   };
 

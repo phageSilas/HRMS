@@ -118,10 +118,10 @@ public class MenuServiceImpl implements MenuService {
 
     @Override
     public List<MenuEntity> buildMenuTree() {
-        // 查询所有菜单
+        // 查询所有菜单（用于权限分配，不过滤 visible）
+        // visible 字段只影响用户侧边栏显示，不应影响权限分配
         LambdaQueryWrapper<MenuEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(MenuEntity::getStatus, 1);
-        wrapper.eq(MenuEntity::getVisible, 1);
         wrapper.orderByAsc(MenuEntity::getSortNo);
         List<MenuEntity> allMenus = menuMapper.selectList(wrapper);
 

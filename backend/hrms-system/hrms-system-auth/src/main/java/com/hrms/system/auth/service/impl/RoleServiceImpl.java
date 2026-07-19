@@ -218,14 +218,16 @@ public class RoleServiceImpl implements RoleService {
             newMenuIds = List.of();
         }
 
+        // 获取当前操作用户ID
+        Long currentUserId = com.hrms.common.security.SecurityContextHolder.getUserId();
+
         // 3. 处理新分配的菜单
         for (Long menuId : newMenuIds) {
             RoleMenuEntity existing = existingMenuMap.get(menuId);
             if (existing != null) {
-                // 如果已存在但已删除，则恢复
+                // 如果已存在但已删除，则恢复（使用自定义SQL绕过逻辑删除）
                 if (existing.getIsDeleted() == 1) {
-                    existing.setIsDeleted(0);
-                    roleMenuMapper.updateById(existing);
+                    roleMenuMapper.restoreById(existing.getId(), currentUserId);
                 }
             } else {
                 // 如果不存在，则插入新关联

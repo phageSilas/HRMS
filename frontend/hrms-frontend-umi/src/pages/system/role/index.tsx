@@ -16,7 +16,6 @@ import {
 import {
   Button,
   message,
-  Popconfirm,
   Tag,
   Space,
   Form,
@@ -26,14 +25,12 @@ import {
 import {
   PlusOutlined,
   EditOutlined,
-  DeleteOutlined,
   SettingOutlined,
 } from '@ant-design/icons';
 import {
   getRoleList,
   createRole,
   updateRole,
-  deleteRole,
   assignRoleMenus,
   getMenuTree,
 } from '@/services/system';
@@ -160,17 +157,25 @@ const RolePage: React.FC = () => {
           >
             编辑
           </Button>
-          <Popconfirm
-            title="确认删除"
-            description={`确定要删除角色 "${record.roleName}" 吗？`}
-            onConfirm={() => handleDelete(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button type="link" danger size="small" icon={<DeleteOutlined />} style={{ padding: '0 2px' }}>
-              删除
+          {/* 启用/禁用按钮 */}
+          {record.status === 1 ? (
+            <Button
+              type="link"
+              size="small"
+              danger
+              onClick={() => handleToggleStatus(record)}
+            >
+              禁用
             </Button>
-          </Popconfirm>
+          ) : (
+            <Button
+              type="link"
+              size="small"
+              onClick={() => handleToggleStatus(record)}
+            >
+              启用
+            </Button>
+          )}
         </Space>
       ),
     },
@@ -229,14 +234,16 @@ const RolePage: React.FC = () => {
     setEditModalVisible(true);
   };
 
-  // 删除角色
-  const handleDelete = async (id: number) => {
+  // 切换角色状态（启用/禁用）
+  const handleToggleStatus = async (record: RoleItem) => {
+    const newStatus = record.status === 1 ? 0 : 1;
+    const actionText = newStatus === 1 ? '启用' : '禁用';
     try {
-      await deleteRole(id);
-      message.success('删除成功');
+      await updateRole(record.id, { status: newStatus });
+      message.success(`${actionText}成功`);
       actionRef.current?.reload();
     } catch (error: any) {
-      message.error(error.message || '删除失败');
+      message.error(error.message || `${actionText}失败`);
     }
   };
 
