@@ -248,6 +248,82 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
         ));
     }
 
+    @Override
+    public PageResult<PendingTaskVO> findFilteredTasks(Long userId, PendingTaskQuery query) {
+        // 1. 按筛选条件查询符合条件的实例ID（复用实例级筛选逻辑）
+        List<Long> instanceIds = queryFilteredInstanceIds(query);
+        if (instanceIds.isEmpty()) {
+            return emptyPageResult(query);
+        }
+
+        // 2. 根据 filterType 分支构造不同的任务表查询条件
+        String filterType = query.getFilterType();
+        LocalDateTime now = LocalDateTime.now();
+
+        Page<ApprovalTaskEntity> mpPage = new Page<>(query.getPageNum(), query.getPageSize());
+        LambdaQueryWrapper<ApprovalTaskEntity> wrapper = Wrappers.lambdaQuery(ApprovalTaskEntity.class)
+                .in(ApprovalTaskEntity::getInstanceId, instanceIds)
+                .eq(ApprovalTaskEntity::getApproverUserId, userId)
+                .apply("EXISTS (SELECT 1 FROM hr_approval_instance i WHERE i.id = instance_id AND i.is_deleted = 0)");
+
+        if ("today-approved".equals(filterType)) {
+            // 今日已审批：已处理任务 + 审批时间在今天
+            wrapper.in(ApprovalTaskEntity::getTaskStatus,
+                            TaskStatusEnum.PROCESSED.getCode(),
+                            TaskStatusEnum.TRANSFERRED.getCode())
+                    .ge(ApprovalTaskEntity::getApproveTime,
+                            now.withHour(0).withMinute(0).withSecond(0).withNano(0))
+                    .orderByDesc(ApprovalTaskEntity::getApproveTime);
+        } else if ("overdue".equals(filterType)) {
+            // 已逾期：待办任务 + 截止时间已过
+            wrapper.eq(ApprovalTaskEntity::getTaskStatus, TaskStatusEnum.PENDING.getCode())
+                    .lt(ApprovalTaskEntity::getDeadlineTime, now)
+                    .orderByAsc(ApprovalTaskEntity::getCreateTime);
+        } else {
+            // pending（默认）：待办任务
+            wrapper.eq(ApprovalTaskEntity::getTaskStatus, TaskStatusEnum.PENDING.getCode())
+                    .orderByAsc(ApprovalTaskEntity::getCreateTime);
+        }
+
+        mpPage = taskMapper.selectPage(mpPage, wrapper);
+
+        // 3. 待办角标仅在 pending 视图有意义，其他视图不覆盖角标
+        Integer badgeCount = "today-approved".equals(filterType)
+                ? null
+                : Math.toIntExact(taskMapper.selectCount(
+                        Wrappers.lambdaQuery(ApprovalTaskEntity.class)
+                                .eq(ApprovalTaskEntity::getApproverUserId, userId)
+                                .eq(ApprovalTaskEntity::getTaskStatus, TaskStatusEnum.PENDING.getCode())));
+
+        PageResult<PendingTaskVO> result = buildTaskPageResult(mpPage);
+        result.setBadgeCount(badgeCount);
+        return result;
+    }
+
+    @Override
+    public Integer getTodayApprovedCount(Long userId) {
+        LocalDateTime todayStart = LocalDateTime.now()
+                .withHour(0).withMinute(0).withSecond(0).withNano(0);
+        return Math.toIntExact(taskMapper.selectCount(
+                Wrappers.lambdaQuery(ApprovalTaskEntity.class)
+                        .eq(ApprovalTaskEntity::getApproverUserId, userId)
+                        .in(ApprovalTaskEntity::getTaskStatus,
+                                TaskStatusEnum.PROCESSED.getCode(),
+                                TaskStatusEnum.TRANSFERRED.getCode())
+                        .ge(ApprovalTaskEntity::getApproveTime, todayStart)
+        ));
+    }
+
+    @Override
+    public Integer getOverdueCount(Long userId) {
+        return Math.toIntExact(taskMapper.selectCount(
+                Wrappers.lambdaQuery(ApprovalTaskEntity.class)
+                        .eq(ApprovalTaskEntity::getApproverUserId, userId)
+                        .eq(ApprovalTaskEntity::getTaskStatus, TaskStatusEnum.PENDING.getCode())
+                        .lt(ApprovalTaskEntity::getDeadlineTime, LocalDateTime.now())
+        ));
+    }
+
     // ========== 内部方法 ==========
 
     /**
@@ -356,14 +432,17 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
         vo.setCreatedAt(formatTime(instance.getApplyTime()));
         vo.setDeadline(formatTime(task.getDeadlineTime()));
         // 待办的截止时间已过 → 显示"已过期"
-        if (task.getDeadlineTime() != null && task.getDeadlineTime().isBefore(LocalDateTime.now())
-                && Objects.equals(task.getTaskStatus(), TaskStatusEnum.PENDING.getCode())) {
+        boolean isOverdue = task.getDeadlineTime() != null
+                && task.getDeadlineTime().isBefore(LocalDateTime.now())
+                && Objects.equals(task.getTaskStatus(), TaskStatusEnum.PENDING.getCode());
+        if (isOverdue) {
             vo.setStatus("EXPIRED");
             vo.setStatusName("已过期");
         } else {
             vo.setStatus(getStatusStr(instance.getApprovalStatus()));
             vo.setStatusName(getStatusName(instance.getApprovalStatus()));
         }
+        vo.setOverdue(isOverdue);
         return vo;
     }
 

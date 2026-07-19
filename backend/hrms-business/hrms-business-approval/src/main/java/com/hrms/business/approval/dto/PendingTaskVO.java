@@ -48,4 +48,7 @@ public class PendingTaskVO {
 
     @Schema(description = "状态中文名")
     private String statusName;
+
+    @Schema(description = "是否已逾期（截止时间已过且仍未审批）")
+    private Boolean overdue;
 }

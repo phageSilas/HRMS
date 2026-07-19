@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
+import com.hrms.common.security.DataScopeUtils;
+import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.system.organization.dto.DeptCreateDTO;
 import com.hrms.system.organization.dto.DeptUpdateDTO;
 import com.hrms.system.organization.entity.DeptEntity;
@@ -22,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -37,9 +40,11 @@ public class DeptServiceImpl implements DeptService {
 
     @Override
     public List<DeptTreeVO> getDeptTree() {
+        // 获取所有有效部门
         List<DeptEntity> allDepts = deptMapper.selectList(
                 Wrappers.<DeptEntity>lambdaQuery()
                         .eq(DeptEntity::getStatus, 1)
+                        .eq(DeptEntity::getIsDeleted, 0)
                         .orderByAsc(DeptEntity::getSortNo)
         );
 
@@ -47,16 +52,96 @@ public class DeptServiceImpl implements DeptService {
             return Collections.emptyList();
         }
 
+        // 根据数据权限过滤部门
+        int dataScope = DataScopeUtils.getCurrentUserDataScope();
+        Long userDeptId = SecurityContextHolder.getDeptId();
+        List<DeptEntity> filteredDepts = filterDeptsByDataScope(allDepts, dataScope, userDeptId);
+
+        if (CollectionUtils.isEmpty(filteredDepts)) {
+            return Collections.emptyList();
+        }
+
         // 按 parentId 分组
-        Map<Long, List<DeptEntity>> parentMap = allDepts.stream()
+        Map<Long, List<DeptEntity>> parentMap = filteredDepts.stream()
                 .collect(Collectors.groupingBy(DeptEntity::getParentId));
 
-        // 构建根节点（parentId = 0）
-        List<DeptEntity> rootDepts = parentMap.getOrDefault(0L, Collections.emptyList());
+        // 找出所有在过滤结果中存在的部门ID
+        Set<Long> visibleDeptIds = filteredDepts.stream()
+                .map(DeptEntity::getId)
+                .collect(Collectors.toSet());
+
+        // 构建根节点：
+        // 1. parentId=0 的部门（完整树的根）
+        // 2. parentId 不在可见部门集合中的部门（子树的根，即父节点被过滤掉的情况）
+        List<DeptEntity> rootDepts = filteredDepts.stream()
+                .filter(dept -> dept.getParentId() == 0L || !visibleDeptIds.contains(dept.getParentId()))
+                .collect(Collectors.toList());
 
         return rootDepts.stream()
                 .map(dept -> buildTreeNode(dept, parentMap))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 根据数据权限过滤部门列表
+     *
+     * @param allDepts   所有部门列表
+     * @param dataScope  数据权限范围
+     * @param userDeptId 用户所属部门ID
+     * @return 过滤后的部门列表
+     */
+    private List<DeptEntity> filterDeptsByDataScope(List<DeptEntity> allDepts, int dataScope, Long userDeptId) {
+        if (dataScope == DataScopeUtils.DATA_SCOPE_ALL) {
+            // 全部权限：返回所有部门
+            return allDepts;
+        }
+
+        if (userDeptId == null) {
+            // 没有部门信息，返回空列表
+            return Collections.emptyList();
+        }
+
+        if (dataScope == DataScopeUtils.DATA_SCOPE_SELF || dataScope == DataScopeUtils.DATA_SCOPE_DEPT) {
+            // 仅本人或本部门：只返回用户所属部门
+            return allDepts.stream()
+                    .filter(dept -> dept.getId().equals(userDeptId))
+                    .collect(Collectors.toList());
+        }
+
+        if (dataScope == DataScopeUtils.DATA_SCOPE_DEPT_AND_SUB) {
+            // 本部门及下属：返回用户所属部门及其所有子部门
+            List<Long> visibleDeptIds = getSubDeptIds(userDeptId, allDepts);
+            return allDepts.stream()
+                    .filter(dept -> visibleDeptIds.contains(dept.getId()))
+                    .collect(Collectors.toList());
+        }
+
+        // 默认返回空列表
+        return Collections.emptyList();
+    }
+
+    /**
+     * 递归获取子部门ID列表（含自身）
+     *
+     * @param deptId   部门ID
+     * @param allDepts 所有部门列表
+     * @return 子部门ID列表
+     */
+    private List<Long> getSubDeptIds(Long deptId, List<DeptEntity> allDepts) {
+        List<Long> result = new ArrayList<>();
+        result.add(deptId);
+
+        // 找出直接子部门
+        List<DeptEntity> children = allDepts.stream()
+                .filter(dept -> deptId.equals(dept.getParentId()))
+                .collect(Collectors.toList());
+
+        // 递归获取子部门的子部门
+        for (DeptEntity child : children) {
+            result.addAll(getSubDeptIds(child.getId(), allDepts));
+        }
+
+        return result;
     }
 
     /**
@@ -90,13 +175,24 @@ public class DeptServiceImpl implements DeptService {
 
     @Override
     public List<DeptListVO> getDeptList() {
+        // 获取所有有效部门
         List<DeptEntity> allDepts = deptMapper.selectList(
                 Wrappers.<DeptEntity>lambdaQuery()
                         .eq(DeptEntity::getStatus, 1)
+                        .eq(DeptEntity::getIsDeleted, 0)
                         .orderByAsc(DeptEntity::getSortNo)
         );
 
-        return allDepts.stream().map(dept -> {
+        if (CollectionUtils.isEmpty(allDepts)) {
+            return Collections.emptyList();
+        }
+
+        // 根据数据权限过滤部门
+        int dataScope = DataScopeUtils.getCurrentUserDataScope();
+        Long userDeptId = SecurityContextHolder.getDeptId();
+        List<DeptEntity> filteredDepts = filterDeptsByDataScope(allDepts, dataScope, userDeptId);
+
+        return filteredDepts.stream().map(dept -> {
             DeptListVO vo = new DeptListVO();
             vo.setId(dept.getId());
             vo.setDeptName(dept.getDeptName());
@@ -112,6 +208,11 @@ public class DeptServiceImpl implements DeptService {
         if (dept == null || dept.getIsDeleted() == 1) {
             throw new GlobalException(ErrorCode.NOT_FOUND);
         }
+
+        // 数据权限校验
+        int dataScope = DataScopeUtils.getCurrentUserDataScope();
+        Long userDeptId = SecurityContextHolder.getDeptId();
+        checkDeptAccess(dept, dataScope, userDeptId);
 
         DeptDetailVO vo = new DeptDetailVO();
         vo.setId(dept.getId());
@@ -137,6 +238,45 @@ public class DeptServiceImpl implements DeptService {
         }
 
         return vo;
+    }
+
+    /**
+     * 校验部门访问权限
+     *
+     * @param dept       部门实体
+     * @param dataScope  数据权限范围
+     * @param userDeptId 用户所属部门ID
+     */
+    private void checkDeptAccess(DeptEntity dept, int dataScope, Long userDeptId) {
+        if (dataScope == DataScopeUtils.DATA_SCOPE_ALL) {
+            // 全部权限：可以访问所有部门
+            return;
+        }
+
+        if (userDeptId == null) {
+            throw new GlobalException(ErrorCode.DATA_SCOPE_DENIED);
+        }
+
+        if (dataScope == DataScopeUtils.DATA_SCOPE_SELF || dataScope == DataScopeUtils.DATA_SCOPE_DEPT) {
+            // 仅本人或本部门：只能访问自己所属部门
+            if (!dept.getId().equals(userDeptId)) {
+                throw new GlobalException(ErrorCode.DATA_SCOPE_DENIED);
+            }
+            return;
+        }
+
+        if (dataScope == DataScopeUtils.DATA_SCOPE_DEPT_AND_SUB) {
+            // 本部门及下属：只能访问自己所属部门及其子部门
+            List<DeptEntity> allDepts = deptMapper.selectList(
+                    Wrappers.<DeptEntity>lambdaQuery()
+                            .eq(DeptEntity::getStatus, 1)
+                            .eq(DeptEntity::getIsDeleted, 0)
+            );
+            List<Long> visibleDeptIds = getSubDeptIds(userDeptId, allDepts);
+            if (!visibleDeptIds.contains(dept.getId())) {
+                throw new GlobalException(ErrorCode.DATA_SCOPE_DENIED);
+            }
+        }
     }
 
     @Override
@@ -204,6 +344,11 @@ public class DeptServiceImpl implements DeptService {
             throw new GlobalException(ErrorCode.NOT_FOUND);
         }
 
+        // 数据权限校验
+        int dataScope = DataScopeUtils.getCurrentUserDataScope();
+        Long userDeptId = SecurityContextHolder.getDeptId();
+        checkDeptAccess(dept, dataScope, userDeptId);
+
         dept.setDeptName(updateDTO.getDeptName());
         dept.setLeaderUserId(updateDTO.getLeaderUserId());
         dept.setSortNo(updateDTO.getSortNo());
@@ -219,6 +364,11 @@ public class DeptServiceImpl implements DeptService {
         if (dept == null || dept.getIsDeleted() == 1) {
             throw new GlobalException(ErrorCode.NOT_FOUND);
         }
+
+        // 数据权限校验
+        int dataScope = DataScopeUtils.getCurrentUserDataScope();
+        Long userDeptId = SecurityContextHolder.getDeptId();
+        checkDeptAccess(dept, dataScope, userDeptId);
 
         // 检查是否有子部门
         Long childCount = deptMapper.selectCount(

@@ -12,6 +12,7 @@ export interface PendingQuery {
   keyword?: string;
   startDate?: string;
   endDate?: string;
+  filterType?: string;
   pageNum?: number;
   pageSize?: number;
 }
@@ -29,6 +30,10 @@ export interface ApprovalTask {
   taskId?: number;
   title: string;
   applicantName: string;
+  /** 申请人部门名称 */
+  applicantDeptName?: string;
+  /** 申请人头像 URL */
+  applicantAvatar?: string;
   businessType: string;
   businessTypeName: string;
   createdAt: string;
@@ -38,6 +43,8 @@ export interface ApprovalTask {
   statusName?: string;
   delegateFlag?: boolean;
   delegateMark?: string;
+  /** 是否已逾期 */
+  overdue?: boolean;
 }
 
 // ============ 审批详情 ============
@@ -101,10 +108,27 @@ export interface DelegationCreateData {
 
 // ============ API 方法 ============
 
+/** 今日已审批数量 */
+export async function getTodayApprovedCount() {
+  return request.get<{ count: number }>('/api/v1/approval/today-approved-count');
+}
+
+/** 已逾期数量 */
+export async function getOverdueCount() {
+  return request.get<{ count: number }>('/api/v1/approval/overdue-count');
+}
+
 /** 待审批列表 */
 export async function getPendingTasks(params?: PendingQuery) {
   // 加时间戳防止 Umi 开发服务器缓存 GET 请求导致 304
   return request.get<PageResult<ApprovalTask>>('/api/v1/approval/tasks/pending', {
+    params: { ...params, _t: Date.now() },
+  });
+}
+
+/** 任务列表（支持 filterType 筛选：pending/today-approved/overdue） */
+export async function getTasks(params?: PendingQuery) {
+  return request.get<PageResult<ApprovalTask>>('/api/v1/approval/tasks', {
     params: { ...params, _t: Date.now() },
   });
 }

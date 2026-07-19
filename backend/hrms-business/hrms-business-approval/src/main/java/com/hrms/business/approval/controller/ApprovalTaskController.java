@@ -52,6 +52,13 @@ public class ApprovalTaskController {
         return Result.success(approvalTaskService.findHistoryTasks(userId, query));
     }
 
+    @Operation(summary = "任务列表（支持筛选类型：pending/today-approved/overdue）")
+    @GetMapping("/tasks")
+    public Result<PageResult<PendingTaskVO>> getTasks(PendingTaskQuery query) {
+        Long userId = SecurityContextHolder.getUserId();
+        return Result.success(approvalTaskService.findFilteredTasks(userId, query));
+    }
+
     @Operation(summary = "审批详情")
     @GetMapping("/{id}")
     public Result<ApprovalDetailVO> getDetail(@PathVariable Long id) {
@@ -73,6 +80,22 @@ public class ApprovalTaskController {
     public Result<Map<String, Integer>> getPendingCount() {
         Long userId = SecurityContextHolder.getUserId();
         Integer count = approvalTaskService.getPendingCount(userId);
+        return Result.success(Map.of("count", count));
+    }
+
+    @Operation(summary = "今日已审批数量")
+    @GetMapping("/today-approved-count")
+    public Result<Map<String, Integer>> getTodayApprovedCount() {
+        Long userId = SecurityContextHolder.getUserId();
+        Integer count = approvalTaskService.getTodayApprovedCount(userId);
+        return Result.success(Map.of("count", count));
+    }
+
+    @Operation(summary = "已逾期数量")
+    @GetMapping("/overdue-count")
+    public Result<Map<String, Integer>> getOverdueCount() {
+        Long userId = SecurityContextHolder.getUserId();
+        Integer count = approvalTaskService.getOverdueCount(userId);
         return Result.success(Map.of("count", count));
     }
 

@@ -642,6 +642,7 @@ const AiChatPage: React.FC = () => {
   // ---- 渲染 ----
 
   return (
+    <AiErrorBoundary>
     <div style={styles.container}>
       <style>{`
         @keyframes blink {
@@ -753,7 +754,19 @@ const AiChatPage: React.FC = () => {
             <div style={{ textAlign: 'center', padding: 60 }}>
               <Spin tip="加载消息中..." />
             </div>
-          ) : !currentId && messages.length === 0 ? (
+          ) : error ? (
+            <div style={{ textAlign: 'center', padding: 60 }}>
+              <Text type="warning">{error}</Text>
+              <br />
+              <Button
+                type="primary"
+                style={{ marginTop: 16 }}
+                onClick={() => currentId && loadMessages(currentId)}
+              >
+                重试
+              </Button>
+            </div>
+          ) : messages.length === 0 ? (
             <div style={styles.welcomeContainer}>
               <RobotOutlined style={{ fontSize: 64, color: '#1677ff', marginBottom: 24 }} />
               <Title level={4} style={{ margin: 0 }}>AI 智能助手</Title>
@@ -774,18 +787,6 @@ const AiChatPage: React.FC = () => {
                   </Button>
                 ))}
               </div>
-            </div>
-          ) : error && messages.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 60 }}>
-              <Text type="warning">{error}</Text>
-              <br />
-              <Button
-                type="primary"
-                style={{ marginTop: 16 }}
-                onClick={() => currentId && loadMessages(currentId)}
-              >
-                重试
-              </Button>
             </div>
           ) : (
             <>
@@ -873,7 +874,43 @@ const AiChatPage: React.FC = () => {
         </div>
       </div>
     </div>
+    </AiErrorBoundary>
   );
 };
 
 export default AiChatPage;
+
+// ============ 错误边界 ============
+
+class AiErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: any}> {
+  constructor(props: {children: React.ReactNode}) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: any, info: any) {
+    console.error('[AiChat Error]', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: 40, textAlign: 'center' }}>
+          <div style={{ color: '#ff4d4f', fontSize: 24, marginBottom: 12 }}>⚠️</div>
+          <div style={{ color: '#ff4d4f', marginBottom: 8 }}>页面渲染异常</div>
+          <div style={{ color: '#999', fontSize: 12 }}>
+            {this.state.error?.message || '未知错误'}
+          </div>
+          <button
+            onClick={() => window.location.reload()}
+            style={{ marginTop: 16, padding: '8px 24px', cursor: 'pointer' }}
+          >
+            刷新重试
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}

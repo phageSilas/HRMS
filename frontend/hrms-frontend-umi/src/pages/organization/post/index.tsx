@@ -37,6 +37,7 @@ import {
   getDeptTree,
   getPostStatsBySequence,
 } from '@/services/organization';
+import { hasEmployeesInPost } from '@/services/employee';
 import type { PostItem, DeptTreeNode } from '@/services/organization';
 import { Card, Row, Col, Statistic } from 'antd';
 import { TeamOutlined, SolutionOutlined, ToolOutlined } from '@ant-design/icons';
@@ -231,6 +232,13 @@ const PostPage: React.FC = () => {
   // 删除职位
   const handleDelete = async (id: number) => {
     try {
+      // 检查职位下是否有在职员工
+      const hasEmployees = await hasEmployeesInPost(id);
+      if (hasEmployees) {
+        message.error('该职位下有在职员工，无法删除');
+        return;
+      }
+
       await deletePost(id);
       message.success('删除成功');
       actionRef.current?.reload();

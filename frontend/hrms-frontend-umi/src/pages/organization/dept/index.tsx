@@ -37,6 +37,7 @@ import {
   updateDept,
   deleteDept,
 } from '@/services/organization';
+import { hasEmployeesInDept } from '@/services/employee';
 import type { DeptTreeNode, DeptDetail } from '@/services/organization';
 
 const { TextArea } = Input;
@@ -151,6 +152,14 @@ const DeptPage: React.FC = () => {
   // 删除部门
   const handleDelete = async (id: number) => {
     try {
+      // 1. 检查部门下是否有在职员工
+      const hasEmployees = await hasEmployeesInDept(id);
+      if (hasEmployees) {
+        message.error('该部门下有在职员工，无法删除');
+        return;
+      }
+
+      // 2. 调用删除接口（后端会检查子部门）
       await deleteDept(id);
       message.success('删除成功');
       // 清空选中状态
