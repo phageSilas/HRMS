@@ -3,8 +3,8 @@
  * 负责人：成员 C
  */
 
-import request from '@/utils/request';
 import type { PageQuery, PageResult } from '@/types/api';
+import request from '@/utils/request';
 
 // ============ 类型定义 ============
 
@@ -165,6 +165,8 @@ export interface AttendanceGroup {
   lateThresholdMinutes?: number;
   earlyLeaveThresholdMinutes?: number;
   monthlyCorrectionLimit?: number;
+  clockIpWhitelist?: string;
+  clockGpsScope?: string;
   status?: number;
   statusText?: string;
   scopeType?: AttendanceGroupScopeType | string;
@@ -299,7 +301,10 @@ export async function createAttendanceGroup(data: AttendanceGroupRequest) {
 /**
  * 更新考勤组
  */
-export async function updateAttendanceGroup(id: number, data: AttendanceGroupRequest) {
+export async function updateAttendanceGroup(
+  id: number,
+  data: AttendanceGroupRequest,
+) {
   return request.put<AttendanceGroup>(`/api/v1/attendance/groups/${id}`, data);
 }
 
@@ -323,7 +328,9 @@ export async function getAttendanceGroupRecords(
 }
 
 export async function getAttendanceRecordList(params: AttendanceQuery) {
-  return request.get<PageResult<AttendanceRecord>>('/attendance/records', { params });
+  return request.get<PageResult<AttendanceRecord>>('/attendance/records', {
+    params,
+  });
 }
 
 /**
@@ -344,9 +351,12 @@ export async function clockAttendance(data: AttendanceClockRequest) {
  * 查询当前登录员工个人月度打卡日历。
  */
 export async function getMyAttendanceCalendar(yearMonth: string) {
-  return request.get<AttendanceCalendarVO>('/api/v1/attendance/records/my-calendar', {
-    params: { yearMonth },
-  });
+  return request.get<AttendanceCalendarVO>(
+    '/api/v1/attendance/records/my-calendar',
+    {
+      params: { yearMonth },
+    },
+  );
 }
 
 // ============ 请假申请接口 ============
@@ -368,10 +378,15 @@ export async function createLeaveRequest(data: Partial<LeaveRequest>) {
 /**
  * 获取管理侧请假列表
  */
-export async function getAttendanceLeaveManageList(params: AttendanceLeaveManageQuery) {
-  return request.get<PageResult<AttendanceLeaveManageItem>>('/api/v1/attendance/leaves', {
-    params,
-  });
+export async function getAttendanceLeaveManageList(
+  params: AttendanceLeaveManageQuery,
+) {
+  return request.get<PageResult<AttendanceLeaveManageItem>>(
+    '/api/v1/attendance/leaves',
+    {
+      params,
+    },
+  );
 }
 
 /**
@@ -389,18 +404,28 @@ export async function getAttendanceLeaveTypes() {
 /**
  * 提交请假申请
  */
-export async function createAttendanceLeave(data: AttendanceLeaveCreateRequest) {
+export async function createAttendanceLeave(
+  data: AttendanceLeaveCreateRequest,
+) {
   return request.post<AttendanceLeaveCreateResult>('/api/v1/leaves', data);
 }
 
-export async function getAttendanceSummary(employeeId: number, yearMonth: string) {
-  return request.get<AttendanceSummary>(`/attendance/summary/${employeeId}/${yearMonth}`);
+export async function getAttendanceSummary(
+  employeeId: number,
+  yearMonth: string,
+) {
+  return request.get<AttendanceSummary>(
+    `/attendance/summary/${employeeId}/${yearMonth}`,
+  );
 }
 
 /**
  * 获取考勤统计
  */
-export async function getAttendanceStatistics(params: { yearMonth: string; departmentId?: number }) {
+export async function getAttendanceStatistics(params: {
+  yearMonth: string;
+  departmentId?: number;
+}) {
   return request.get<AttendanceSummary[]>('/attendance/statistics', { params });
 }
 
@@ -411,7 +436,10 @@ export async function getAttendanceSummaryDashboard(params: {
   yearMonth: string;
   deptId?: number;
 }) {
-  return request.get<AttendanceSummaryDashboard>('/api/v1/attendance/summary/dashboard', {
-    params,
-  });
+  return request.get<AttendanceSummaryDashboard>(
+    '/api/v1/attendance/summary/dashboard',
+    {
+      params,
+    },
+  );
 }

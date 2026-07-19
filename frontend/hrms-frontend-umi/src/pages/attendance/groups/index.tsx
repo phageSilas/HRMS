@@ -106,7 +106,10 @@ function formatBackendTime(value?: string | number[]) {
   if (!value) return '--:--';
   if (Array.isArray(value)) {
     const [hour = 0, minute = 0] = value;
-    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(
+      2,
+      '0',
+    )}`;
   }
   return value.slice(0, 5);
 }
@@ -120,11 +123,50 @@ function toRequestTime(value?: dayjs.Dayjs) {
   return value ? value.format('HH:mm:ss') : undefined;
 }
 
+function parseLocationRange(value?: string) {
+  if (!value) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(value) as {
+      latitude?: number | string;
+      longitude?: number | string;
+      radius?: number | string;
+      address?: string;
+    };
+
+    const latitude =
+      parsed.latitude == null || parsed.latitude === ''
+        ? undefined
+        : Number(parsed.latitude);
+    const longitude =
+      parsed.longitude == null || parsed.longitude === ''
+        ? undefined
+        : Number(parsed.longitude);
+    const radius =
+      parsed.radius == null || parsed.radius === ''
+        ? undefined
+        : Number(parsed.radius);
+
+    return {
+      locationLatitude: Number.isFinite(latitude) ? latitude : undefined,
+      locationLongitude: Number.isFinite(longitude) ? longitude : undefined,
+      locationRadius: Number.isFinite(radius) ? radius : undefined,
+      locationAddress: parsed.address || undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
 function getShiftMeta(type?: string) {
-  return shiftTypeMap[(type || 'FIXED').toUpperCase()] || {
-    label: type || '未配置',
-    color: 'default',
-  };
+  return (
+    shiftTypeMap[(type || 'FIXED').toUpperCase()] || {
+      label: type || '未配置',
+      color: 'default',
+    }
+  );
 }
 
 function toTreeSelectData(nodes?: DeptTreeNode[]): TreeSelectNode[] {
@@ -136,7 +178,9 @@ function toTreeSelectData(nodes?: DeptTreeNode[]): TreeSelectNode[] {
   }));
 }
 
-function buildMemberRange(values: GroupFormValues): AttendanceGroupRequest['memberRange'] {
+function buildMemberRange(
+  values: GroupFormValues,
+): AttendanceGroupRequest['memberRange'] {
   const scopeType = values.scopeType || 'DEPT';
   if (scopeType === 'DEPT') {
     return {
@@ -176,7 +220,10 @@ const AttendanceGroupsPage: React.FC = () => {
   const [employeeOptions, setEmployeeOptions] = useState<EmployeeBrief[]>([]);
   const [employeeLoading, setEmployeeLoading] = useState(false);
 
-  const departmentTreeData = useMemo(() => toTreeSelectData(departmentTree), [departmentTree]);
+  const departmentTreeData = useMemo(
+    () => toTreeSelectData(departmentTree),
+    [departmentTree],
+  );
 
   const loadGroups = async () => {
     setLoading(true);
@@ -186,7 +233,8 @@ const AttendanceGroupsPage: React.FC = () => {
       setGroups(nextGroups);
       return nextGroups;
     } catch (error) {
-      const messageText = error instanceof Error ? error.message : '考勤组加载失败';
+      const messageText =
+        error instanceof Error ? error.message : '考勤组加载失败';
       message.error(messageText);
       return groups;
     } finally {
@@ -202,7 +250,8 @@ const AttendanceGroupsPage: React.FC = () => {
     try {
       setDepartmentTree(await getDepartmentTree());
     } catch (error) {
-      const messageText = error instanceof Error ? error.message : '部门数据加载失败';
+      const messageText =
+        error instanceof Error ? error.message : '部门数据加载失败';
       message.error(messageText);
     } finally {
       setDepartmentLoading(false);
@@ -218,7 +267,8 @@ const AttendanceGroupsPage: React.FC = () => {
       const page = await getPostList({ pageNum: 1, pageSize: 100 });
       setPostOptions(page.records || []);
     } catch (error) {
-      const messageText = error instanceof Error ? error.message : '职位数据加载失败';
+      const messageText =
+        error instanceof Error ? error.message : '职位数据加载失败';
       message.error(messageText);
     } finally {
       setPostLoading(false);
@@ -240,7 +290,8 @@ const AttendanceGroupsPage: React.FC = () => {
       });
       setEmployeeOptions(page.records || []);
     } catch (error) {
-      const messageText = error instanceof Error ? error.message : '员工数据加载失败';
+      const messageText =
+        error instanceof Error ? error.message : '员工数据加载失败';
       message.error(messageText);
     } finally {
       setEmployeeLoading(false);
@@ -292,7 +343,9 @@ const AttendanceGroupsPage: React.FC = () => {
       return;
     }
 
-    const nextScopeType = (editingGroup.scopeType || 'DEPT') as AttendanceGroupScopeType;
+    const nextScopeType = (editingGroup.scopeType ||
+      'DEPT') as AttendanceGroupScopeType;
+    const locationRange = parseLocationRange(editingGroup.clockGpsScope);
     form.setFieldsValue({
       groupName: editingGroup.groupName,
       shiftType: (editingGroup.shiftType || 'FIXED').toUpperCase(),
@@ -301,12 +354,14 @@ const AttendanceGroupsPage: React.FC = () => {
       lateThreshold: editingGroup.lateThresholdMinutes,
       earlyLeaveThreshold: editingGroup.earlyLeaveThresholdMinutes,
       maxCorrectionCount: editingGroup.monthlyCorrectionLimit,
+      ipWhitelist: editingGroup.clockIpWhitelist,
       enabled: editingGroup.status !== 0,
       scopeType: nextScopeType,
       deptIds: editingGroup.deptIds || [],
       postId: editingGroup.postId,
       employeeDeptId: editingGroup.deptId,
       employeeIds: editingGroup.employeeIds || [],
+      ...locationRange,
     });
     if (nextScopeType === 'EMPLOYEE') {
       void searchEmployees('', editingGroup.deptId);
@@ -375,7 +430,8 @@ const AttendanceGroupsPage: React.FC = () => {
       if (error && typeof error === 'object' && 'errorFields' in error) {
         return;
       }
-      const messageText = error instanceof Error ? error.message : '考勤组保存失败';
+      const messageText =
+        error instanceof Error ? error.message : '考勤组保存失败';
       message.error(messageText);
     } finally {
       setSubmitting(false);
@@ -401,7 +457,8 @@ const AttendanceGroupsPage: React.FC = () => {
           closeDrawer();
           await loadGroups();
         } catch (error) {
-          const messageText = error instanceof Error ? error.message : '考勤组删除失败';
+          const messageText =
+            error instanceof Error ? error.message : '考勤组删除失败';
           message.error(messageText);
         } finally {
           setDeleting(false);
@@ -417,7 +474,11 @@ const AttendanceGroupsPage: React.FC = () => {
           <Title level={3}>考勤规则配置</Title>
           <Text type="secondary">管理考勤组、适用范围、工作日及打卡规则</Text>
         </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={openCreateDrawer}>
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={openCreateDrawer}
+        >
           新增考勤组
         </Button>
       </div>
@@ -428,7 +489,9 @@ const AttendanceGroupsPage: React.FC = () => {
             {groups.map((group) => {
               const shiftMeta = getShiftMeta(group.shiftType);
               const scopeText = group.scopeName || '暂未配置适用范围';
-              const normalizedScopeType = group.scopeType as AttendanceGroupScopeType | undefined;
+              const normalizedScopeType = group.scopeType as
+                | AttendanceGroupScopeType
+                | undefined;
               return (
                 <Col xs={24} md={12} xl={8} key={group.id}>
                   <Card
@@ -442,7 +505,11 @@ const AttendanceGroupsPage: React.FC = () => {
                       />
                     }
                   >
-                    <Space direction="vertical" size={10} className={styles.groupCardContent}>
+                    <Space
+                      direction="vertical"
+                      size={10}
+                      className={styles.groupCardContent}
+                    >
                       <Space wrap>
                         <Text strong className={styles.groupName}>
                           {group.groupName}
@@ -454,27 +521,42 @@ const AttendanceGroupsPage: React.FC = () => {
                       </Space>
                       <div className={styles.groupMeta}>
                         <ClockCircleOutlined />
-                        {formatBackendTime(group.workStartTime)} - {formatBackendTime(group.workEndTime)}
+                        {formatBackendTime(group.workStartTime)} -{' '}
+                        {formatBackendTime(group.workEndTime)}
                       </div>
                       <div className={styles.scopeMeta}>
                         <TeamOutlined />
                         <div>
                           <div className={styles.scopeSummary}>
-                            {normalizedScopeType ? `${scopeTypeText[normalizedScopeType] || '范围'}：` : ''}
+                            {normalizedScopeType
+                              ? `${
+                                  scopeTypeText[normalizedScopeType] || '范围'
+                                }：`
+                              : ''}
                             {scopeText}
                           </div>
-                          <Text type="secondary">{group.memberCount ?? 0} 人</Text>
+                          <Text type="secondary">
+                            {group.memberCount ?? 0} 人
+                          </Text>
                         </div>
                       </div>
                       <div className={styles.groupFooter}>
-                        <span>补卡上限 {group.monthlyCorrectionLimit ?? 0} 次/月</span>
-                        <span>迟到阈值 {group.lateThresholdMinutes ?? 0}min</span>
+                        <span>
+                          补卡上限 {group.monthlyCorrectionLimit ?? 0} 次/月
+                        </span>
+                        <span>
+                          迟到阈值 {group.lateThresholdMinutes ?? 0}min
+                        </span>
                       </div>
                       <div className={styles.groupActions}>
                         <Button
                           type="link"
                           icon={<FileSearchOutlined />}
-                          onClick={() => history.push(`/attendance/record?groupId=${group.id}`)}
+                          onClick={() =>
+                            history.push(
+                              `/attendance/record?groupId=${group.id}`,
+                            )
+                          }
                         >
                           查看记录
                         </Button>
@@ -487,7 +569,10 @@ const AttendanceGroupsPage: React.FC = () => {
           </Row>
         ) : (
           <Card bordered={false} className={styles.emptyCard}>
-            <Empty description="暂无考勤组，请先新增考勤规则" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            <Empty
+              description="暂无考勤组，请先新增考勤规则"
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+            />
           </Card>
         )}
       </Spin>
@@ -498,7 +583,11 @@ const AttendanceGroupsPage: React.FC = () => {
             <Title level={5}>工作日设置</Title>
             <Space wrap className={styles.weekLine}>
               {weekDays.map((day, index) => (
-                <Tag key={day} color={index < 5 ? 'blue' : 'default'} className={styles.weekTag}>
+                <Tag
+                  key={day}
+                  color={index < 5 ? 'blue' : 'default'}
+                  className={styles.weekTag}
+                >
                   {day}
                 </Tag>
               ))}
@@ -526,7 +615,8 @@ const AttendanceGroupsPage: React.FC = () => {
               <Tag>缺勤</Tag>
             </div>
             <Text type="secondary">
-              当前已启用 {activeCount} 个考勤组；补卡申请默认每月最多 2 次，可在考勤组内单独配置。
+              当前已启用 {activeCount} 个考勤组；补卡申请默认每月最多 2
+              次，可在考勤组内单独配置。
             </Text>
           </Card>
         </Col>
@@ -578,7 +668,10 @@ const AttendanceGroupsPage: React.FC = () => {
               />
             </Form.Item>
 
-            <Form.Item noStyle shouldUpdate={(prev, next) => prev.scopeType !== next.scopeType}>
+            <Form.Item
+              noStyle
+              shouldUpdate={(prev, next) => prev.scopeType !== next.scopeType}
+            >
               {({ getFieldValue }) => {
                 const currentScopeType = getFieldValue('scopeType') || 'DEPT';
                 if (currentScopeType === 'POST') {
@@ -594,7 +687,9 @@ const AttendanceGroupsPage: React.FC = () => {
                         placeholder="请选择职位"
                         optionFilterProp="label"
                         options={postOptions.map((post) => ({
-                          label: `${post.postName}${post.deptName ? `（${post.deptName}）` : ''}`,
+                          label: `${post.postName}${
+                            post.deptName ? `（${post.deptName}）` : ''
+                          }`,
                           value: post.id,
                         }))}
                       />
@@ -607,7 +702,9 @@ const AttendanceGroupsPage: React.FC = () => {
                       <Form.Item
                         label="员工所属部门"
                         name="employeeDeptId"
-                        rules={[{ required: true, message: '请先选择员工所属部门' }]}
+                        rules={[
+                          { required: true, message: '请先选择员工所属部门' },
+                        ]}
                       >
                         <TreeSelect
                           allowClear
@@ -634,9 +731,15 @@ const AttendanceGroupsPage: React.FC = () => {
                           filterOption={false}
                           disabled={!employeeDeptId}
                           loading={employeeLoading}
-                          placeholder={employeeDeptId ? '输入姓名或工号搜索员工' : '请先选择部门'}
+                          placeholder={
+                            employeeDeptId
+                              ? '输入姓名或工号搜索员工'
+                              : '请先选择部门'
+                          }
                           onFocus={() => searchEmployees('', employeeDeptId)}
-                          onSearch={(keyword) => searchEmployees(keyword, employeeDeptId)}
+                          onSearch={(keyword) =>
+                            searchEmployees(keyword, employeeDeptId)
+                          }
                           options={employeeOptions.map((employee) => ({
                             label: `${employee.employeeName}（${employee.employeeNo}）`,
                             value: employee.id,
@@ -687,7 +790,11 @@ const AttendanceGroupsPage: React.FC = () => {
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item label="启用状态" name="enabled" valuePropName="checked">
+              <Form.Item
+                label="启用状态"
+                name="enabled"
+                valuePropName="checked"
+              >
                 <Switch checkedChildren="启用" unCheckedChildren="停用" />
               </Form.Item>
             </Col>
@@ -739,17 +846,29 @@ const AttendanceGroupsPage: React.FC = () => {
           <Row gutter={12}>
             <Col span={8}>
               <Form.Item label="迟到阈值" name="lateThreshold">
-                <InputNumber min={0} addonAfter="分钟" style={{ width: '100%' }} />
+                <InputNumber
+                  min={0}
+                  addonAfter="分钟"
+                  style={{ width: '100%' }}
+                />
               </Form.Item>
             </Col>
             <Col span={8}>
               <Form.Item label="早退阈值" name="earlyLeaveThreshold">
-                <InputNumber min={0} addonAfter="分钟" style={{ width: '100%' }} />
+                <InputNumber
+                  min={0}
+                  addonAfter="分钟"
+                  style={{ width: '100%' }}
+                />
               </Form.Item>
             </Col>
             <Col span={8}>
               <Form.Item label="补卡上限" name="maxCorrectionCount">
-                <InputNumber min={0} addonAfter="次/月" style={{ width: '100%' }} />
+                <InputNumber
+                  min={0}
+                  addonAfter="次/月"
+                  style={{ width: '100%' }}
+                />
               </Form.Item>
             </Col>
           </Row>
@@ -774,7 +893,11 @@ const AttendanceGroupsPage: React.FC = () => {
               </Col>
               <Col span={8}>
                 <Form.Item label="半径" name="locationRadius">
-                  <InputNumber min={0} addonAfter="米" style={{ width: '100%' }} />
+                  <InputNumber
+                    min={0}
+                    addonAfter="米"
+                    style={{ width: '100%' }}
+                  />
                 </Form.Item>
               </Col>
             </Row>
