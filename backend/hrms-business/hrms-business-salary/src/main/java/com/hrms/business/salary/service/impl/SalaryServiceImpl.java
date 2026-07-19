@@ -1793,6 +1793,10 @@ public class SalaryServiceImpl implements SalaryService {
         if (item.getNetSalary().compareTo(BigDecimal.ZERO) <= 0) {
             item.setWarningLevel(SalaryWarningLevelEnum.BLOCK.name());
             item.setWarningReason("实发工资小于等于 0");
+        } else if (SalaryWarningLevelEnum.BLOCK.name().equals(item.getWarningLevel())
+                && "实发工资小于等于 0".equals(item.getWarningReason())) {
+            item.setWarningLevel(SalaryWarningLevelEnum.NONE.name());
+            item.setWarningReason(null);
         }
     }
 
