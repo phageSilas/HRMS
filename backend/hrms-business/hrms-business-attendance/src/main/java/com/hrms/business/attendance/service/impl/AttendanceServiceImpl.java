@@ -45,6 +45,7 @@ import com.hrms.business.attendance.mq.event.AttendanceClockCreatedEvent;
 import com.hrms.business.attendance.mq.handler.AttendanceClockEventHandler;
 import com.hrms.business.attendance.mq.event.AttendanceMonthlyStatGenerateMessage;
 import com.hrms.business.attendance.mq.producer.AttendanceMonthlyStatGenerateProducer;
+import com.hrms.business.attendance.service.AttendanceCalendarConfigService;
 import com.hrms.business.attendance.service.AttendanceService;
 import com.hrms.business.attendance.vo.AttendanceClockVO;
 import com.hrms.business.attendance.vo.AttendanceCalendarDayVO;
@@ -142,6 +143,8 @@ public class AttendanceServiceImpl implements AttendanceService {
     private static final String GROUP_SCOPE_POST = "POST";
 
     private static final String GROUP_SCOPE_EMPLOYEE = "EMPLOYEE";
+
+    private final AttendanceCalendarConfigService attendanceCalendarConfigService;
 
     private final AttendanceGroupMapper attendanceGroupMapper;
 
@@ -768,9 +771,7 @@ public class AttendanceServiceImpl implements AttendanceService {
      * 本方法使用的工具类: Stream(JDK)
      */
     private List<LocalDate> listWorkdays(LocalDate startDate, LocalDate endDate) {
-        return startDate.datesUntil(endDate.plusDays(1))
-                .filter(date -> date.getDayOfWeek().getValue() <= 5)
-                .toList();
+        return attendanceCalendarConfigService.listWorkdays(startDate, endDate);
     }
 
     /**
@@ -1821,9 +1822,7 @@ public class AttendanceServiceImpl implements AttendanceService {
      * 本方法使用的工具类: IntStream(JDK)
      */
     private int countWeekdays(LocalDate startDate, LocalDate endDate) {
-        return (int) startDate.datesUntil(endDate.plusDays(1))
-                .filter(date -> date.getDayOfWeek().getValue() <= 5)
-                .count();
+        return attendanceCalendarConfigService.countWorkdays(startDate, endDate);
     }
 
     /**

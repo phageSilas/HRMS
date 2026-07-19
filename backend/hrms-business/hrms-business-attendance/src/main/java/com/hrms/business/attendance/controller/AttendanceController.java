@@ -1,5 +1,6 @@
 package com.hrms.business.attendance.controller;
 
+import com.hrms.business.attendance.dto.AttendanceCalendarConfigRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceClockRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceCorrectionCreateRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupQueryDTO;
@@ -7,7 +8,9 @@ import com.hrms.business.attendance.dto.AttendanceGroupCreateOrUpdateRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceLeaveManageQueryDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupRecordQueryDTO;
 import com.hrms.business.attendance.dto.MonthlyStatGenerateRequestDTO;
+import com.hrms.business.attendance.service.AttendanceCalendarConfigService;
 import com.hrms.business.attendance.service.AttendanceService;
+import com.hrms.business.attendance.vo.AttendanceCalendarConfigVO;
 import com.hrms.business.attendance.vo.AttendanceClockVO;
 import com.hrms.business.attendance.vo.AttendanceCalendarVO;
 import com.hrms.business.attendance.vo.AttendanceCorrectionCreateVO;
@@ -46,6 +49,7 @@ import java.util.List;
 public class AttendanceController {
 
     private final AttendanceService attendanceService;
+    private final AttendanceCalendarConfigService attendanceCalendarConfigService;
 
     /**
      * 分页查询考勤组。
@@ -57,6 +61,17 @@ public class AttendanceController {
     @GetMapping("/groups")
     public Result<PageResult<AttendanceGroupPageVO>> pageAttendanceGroups(@Valid AttendanceGroupQueryDTO queryDTO) {
         return Result.success(attendanceService.pageAttendanceGroups(queryDTO));
+    }
+
+    @GetMapping("/calendar-config")
+    public Result<AttendanceCalendarConfigVO> getCalendarConfig(@RequestParam Integer year) {
+        return Result.success(attendanceCalendarConfigService.getCalendarConfig(year));
+    }
+
+    @PutMapping("/calendar-config")
+    public Result<AttendanceCalendarConfigVO> saveCalendarConfig(
+            @Valid @RequestBody AttendanceCalendarConfigRequestDTO requestDTO) {
+        return Result.success(attendanceCalendarConfigService.saveCalendarConfig(requestDTO));
     }
 
     /**
