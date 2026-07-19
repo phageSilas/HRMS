@@ -134,6 +134,11 @@ function parseBackendDate(value?: BackendDateValue) {
   return parsed.isValid() ? parsed : undefined;
 }
 
+function formatLocalTimeArray(value: number[]) {
+  const [hour = 0, minute = 0] = value;
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
 function normalizeDate(value?: BackendDateValue) {
   return parseBackendDate(value)?.format('YYYY-MM-DD');
 }
@@ -143,6 +148,17 @@ function normalizeDateTime(value?: BackendDateValue) {
 }
 
 function formatTime(value?: BackendDateValue) {
+  if (Array.isArray(value)) {
+    if (value.length <= 4) {
+      return formatLocalTimeArray(value);
+    }
+    return parseBackendDate(value)?.format('HH:mm') || '--:--';
+  }
+
+  if (typeof value === 'string' && /^\d{2}:\d{2}(:\d{2})?$/.test(value)) {
+    return value.slice(0, 5);
+  }
+
   return parseBackendDate(value)?.format('HH:mm') || '--:--';
 }
 
