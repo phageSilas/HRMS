@@ -12,21 +12,19 @@ import {
 import { history, useModel } from '@umijs/max';
 import { Button, Card, Input, Typography } from 'antd';
 import dayjs from 'dayjs';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import styles from './index.less';
+import {
+  DEFAULT_HOME_WEATHER_INFO,
+  fetchZhengzhouWeather,
+  type HomeWeatherInfo,
+  type HomeWeatherType,
+} from './weather';
 
 const { Paragraph, Text, Title } = Typography;
 const { TextArea } = Input;
 
 const HOME_AI_PENDING_PROMPT_STORAGE_KEY = 'hrms-ai-pending-prompt';
-
-type WeatherType = '晴天' | '多云' | '阴天' | '雨天' | string;
-
-interface HomeWeatherInfo {
-  type: WeatherType;
-  temperature: string;
-  tip: string;
-}
 
 interface QuickEntry {
   key: string;
@@ -144,12 +142,6 @@ const QUICK_ENTRIES: QuickEntry[] = [
   },
 ];
 
-const DEFAULT_WEATHER_INFO: HomeWeatherInfo = {
-  type: '多云',
-  temperature: '15°C',
-  tip: '带好常备轻薄外套',
-};
-
 const WEATHER_ICON_MAP: Record<
   string,
   React.ComponentType<WeatherIconProps>
@@ -165,8 +157,8 @@ const WEATHER_ICON_MAP: Record<
  *
  * 本方法使用的工具类: 无
  */
-function normalizeWeatherType(type: WeatherType) {
-  return WEATHER_ICON_MAP[type] ? type : '阴天';
+function normalizeWeatherType(type: string): HomeWeatherType {
+  return (WEATHER_ICON_MAP[type] ? type : '阴天') as HomeWeatherType;
 }
 
 /**
@@ -195,14 +187,47 @@ const HomePage: React.FC = () => {
   const { initialState } = useModel('@@initialState');
   const currentUser = initialState?.currentUser;
   const [assistantInput, setAssistantInput] = useState('');
+  const [weatherInfo, setWeatherInfo] = useState<HomeWeatherInfo>(
+    DEFAULT_HOME_WEATHER_INFO,
+  );
+  const [weatherLoading, setWeatherLoading] = useState(true);
+  const [weatherError, setWeatherError] = useState<string | null>(null);
 
-  const weatherInfo = DEFAULT_WEATHER_INFO;
   const weatherType = normalizeWeatherType(weatherInfo.type);
   const WeatherIcon = WEATHER_ICON_MAP[weatherType] || OvercastIcon;
 
   const welcomeName = useMemo(() => {
     return currentUser?.nickname || currentUser?.username || '同事';
   }, [currentUser?.nickname, currentUser?.username]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadWeather = async () => {
+      setWeatherLoading(true);
+      const nextWeather = await fetchZhengzhouWeather();
+
+      if (cancelled) {
+        return;
+      }
+
+      if (nextWeather) {
+        setWeatherInfo(nextWeather);
+        setWeatherError(null);
+      } else {
+        setWeatherInfo(DEFAULT_HOME_WEATHER_INFO);
+        setWeatherError('获取天气失败，已展示默认天气');
+      }
+
+      setWeatherLoading(false);
+    };
+
+    void loadWeather();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   /**
    * 发送首页 AI 问题并跳转到助手页
@@ -270,8 +295,14 @@ const HomePage: React.FC = () => {
               <div className={styles.weatherTemperature}>
                 {weatherInfo.temperature}
               </div>
-              <div className={styles.weatherType}>{weatherType}</div>
-              <div className={styles.weatherTip}>{weatherInfo.tip}</div>
+              <div className={styles.weatherType}>
+                {weatherInfo.rawWeatherText || weatherType}
+              </div>
+              <div className={styles.weatherTip}>
+                {weatherLoading
+                  ? '正在同步郑州实时天气'
+                  : weatherError || weatherInfo.tip}
+              </div>
             </div>
           </div>
         </div>
