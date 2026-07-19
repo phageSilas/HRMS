@@ -45,6 +45,7 @@ import com.hrms.business.salary.mapper.SalaryTemplateMapper;
 import com.hrms.business.salary.mq.producer.SalaryBatchCalculateProducer;
 import com.hrms.business.salary.mq.event.SalaryBatchCalculateMessage;
 import com.hrms.business.salary.service.SalaryCalculateService;
+import com.hrms.business.salary.service.PaySlipService;
 import com.hrms.business.salary.service.SalaryService;
 import com.hrms.business.salary.service.SalaryTemplateService;
 import com.hrms.business.salary.vo.EmployeeSalaryProfileVO;
@@ -170,6 +171,7 @@ public class SalaryServiceImpl implements SalaryService {
     private final FileConfig fileConfig;
     private final SalaryTemplateService salaryTemplateService;
     private final SalaryCalculateService salaryCalculateService;
+    private final PaySlipService paySlipService;
 
     /**
      * 分页查询薪资账套。
@@ -368,22 +370,7 @@ public class SalaryServiceImpl implements SalaryService {
      */
     @Override
     public List<SalaryPayslipListVO> listPayslips(String month) {
-        Long employeeId = getCurrentEmployeeId();
-        List<SalaryBatchEntity> batches = salaryBatchMapper.selectList(Wrappers.lambdaQuery(SalaryBatchEntity.class)
-                .eq(StrUtil.isNotBlank(month), SalaryBatchEntity::getSalaryMonth, month)
-                .in(SalaryBatchEntity::getBatchStatus, PAYSLIP_VISIBLE_STATUS)
-                .orderByDesc(SalaryBatchEntity::getSalaryMonth));
-        if (CollUtil.isEmpty(batches)) {
-            return List.of();
-        }
-        Map<Long, SalaryBatchEntity> batchMap = batches.stream()
-                .collect(Collectors.toMap(SalaryBatchEntity::getId, Function.identity()));
-        List<SalaryBatchItemEntity> items = salaryBatchItemMapper.selectList(Wrappers
-                .lambdaQuery(SalaryBatchItemEntity.class)
-                .eq(SalaryBatchItemEntity::getEmployeeId, employeeId)
-                .in(SalaryBatchItemEntity::getBatchId, batchMap.keySet())
-                .orderByDesc(SalaryBatchItemEntity::getId));
-        return items.stream().map(item -> toPayslipListVO(item, batchMap.get(item.getBatchId()))).toList();
+        return paySlipService.listPayslips(month);
     }
 
     /**
@@ -402,45 +389,12 @@ public class SalaryServiceImpl implements SalaryService {
      */
     @Override
     public PageResult<SalaryPayslipListVO> pagePayslips(SalaryPayslipPageQueryDTO queryDTO) {
-        Long employeeId = getCurrentEmployeeId();
-        int pageNum = Optional.ofNullable(queryDTO.getPageNum()).orElse(1);
-        int pageSize = Optional.ofNullable(queryDTO.getPageSize()).orElse(10);
-        Page<SalaryPayslipListVO> page = salaryBatchItemMapper.selectEmployeePayslipPage(
-                Page.of(pageNum, pageSize), employeeId, queryDTO, PAYSLIP_VISIBLE_STATUS);
-        StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
-        if (redisTemplate != null) {
-            page.getRecords().forEach(record -> record.setVerified(Boolean.TRUE.equals(redisTemplate.hasKey(
-                    SalaryCacheKeys.payslipVerify(employeeId, record.getSalaryMonth())))));
-        } else {
-            page.getRecords().forEach(record -> record.setVerified(false));
-        }
-        return PageResult.of(page.getRecords(), page.getTotal(), (int) page.getCurrent(), (int) page.getSize());
+        return paySlipService.pagePayslips(queryDTO);
     }
 
     @Override
     public SalaryPayslipVerifyVO verifyPayslip(SalaryPayslipVerifyRequestDTO requestDTO) {
-        Long userId = SecurityContextHolder.getUserId();
-        Long employeeId = getCurrentEmployeeId();
-        SalarySysUserEntity user = salarySysUserMapper.selectById(userId);
-        if (user == null || Objects.equals(user.getIsDeleted(), 1) || Objects.equals(user.getStatus(), 0)) {
-            throw new GlobalException(ErrorCode.UNAUTHORIZED, "当前用户不可用");
-        }
-        boolean passwordOk = StrUtil.isNotBlank(requestDTO.getPassword())
-                && getPasswordEncoder().matches(requestDTO.getPassword(), user.getPassword());
-        if (!passwordOk) {
-            throw new GlobalException(ErrorCode.FORBIDDEN, "登录密码验证失败");
-        }
-        String token = IdUtil.fastSimpleUUID();
-        StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
-        if (redisTemplate != null) {
-            redisTemplate.opsForValue().set(SalaryCacheKeys.payslipVerify(employeeId, requestDTO.getMonth()),
-                    token, 30, TimeUnit.MINUTES);
-        }
-        return SalaryPayslipVerifyVO.builder()
-                .success(true)
-                .token(token)
-                .expireTime(LocalDateTime.now().plusMinutes(30))
-                .build();
+        return paySlipService.verifyPayslip(requestDTO);
     }
 
     /**
@@ -452,27 +406,7 @@ public class SalaryServiceImpl implements SalaryService {
      */
     @Override
     public SalaryPayslipVerifyVO verifyManagePayslip(SalaryManagePayslipVerifyRequestDTO requestDTO) {
-        assertSalaryManagerRole();
-        Long userId = SecurityContextHolder.getUserId();
-        SalarySysUserEntity user = salarySysUserMapper.selectById(userId);
-        if (user == null || Objects.equals(user.getIsDeleted(), 1) || Objects.equals(user.getStatus(), 0)) {
-            throw new GlobalException(ErrorCode.UNAUTHORIZED, "当前用户不可用");
-        }
-        boolean passwordOk = StrUtil.isNotBlank(requestDTO.getPassword())
-                && getPasswordEncoder().matches(requestDTO.getPassword(), user.getPassword());
-        if (!passwordOk) {
-            throw new GlobalException(ErrorCode.FORBIDDEN, "登录密码验证失败");
-        }
-        String token = IdUtil.fastSimpleUUID();
-        StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
-        if (redisTemplate != null) {
-            redisTemplate.opsForValue().set(SalaryCacheKeys.managePayslipVerify(userId), token, 30, TimeUnit.MINUTES);
-        }
-        return SalaryPayslipVerifyVO.builder()
-                .success(true)
-                .token(token)
-                .expireTime(LocalDateTime.now().plusMinutes(30))
-                .build();
+        return paySlipService.verifyManagePayslip(requestDTO);
     }
 
     /**
@@ -484,21 +418,7 @@ public class SalaryServiceImpl implements SalaryService {
      */
     @Override
     public PageResult<SalaryManagePayslipPageVO> pageManagePayslips(SalaryManagePayslipQueryDTO queryDTO) {
-        assertSalaryManagerRole();
-        queryDTO.setViewStatus(normalizeManagePayslipViewStatus(queryDTO.getViewStatus()));
-        int pageNum = Optional.ofNullable(queryDTO.getPageNum()).orElse(1);
-        int pageSize = Optional.ofNullable(queryDTO.getPageSize()).orElse(10);
-        Page<SalaryManagePayslipPageVO> page = salaryBatchItemMapper.selectManagePayslipPage(
-                Page.of(pageNum, pageSize), queryDTO, PAYSLIP_VISIBLE_STATUS);
-        boolean verified = hasManagePayslipVerified();
-        page.getRecords().forEach(record -> {
-            SalaryEmployeeSnapshotEntity employee = new SalaryEmployeeSnapshotEntity();
-            employee.setId(record.getEmployeeId());
-            employee.setDeptId(record.getDeptId());
-            record.setDeptName(resolveDeptName(employee));
-            record.setVerified(verified);
-        });
-        return PageResult.of(page.getRecords(), page.getTotal(), (int) page.getCurrent(), (int) page.getSize());
+        return paySlipService.pageManagePayslips(queryDTO);
     }
 
     /**
@@ -510,26 +430,7 @@ public class SalaryServiceImpl implements SalaryService {
      */
     @Override
     public SalaryPayslipDetailVO getPayslipDetail(Long payslipId) {
-        Long employeeId = getCurrentEmployeeId();
-        SalaryBatchItemEntity item = salaryBatchItemMapper.selectById(payslipId);
-        if (item == null || !Objects.equals(item.getEmployeeId(), employeeId)) {
-            throw new GlobalException(ErrorCode.NOT_FOUND, "工资条不存在");
-        }
-        SalaryBatchEntity batch = getBatchRequired(item.getBatchId());
-        if (!PAYSLIP_VISIBLE_STATUS.contains(batch.getBatchStatus())) {
-            throw new GlobalException(ErrorCode.FORBIDDEN, "工资条暂不可查看");
-        }
-        StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
-        if (redisTemplate != null && !Boolean.TRUE.equals(redisTemplate.hasKey(
-                SalaryCacheKeys.payslipVerify(employeeId, batch.getSalaryMonth())))) {
-            throw new GlobalException(ErrorCode.FORBIDDEN, "请先完成工资条二次验证");
-        }
-        SalaryEmployeeSnapshotEntity employee = employeeSnapshotMapper.selectById(employeeId);
-        recordPayslipView(item, batch);
-        return payslipDetailBuilder(item, employee)
-                .salaryMonth(batch.getSalaryMonth())
-                .batchNo(batch.getBatchNo())
-                .build();
+        return paySlipService.getPayslipDetail(payslipId);
     }
 
     /**
@@ -547,46 +448,12 @@ public class SalaryServiceImpl implements SalaryService {
      */
     @Override
     public SalaryPayslipDetailVO getManagePayslipDetail(Long payslipId) {
-        assertSalaryManagerRole();
-        if (!hasManagePayslipVerified()) {
-            throw new GlobalException(ErrorCode.FORBIDDEN, "请先完成管理端工资条二次验证");
-        }
-        SalaryBatchItemEntity item = salaryBatchItemMapper.selectById(payslipId);
-        if (item == null) {
-            throw new GlobalException(ErrorCode.NOT_FOUND, "工资条不存在");
-        }
-        SalaryBatchEntity batch = getBatchRequired(item.getBatchId());
-        SalaryEmployeeSnapshotEntity employee = employeeSnapshotMapper.selectById(item.getEmployeeId());
-        return payslipDetailBuilder(item, employee)
-                .salaryMonth(batch.getSalaryMonth())
-                .batchNo(batch.getBatchNo())
-                .build();
+        return paySlipService.getManagePayslipDetail(payslipId);
     }
 
     @Override
     public List<SalaryTrendVO> getTrend() {
-        Long employeeId = getCurrentEmployeeId();
-        String startMonth = YearMonth.now().minusMonths(5).toString();
-        List<SalaryBatchEntity> batches = salaryBatchMapper.selectList(Wrappers.lambdaQuery(SalaryBatchEntity.class)
-                .ge(SalaryBatchEntity::getSalaryMonth, startMonth)
-                .in(SalaryBatchEntity::getBatchStatus, PAYSLIP_VISIBLE_STATUS)
-                .orderByAsc(SalaryBatchEntity::getSalaryMonth));
-        if (CollUtil.isEmpty(batches)) {
-            return List.of();
-        }
-        Map<Long, SalaryBatchEntity> batchMap = batches.stream()
-                .collect(Collectors.toMap(SalaryBatchEntity::getId, Function.identity()));
-        List<SalaryBatchItemEntity> items = salaryBatchItemMapper.selectList(Wrappers
-                .lambdaQuery(SalaryBatchItemEntity.class)
-                .eq(SalaryBatchItemEntity::getEmployeeId, employeeId)
-                .in(SalaryBatchItemEntity::getBatchId, batchMap.keySet()));
-        return items.stream()
-                .map(item -> SalaryTrendVO.builder()
-                        .month(batchMap.get(item.getBatchId()).getSalaryMonth())
-                        .netSalary(item.getNetSalary())
-                        .build())
-                .sorted(Comparator.comparing(SalaryTrendVO::getMonth))
-                .toList();
+        return paySlipService.getTrend();
     }
 
     /**
