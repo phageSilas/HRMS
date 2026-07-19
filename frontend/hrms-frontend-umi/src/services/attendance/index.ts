@@ -144,7 +144,7 @@ export interface AttendanceCalendarVO {
 export interface AttendanceCalendarConfig {
   year: number;
   workdays: number[];
-  holidayDates: string[];
+  holidayDates: Array<string | number[]>;
 }
 
 export interface AttendanceGroupQuery extends Partial<PageQuery> {

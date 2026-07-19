@@ -142,9 +142,30 @@ function toRequestTime(value?: dayjs.Dayjs) {
   return value ? value.format('HH:mm:ss') : undefined;
 }
 
-function formatHolidayDateLabel(value: string) {
-  const parsed = dayjs(value, 'YYYY-MM-DD');
-  return parsed.isValid() ? parsed.format('YYYY/MM/DD') : value;
+function normalizeHolidayDateValue(value: string | number[]) {
+  if (Array.isArray(value)) {
+    const [year, month, day] = value;
+    if (!year || !month || !day) {
+      return '';
+    }
+    return `${String(year).padStart(4, '0')}-${String(month).padStart(
+      2,
+      '0',
+    )}-${String(day).padStart(2, '0')}`;
+  }
+
+  if (/^\d{8}$/.test(value)) {
+    return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;
+  }
+
+  const parsed = dayjs(value, ['YYYY-MM-DD', 'YYYY/M/D', 'YYYY/M/DD', 'YYYY/MM/D', 'YYYY/MM/DD']);
+  return parsed.isValid() ? parsed.format('YYYY-MM-DD') : value;
+}
+
+function formatHolidayDateLabel(value: string | number[]) {
+  const normalized = normalizeHolidayDateValue(value);
+  const parsed = dayjs(normalized, 'YYYY-MM-DD');
+  return parsed.isValid() ? parsed.format('YYYY/MM/DD') : normalized;
 }
 
 function parseLocationRange(value?: string) {
@@ -291,7 +312,12 @@ const AttendanceGroupsPage: React.FC = () => {
           .slice()
           .sort((left, right) => left - right),
       );
-      setSelectedHolidayDates((config?.holidayDates || []).slice().sort());
+      setSelectedHolidayDates(
+        (config?.holidayDates || [])
+          .map((item) => normalizeHolidayDateValue(item))
+          .filter((item) => !!item)
+          .sort(),
+      );
     } catch (error) {
       const messageText =
         error instanceof Error ? error.message : '工作日和节假日配置加载失败';
