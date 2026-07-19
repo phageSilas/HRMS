@@ -378,6 +378,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                                                                    Map<Long, String> deptNameCache,
                                                                    AttendanceDateRange dateRange,
                                                                    AttendanceGroupRecordQueryDTO queryDTO) {
+        LocalDate today = LocalDate.now();
         List<LocalDate> dates = IntStream.rangeClosed(0, (int) ChronoUnit.DAYS.between(dateRange.startDate(), dateRange.endDate()))
                 .mapToObj(dateRange.startDate()::plusDays)
                 .toList();
@@ -392,6 +393,9 @@ public class AttendanceServiceImpl implements AttendanceService {
                 continue;
             }
             for (LocalDate date : dates) {
+                if (date.isAfter(today)) {
+                    continue;
+                }
                 if (!isMemberEffectiveOnDate(members, employeeId, date)) {
                     continue;
                 }
