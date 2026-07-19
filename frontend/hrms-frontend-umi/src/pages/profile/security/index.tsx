@@ -5,6 +5,7 @@
 
 import {
   KeyOutlined,
+  LockOutlined,
   PhoneOutlined,
   SafetyCertificateOutlined,
 } from '@ant-design/icons';
@@ -134,14 +135,18 @@ const ProfileSecurityPage: React.FC = () => {
       const values = await phoneForm.validateFields();
       const payload: PhoneBindRequest = {
         phone: values.phone,
-        smsCode: values.smsCode,
+        password: values.password,
       };
       await bindPhone(payload);
-      message.success('手机绑定成功');
+      message.success('手机更换成功');
       setPhoneModalOpen(false);
       phoneForm.resetFields();
-    } catch {
-      // 静默处理
+    } catch (error: any) {
+      if (error?.response?.data?.message) {
+        message.error(error.response.data.message);
+      } else if (error instanceof Error) {
+        message.error(error.message);
+      }
     }
   };
 
@@ -292,9 +297,9 @@ const ProfileSecurityPage: React.FC = () => {
         </Form>
       </Modal>
 
-      {/* 绑定手机弹窗 */}
+      {/* 更换手机弹窗 */}
       <Modal
-        title="绑定手机"
+        title="更换手机"
         open={phoneModalOpen}
         onOk={handlePhoneSubmit}
         onCancel={() => {
@@ -306,27 +311,22 @@ const ProfileSecurityPage: React.FC = () => {
         <Form form={phoneForm} layout="vertical">
           <Form.Item
             name="phone"
-            label="手机号"
+            label="新手机号"
             rules={[
-              { required: true, message: '请输入手机号' },
+              { required: true, message: '请输入新手机号' },
               { pattern: /^1\d{10}$/, message: '请输入正确的手机号格式' },
             ]}
           >
-            <Input placeholder="请输入手机号" maxLength={11} />
+            <Input placeholder="请输入新手机号" maxLength={11} />
           </Form.Item>
           <Form.Item
-            name="smsCode"
-            label="短信验证码"
-            rules={[{ required: true, message: '请输入短信验证码' }]}
+            name="password"
+            label="当前密码"
+            rules={[{ required: true, message: '请输入当前密码以验证身份' }]}
           >
-            <Input
-              placeholder="请输入验证码"
-              maxLength={6}
-              suffix={
-                <Button type="link" size="small">
-                  获取验证码
-                </Button>
-              }
+            <Input.Password
+              prefix={<LockOutlined />}
+              placeholder="请输入当前密码"
             />
           </Form.Item>
         </Form>

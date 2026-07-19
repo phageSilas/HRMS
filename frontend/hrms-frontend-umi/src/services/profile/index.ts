@@ -138,10 +138,10 @@ export interface PasswordChangeRequest {
   newPassword: string;
 }
 
-/** 绑定手机请求 */
+/** 绑定/更换手机请求 */
 export interface PhoneBindRequest {
   phone: string;
-  smsCode: string;
+  password: string;
 }
 
 /** 登录日志 VO（与后端 LoginLogVO 对齐） */
