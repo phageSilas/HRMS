@@ -45,6 +45,7 @@ import com.hrms.business.salary.mapper.SalaryTemplateMapper;
 import com.hrms.business.salary.mq.producer.SalaryBatchCalculateProducer;
 import com.hrms.business.salary.mq.event.SalaryBatchCalculateMessage;
 import com.hrms.business.salary.service.SalaryService;
+import com.hrms.business.salary.service.SalaryTemplateService;
 import com.hrms.business.salary.vo.EmployeeSalaryProfileVO;
 import com.hrms.business.salary.vo.SalaryBatchItemVO;
 import com.hrms.business.salary.vo.SalaryBatchExportVO;
@@ -166,6 +167,7 @@ public class SalaryServiceImpl implements SalaryService {
     private final DeptService deptService;
     private final FileService fileService;
     private final FileConfig fileConfig;
+    private final SalaryTemplateService salaryTemplateService;
 
     /**
      * 分页查询薪资账套。
@@ -176,21 +178,7 @@ public class SalaryServiceImpl implements SalaryService {
      */
     @Override
     public PageResult<SalaryTemplatePageVO> pageTemplates(SalaryTemplateQueryDTO queryDTO) {
-        LambdaQueryWrapper<SalaryTemplateEntity> wrapper = Wrappers.lambdaQuery(SalaryTemplateEntity.class)
-                .like(StrUtil.isNotBlank(queryDTO.getTemplateName()), SalaryTemplateEntity::getTemplateName,
-                        queryDTO.getTemplateName())
-                .eq(queryDTO.getStatus() != null, SalaryTemplateEntity::getStatus, queryDTO.getStatus());
-        appendTemplateScopeCondition(wrapper, queryDTO.getScope());
-        wrapper.orderByDesc(SalaryTemplateEntity::getCreateTime);
-        Page<SalaryTemplateEntity> page = salaryTemplateMapper.selectPage(
-                Page.of(queryDTO.getPageNum(), queryDTO.getPageSize()), wrapper);
-        List<Long> templateIds = page.getRecords().stream().map(SalaryTemplateEntity::getId).toList();
-        Map<Long, List<SalaryTemplateItemEntity>> itemMap = listTemplateItems(templateIds).stream()
-                .collect(Collectors.groupingBy(SalaryTemplateItemEntity::getTemplateId));
-        List<SalaryTemplatePageVO> records = page.getRecords().stream()
-                .map(entity -> toTemplateVO(entity, itemMap.getOrDefault(entity.getId(), List.of())))
-                .toList();
-        return PageResult.of(records, page.getTotal(), (int) page.getCurrent(), (int) page.getSize());
+        return salaryTemplateService.pageTemplates(queryDTO);
     }
 
     /**
@@ -203,18 +191,7 @@ public class SalaryServiceImpl implements SalaryService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public SalaryTemplatePageVO createTemplate(SalaryTemplateCreateOrUpdateRequestDTO requestDTO) {
-        SalaryTemplateEntity entity = new SalaryTemplateEntity();
-        entity.setTemplateName(requestDTO.getTemplateName());
-        entity.setTemplateCode(StrUtil.blankToDefault(requestDTO.getTemplateCode(), "SAL-TPL-" + IdUtil.fastSimpleUUID().substring(0, 12)));
-        entity.setScopeType(normalizeScopeType(requestDTO.getScopeType()));
-        entity.setScopeValue(requestDTO.getScopeValue());
-        entity.setEffectiveDate(requestDTO.getEffectiveDate());
-        entity.setStatus(Optional.ofNullable(requestDTO.getStatus()).orElse(1));
-        entity.setRemark(requestDTO.getRemark());
-        salaryTemplateMapper.insert(entity);
-        saveTemplateItems(entity.getId(), requestDTO.getItems());
-        evictTemplateCache(entity.getId());
-        return toTemplateVO(entity, listTemplateItems(List.of(entity.getId())));
+        return salaryTemplateService.createTemplate(requestDTO);
     }
 
     /**
@@ -228,22 +205,7 @@ public class SalaryServiceImpl implements SalaryService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public SalaryTemplatePageVO updateTemplate(Long id, SalaryTemplateCreateOrUpdateRequestDTO requestDTO) {
-        SalaryTemplateEntity entity = getTemplateRequired(id);
-        entity.setTemplateName(requestDTO.getTemplateName());
-        if (StrUtil.isNotBlank(requestDTO.getTemplateCode())) {
-            entity.setTemplateCode(requestDTO.getTemplateCode());
-        }
-        entity.setScopeType(normalizeScopeType(requestDTO.getScopeType()));
-        entity.setScopeValue(requestDTO.getScopeValue());
-        entity.setEffectiveDate(requestDTO.getEffectiveDate());
-        entity.setStatus(Optional.ofNullable(requestDTO.getStatus()).orElse(entity.getStatus()));
-        entity.setRemark(requestDTO.getRemark());
-        salaryTemplateMapper.updateById(entity);
-        salaryTemplateItemMapper.delete(Wrappers.lambdaQuery(SalaryTemplateItemEntity.class)
-                .eq(SalaryTemplateItemEntity::getTemplateId, id));
-        saveTemplateItems(id, requestDTO.getItems());
-        evictTemplateCache(id);
-        return toTemplateVO(entity, listTemplateItems(List.of(id)));
+        return salaryTemplateService.updateTemplate(id, requestDTO);
     }
 
     /**
@@ -255,14 +217,7 @@ public class SalaryServiceImpl implements SalaryService {
      */
     @Override
     public EmployeeSalaryProfileVO getEmployeeProfile(Long employeeId) {
-        SalaryEmployeeSnapshotEntity employee = getEmployeeRequired(employeeId);
-        EmployeeSalaryProfileEntity profile = employeeSalaryProfileMapper.selectOne(Wrappers
-                .lambdaQuery(EmployeeSalaryProfileEntity.class)
-                .eq(EmployeeSalaryProfileEntity::getEmployeeId, employeeId));
-        if (profile == null) {
-            throw new GlobalException(ErrorCode.NOT_FOUND, "员工薪资档案不存在");
-        }
-        return toProfileVO(profile, employee);
+        return salaryTemplateService.getEmployeeProfile(employeeId);
     }
 
     /**
@@ -276,50 +231,7 @@ public class SalaryServiceImpl implements SalaryService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public EmployeeSalaryProfileVO setEmployeeProfile(Long employeeId, EmployeeSalaryProfileRequestDTO requestDTO) {
-        SalaryEmployeeSnapshotEntity employee = getEmployeeRequired(employeeId);
-        if (requestDTO.getTemplateId() != null) {
-            getTemplateRequired(requestDTO.getTemplateId());
-        }
-        EmployeeSalaryProfileEntity profile = employeeSalaryProfileMapper.selectOne(Wrappers
-                .lambdaQuery(EmployeeSalaryProfileEntity.class)
-                .eq(EmployeeSalaryProfileEntity::getEmployeeId, employeeId));
-        boolean create = profile == null;
-        if (create) {
-            profile = new EmployeeSalaryProfileEntity();
-            profile.setEmployeeId(employeeId);
-        }
-        profile.setTemplateId(requestDTO.getTemplateId());
-        profile.setBaseSalary(money(requestDTO.getBaseSalary()));
-        profile.setAllowance(money(requestDTO.getAllowance()));
-        profile.setPerformanceBase(money(requestDTO.getPerformanceBase()));
-        BigDecimal pensionInsuranceBase = resolveInsuranceBase(
-                requestDTO.getPensionInsuranceBase(), requestDTO.getSocialInsuranceBase(), profile.getPensionInsuranceBase());
-        BigDecimal medicalInsuranceBase = resolveInsuranceBase(
-                requestDTO.getMedicalInsuranceBase(), requestDTO.getSocialInsuranceBase(), profile.getMedicalInsuranceBase());
-        BigDecimal unemploymentInsuranceBase = resolveInsuranceBase(
-                requestDTO.getUnemploymentInsuranceBase(), requestDTO.getSocialInsuranceBase(), profile.getUnemploymentInsuranceBase());
-        profile.setPensionInsuranceBase(pensionInsuranceBase);
-        profile.setPensionInsuranceRate(resolveInsuranceRate(
-                requestDTO.getPensionInsuranceRate(), profile.getPensionInsuranceRate(), DEFAULT_PENSION_INSURANCE_RATE));
-        profile.setMedicalInsuranceBase(medicalInsuranceBase);
-        profile.setMedicalInsuranceRate(resolveInsuranceRate(
-                requestDTO.getMedicalInsuranceRate(), profile.getMedicalInsuranceRate(), DEFAULT_MEDICAL_INSURANCE_RATE));
-        profile.setUnemploymentInsuranceBase(unemploymentInsuranceBase);
-        profile.setUnemploymentInsuranceRate(resolveInsuranceRate(
-                requestDTO.getUnemploymentInsuranceRate(), profile.getUnemploymentInsuranceRate(), DEFAULT_UNEMPLOYMENT_INSURANCE_RATE));
-        profile.setSocialInsuranceBase(resolveCompatibleSocialInsuranceBase(
-                requestDTO.getSocialInsuranceBase(), pensionInsuranceBase, medicalInsuranceBase, unemploymentInsuranceBase));
-        profile.setHousingFundBase(money(requestDTO.getHousingFundBase()));
-        profile.setBankName(requestDTO.getBankName());
-        profile.setBankAccount(requestDTO.getBankAccount());
-        profile.setEffectiveDate(requestDTO.getEffectiveDate());
-        profile.setRemark(requestDTO.getRemark());
-        if (create) {
-            employeeSalaryProfileMapper.insert(profile);
-        } else {
-            employeeSalaryProfileMapper.updateById(profile);
-        }
-        return toProfileVO(profile, employee);
+        return salaryTemplateService.setEmployeeProfile(employeeId, requestDTO);
     }
 
     /**

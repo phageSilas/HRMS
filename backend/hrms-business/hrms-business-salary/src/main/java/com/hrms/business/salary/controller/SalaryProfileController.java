@@ -1,7 +1,7 @@
 package com.hrms.business.salary.controller;
 
 import com.hrms.business.salary.dto.EmployeeSalaryProfileRequestDTO;
-import com.hrms.business.salary.service.SalaryService;
+import com.hrms.business.salary.service.SalaryTemplateService;
 import com.hrms.business.salary.vo.EmployeeSalaryProfileVO;
 import com.hrms.common.web.Result;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class SalaryProfileController {
 
-    private final SalaryService salaryService;
+    private final SalaryTemplateService salaryTemplateService;
 
     /**
      * 查询员工薪资档案。
@@ -34,7 +34,7 @@ public class SalaryProfileController {
      */
     @GetMapping("/{employeeId}/profile")
     public Result<EmployeeSalaryProfileVO> getEmployeeProfile(@PathVariable("employeeId") Long employeeId) {
-        return Result.success(salaryService.getEmployeeProfile(employeeId));
+        return Result.success(salaryTemplateService.getEmployeeProfile(employeeId));
     }
 
     /**
@@ -49,6 +49,6 @@ public class SalaryProfileController {
     public Result<EmployeeSalaryProfileVO> setEmployeeProfile(
             @PathVariable("employeeId") Long employeeId,
             @Valid @RequestBody EmployeeSalaryProfileRequestDTO requestDTO) {
-        return Result.success(salaryService.setEmployeeProfile(employeeId, requestDTO));
+        return Result.success(salaryTemplateService.setEmployeeProfile(employeeId, requestDTO));
     }
 }
