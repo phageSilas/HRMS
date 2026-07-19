@@ -155,6 +155,9 @@ function renderWarningTag(level?: string) {
   if (level === 'YELLOW') {
     return <Tag color="warning">待复核</Tag>;
   }
+  if (level === 'NONE') {
+    return <Tag color="success">无异常</Tag>;
+  }
   return <Tag>{level}</Tag>;
 }
 
@@ -524,7 +527,14 @@ const SalaryBatchPage: React.FC = () => {
     toNumber(currentBatch?.blockCount) === 0;
 
   const filteredPreviewItems = useMemo(() => {
-    const items = previewData?.items || [];
+    const items = (previewData?.items || []).map((item) =>
+      item.warningLevel === 'NONE'
+        ? {
+            ...item,
+            warningReason: undefined,
+          }
+        : item,
+    );
     if (!selectedDeptName) {
       return items;
     }
