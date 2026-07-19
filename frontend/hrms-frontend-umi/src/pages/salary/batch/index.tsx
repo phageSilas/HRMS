@@ -447,6 +447,29 @@ const SalaryBatchPage: React.FC = () => {
     }
   };
 
+  const handleSubmitApprovalAction = () => {
+    if (!currentBatch?.id) {
+      return;
+    }
+    if (toNumber(currentBatch.blockCount) > 0) {
+      Modal.warning({
+        title: '无法提交审批',
+        content: '当前批次存在阻断异常，请先处理完成后再提交审批。',
+        okText: '我知道了',
+      });
+      return;
+    }
+    Modal.confirm({
+      title: '是否提交审批',
+      content: '提交后将进入审批流程，确认继续提交当前薪资批次吗？',
+      okText: '是',
+      cancelText: '否',
+      onOk: async () => {
+        await handleSubmitApproval();
+      },
+    });
+  };
+
   const openAdjustmentModal = (item: SalaryBatchItem) => {
     setAdjustingItem(item);
     adjustmentForm.resetFields();
@@ -522,9 +545,7 @@ const SalaryBatchPage: React.FC = () => {
   const canRecalculate =
     canManage && currentBatch?.batchStatus === 'PENDING_REVIEW';
   const canSubmitApproval =
-    canManage &&
-    currentBatch?.batchStatus === 'PENDING_REVIEW' &&
-    toNumber(currentBatch?.blockCount) === 0;
+    canManage && currentBatch?.batchStatus === 'PENDING_REVIEW';
 
   const filteredPreviewItems = useMemo(() => {
     const items = (previewData?.items || []).map((item) =>
@@ -1014,7 +1035,7 @@ const SalaryBatchPage: React.FC = () => {
                         type="primary"
                         icon={<CheckCircleOutlined />}
                         loading={submittingApproval}
-                        onClick={() => void handleSubmitApproval()}
+                        onClick={handleSubmitApprovalAction}
                       >
                         提交审批
                       </Button>
