@@ -17,7 +17,6 @@ import {
   SearchOutlined,
 } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
-import { history } from '@umijs/max';
 import type { PageResult } from '@/types/api';
 import {
   Button,
@@ -440,9 +439,6 @@ const AttendanceRecordPage: React.FC = () => {
             面向 HR、部门主管和管理员，按考勤组查询员工每日打卡明细
           </Text>
         </div>
-        <Button type="primary" onClick={() => history.push('/profile/attendance')}>
-          申请补卡
-        </Button>
       </div>
 
       <Card bordered={false} className={styles.statusCard}>
