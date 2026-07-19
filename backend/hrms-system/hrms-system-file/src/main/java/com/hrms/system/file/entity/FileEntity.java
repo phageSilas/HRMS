@@ -1,47 +1,55 @@
 package com.hrms.system.file.entity;
 
+import com.baomidou.mybatisplus.annotation.TableName;
 import com.hrms.common.entity.BaseEntity;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 /**
- * 附件实体
+ * 文件实体。
  */
 @Data
+@EqualsAndHashCode(callSuper = true)
+@TableName("sys_file")
 public class FileEntity extends BaseEntity {
 
     /**
-     * 文件名
+     * 原始文件名。
      */
     private String fileName;
 
     /**
-     * 文件路径
+     * 存储路径。
      */
     private String filePath;
 
     /**
-     * 文件类型
-     */
-    private String fileType;
-
-    /**
-     * 文件大小（字节）
+     * 文件大小（字节）。
      */
     private Long fileSize;
 
     /**
-     * 关联业务类型
+     * 文件类型。
      */
-    private String bizType;
+    private String fileType;
 
     /**
-     * 关联业务ID
+     * MIME 类型。
      */
-    private Long bizId;
+    private String mimeType;
 
     /**
-     * 状态：1-正常，0-删除
+     * 文件 MD5。
      */
-    private Integer status;
+    private String md5;
 
+    /**
+     * 业务类型。
+     */
+    private String businessType;
+
+    /**
+     * 业务 ID。
+     */
+    private Long businessId;
 }

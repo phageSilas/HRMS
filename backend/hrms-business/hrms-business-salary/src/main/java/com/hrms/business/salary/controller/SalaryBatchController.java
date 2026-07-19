@@ -4,6 +4,7 @@ import com.hrms.business.salary.dto.SalaryBatchCreateRequestDTO;
 import com.hrms.business.salary.dto.SalaryBatchAdjustmentRequestDTO;
 import com.hrms.business.salary.service.SalaryService;
 import com.hrms.business.salary.vo.SalaryBatchItemVO;
+import com.hrms.business.salary.vo.SalaryBatchExportVO;
 import com.hrms.business.salary.vo.SalaryBatchPreviewVO;
 import com.hrms.business.salary.vo.SalaryBatchTrendVO;
 import com.hrms.business.salary.vo.SalaryBatchVO;
@@ -126,6 +127,17 @@ public class SalaryBatchController {
     @GetMapping("/{id}/preview")
     public Result<SalaryBatchPreviewVO> previewBatch(@PathVariable Long id) {
         return Result.success(salaryService.previewBatch(id));
+    }
+
+    /**
+     * 导出薪资批次 Excel。
+     *
+     * @param id 批次 ID
+     * @return 导出结果
+     */
+    @PostMapping("/{id}/export")
+    public Result<SalaryBatchExportVO> exportBatch(@PathVariable Long id) {
+        return Result.success(salaryService.exportBatch(id));
     }
 
     /**

@@ -47,6 +47,7 @@ import com.hrms.business.salary.mq.event.SalaryBatchCalculateMessage;
 import com.hrms.business.salary.service.SalaryService;
 import com.hrms.business.salary.vo.EmployeeSalaryProfileVO;
 import com.hrms.business.salary.vo.SalaryBatchItemVO;
+import com.hrms.business.salary.vo.SalaryBatchExportVO;
 import com.hrms.business.salary.vo.SalaryBatchPreviewVO;
 import com.hrms.business.salary.vo.SalaryBatchTrendVO;
 import com.hrms.business.salary.vo.SalaryBatchVO;
@@ -61,12 +62,18 @@ import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
 import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
+import com.hrms.system.file.config.FileConfig;
+import com.hrms.system.file.service.FileService;
 import com.hrms.system.auth.entity.RoleEntity;
 import com.hrms.system.auth.service.RoleService;
 import com.hrms.system.organization.service.DeptService;
 import com.hrms.system.organization.vo.DeptDetailVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -76,6 +83,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.ArrayList;
@@ -108,6 +119,10 @@ public class SalaryServiceImpl implements SalaryService {
             SalaryBatchStatusEnum.RELEASED.name(),
             SalaryBatchStatusEnum.ARCHIVED.name()
     );
+    private static final Set<String> BATCH_EXPORT_ALLOWED_STATUS = Set.of(
+            SalaryBatchStatusEnum.APPROVED.name(),
+            SalaryBatchStatusEnum.RELEASED.name()
+    );
     private static final Set<String> SALARY_MANAGER_ROLE_CODES = Set.of(
             "FINANCE", "HR", "HR_TEST", "ADMIN", "ROLE_ADMIN"
     );
@@ -128,6 +143,10 @@ public class SalaryServiceImpl implements SalaryService {
             "HOUSING_FUND",
             "INCOME_TAX"
     );
+    private static final String SALARY_EXPORT_MIME_TYPE =
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    private static final String SALARY_EXPORT_FILE_TYPE = "xlsx";
+    private static final String SALARY_EXPORT_BUSINESS_TYPE = "SALARY_BATCH_EXPORT";
 
     private final SalaryTemplateMapper salaryTemplateMapper;
     private final SalaryTemplateItemMapper salaryTemplateItemMapper;
@@ -145,6 +164,8 @@ public class SalaryServiceImpl implements SalaryService {
     private final ApprovalEngine approvalEngine;
     private final RoleService roleService;
     private final DeptService deptService;
+    private final FileService fileService;
+    private final FileConfig fileConfig;
 
     /**
      * 分页查询薪资账套。
@@ -595,6 +616,45 @@ public class SalaryServiceImpl implements SalaryService {
             redisTemplate.opsForValue().set(cacheKey, JSONUtil.toJsonStr(vo), 5, TimeUnit.MINUTES);
         }
         return vo;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public SalaryBatchExportVO exportBatch(Long batchId) {
+        assertSalaryManagerRole();
+        SalaryBatchEntity batch = getBatchRequired(batchId);
+        if (!BATCH_EXPORT_ALLOWED_STATUS.contains(batch.getBatchStatus())) {
+            throw new GlobalException(ErrorCode.BUSINESS_ERROR, "仅已通过或已发放批次支持导出");
+        }
+        List<SalaryBatchItemEntity> items = salaryBatchItemMapper.selectList(Wrappers
+                .lambdaQuery(SalaryBatchItemEntity.class)
+                .eq(SalaryBatchItemEntity::getBatchId, batchId)
+                .orderByAsc(SalaryBatchItemEntity::getEmployeeId));
+        if (CollUtil.isEmpty(items)) {
+            throw new GlobalException(ErrorCode.NOT_FOUND, "当前批次暂无可导出薪资明细");
+        }
+        Map<Long, SalaryEmployeeSnapshotEntity> employeeMap = listEmployeesByIds(
+                items.stream().map(SalaryBatchItemEntity::getEmployeeId).toList());
+        List<SalaryBatchItemVO> exportItems = items.stream()
+                .map(item -> toBatchItemVO(item, employeeMap.get(item.getEmployeeId())))
+                .toList();
+        String fileName = buildSalaryExportFileName(batch);
+        Path filePath = buildSalaryExportPath(batch);
+        writeSalaryBatchWorkbook(filePath, exportItems);
+        Long fileId = fileService.upload(
+                fileName,
+                filePath.toString(),
+                resolveFileSize(filePath),
+                SALARY_EXPORT_FILE_TYPE,
+                SALARY_EXPORT_MIME_TYPE,
+                SALARY_EXPORT_BUSINESS_TYPE,
+                batchId
+        );
+        return SalaryBatchExportVO.builder()
+                .fileId(fileId)
+                .fileName(fileName)
+                .downloadUrl("/api/v1/files/" + fileId + "/download")
+                .build();
     }
 
     /**
@@ -2013,6 +2073,82 @@ public class SalaryServiceImpl implements SalaryService {
      * @return 部门名称
      * 本方法使用的工具类: DeptService(hrms-system-organization)
      */
+    private String buildSalaryExportFileName(SalaryBatchEntity batch) {
+        return "薪资核算_" + batch.getSalaryMonth() + "_" + sanitizeFileName(batch.getBatchNo()) + ".xlsx";
+    }
+
+    private Path buildSalaryExportPath(SalaryBatchEntity batch) {
+        try {
+            Path exportDir = Path.of(fileConfig.getBaseDir(), "salary-batch");
+            Files.createDirectories(exportDir);
+            String storageName = "salary-batch-" + batch.getId() + "-" + System.currentTimeMillis() + ".xlsx";
+            return exportDir.resolve(storageName);
+        } catch (IOException ex) {
+            throw new GlobalException(ErrorCode.FILE_UPLOAD_ERROR, "创建导出目录失败");
+        }
+    }
+
+    private long resolveFileSize(Path path) {
+        try {
+            return Files.size(path);
+        } catch (IOException ex) {
+            throw new GlobalException(ErrorCode.FILE_UPLOAD_ERROR, "读取导出文件大小失败");
+        }
+    }
+
+    private void writeSalaryBatchWorkbook(Path filePath, List<SalaryBatchItemVO> items) {
+        try (Workbook workbook = new XSSFWorkbook();
+             OutputStream outputStream = Files.newOutputStream(filePath)) {
+            Sheet sheet = workbook.createSheet("薪资核算");
+            writeSalaryBatchHeader(sheet.createRow(0));
+            for (int index = 0; index < items.size(); index++) {
+                writeSalaryBatchRow(sheet.createRow(index + 1), items.get(index));
+            }
+            for (int index = 0; index < 12; index++) {
+                sheet.autoSizeColumn(index);
+            }
+            workbook.write(outputStream);
+        } catch (IOException ex) {
+            throw new GlobalException(ErrorCode.FILE_UPLOAD_ERROR, "写出薪资导出文件失败");
+        }
+    }
+
+    private void writeSalaryBatchHeader(Row row) {
+        String[] headers = {
+                "工号", "姓名", "部门", "基本工资", "补贴", "绩效", "加班",
+                "应发合计", "社保", "公积金", "个税", "实发工资"
+        };
+        for (int index = 0; index < headers.length; index++) {
+            row.createCell(index).setCellValue(headers[index]);
+        }
+    }
+
+    private void writeSalaryBatchRow(Row row, SalaryBatchItemVO item) {
+        row.createCell(0).setCellValue(StrUtil.blankToDefault(item.getEmployeeNo(), ""));
+        row.createCell(1).setCellValue(StrUtil.blankToDefault(item.getEmployeeName(), ""));
+        row.createCell(2).setCellValue(StrUtil.blankToDefault(item.getDeptName(), ""));
+        row.createCell(3).setCellValue(toExcelNumber(item.getBaseSalary()));
+        row.createCell(4).setCellValue(toExcelNumber(item.getAllowance()));
+        row.createCell(5).setCellValue(toExcelNumber(item.getPerformanceBonus()));
+        row.createCell(6).setCellValue(toExcelNumber(item.getOvertimePay()));
+        row.createCell(7).setCellValue(toExcelNumber(item.getGrossSalary()));
+        row.createCell(8).setCellValue(toExcelNumber(item.getSocialInsurance()));
+        row.createCell(9).setCellValue(toExcelNumber(item.getHousingFund()));
+        row.createCell(10).setCellValue(toExcelNumber(item.getIncomeTax()));
+        row.createCell(11).setCellValue(toExcelNumber(item.getNetSalary()));
+    }
+
+    private double toExcelNumber(BigDecimal value) {
+        return money(value).doubleValue();
+    }
+
+    private String sanitizeFileName(String value) {
+        if (StrUtil.isBlank(value)) {
+            return "BATCH";
+        }
+        return value.replaceAll("[\\\\/:*?\"<>|\\s]+", "_");
+    }
+
     private String resolveDeptName(SalaryEmployeeSnapshotEntity employee) {
         if (employee == null || employee.getDeptId() == null) {
             return null;
