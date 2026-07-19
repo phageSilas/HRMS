@@ -21,12 +21,21 @@ public class LeaveBalanceVO {
     @Schema(description = "年假剩余天数")
     private BigDecimal annualRemaining;
 
-    @Schema(description = "调休总小时数")
+    @Schema(description = "病假总天数")
+    private BigDecimal sickTotal;
+
+    @Schema(description = "病假已用天数")
+    private BigDecimal sickUsed;
+
+    @Schema(description = "病假剩余天数")
+    private BigDecimal sickRemaining;
+
+    @Schema(description = "调休总天数")
     private BigDecimal compassionateTotal;
 
-    @Schema(description = "调休已用小时数")
+    @Schema(description = "调休已用天数")
     private BigDecimal compassionateUsed;
 
-    @Schema(description = "调休剩余小时数")
+    @Schema(description = "调休剩余天数")
     private BigDecimal compassionateRemaining;
 }
