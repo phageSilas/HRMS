@@ -9,9 +9,11 @@ import com.hrms.business.mycenter.dto.MakeupRequest;
 import com.hrms.business.mycenter.dto.OvertimeRecordVO;
 import com.hrms.business.mycenter.dto.OvertimeRequest;
 import com.hrms.business.mycenter.entity.AttendanceCorrectionEntity;
+import com.hrms.business.mycenter.entity.LeaveRequestEntity;
 import com.hrms.business.mycenter.entity.MyAttendanceRecordEntity;
 import com.hrms.business.mycenter.mapper.AttendanceOvertimeMapper;
 import com.hrms.business.mycenter.mapper.MyCenterAttendanceCorrectionMapper;
+import com.hrms.business.mycenter.mapper.MyCenterLeaveRequestMapper;
 import com.hrms.business.mycenter.mapper.MyAttendanceRecordMapper;
 import com.hrms.business.approval.service.ApprovalService;
 import com.hrms.business.mycenter.service.AttendanceService;
@@ -44,6 +46,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final MyAttendanceRecordMapper attendanceRecordMapper;
     private final MyCenterAttendanceCorrectionMapper correctionMapper;
     private final AttendanceOvertimeMapper overtimeMapper;
+    private final MyCenterLeaveRequestMapper leaveRequestMapper;
     private final ApprovalService approvalService;
 
     @Override
@@ -63,6 +66,18 @@ public class AttendanceServiceImpl implements AttendanceService {
         Map<LocalDate, MyAttendanceRecordEntity> recordMap = records.stream()
                 .collect(Collectors.toMap(MyAttendanceRecordEntity::getRecordDate, r -> r, (a, b) -> b));
 
+        // 查询该月请假记录（已通过或审批中）
+        List<LeaveRequestEntity> leaves = leaveRequestMapper.selectList(
+                new LambdaQueryWrapper<LeaveRequestEntity>()
+                        .eq(LeaveRequestEntity::getEmployeeId, employeeId)
+                        .in(LeaveRequestEntity::getApprovalStatus, 1, 2)
+                        .and(w -> w
+                                .between(LeaveRequestEntity::getStartTime, firstDay.atStartOfDay(), lastDay.atTime(23, 59, 59))
+                                .or(w2 -> w2
+                                        .between(LeaveRequestEntity::getEndTime, firstDay.atStartOfDay(), lastDay.atTime(23, 59, 59)))
+                        )
+        );
+
         // 构建每日日历
         List<AttendanceCalendarVO.AttendanceDayVO> days = new ArrayList<>();
         for (LocalDate date = firstDay; !date.isAfter(lastDay); date = date.plusDays(1)) {
@@ -73,11 +88,28 @@ public class AttendanceServiceImpl implements AttendanceService {
             boolean isWeekend = date.getDayOfWeek() == DayOfWeek.SATURDAY
                     || date.getDayOfWeek() == DayOfWeek.SUNDAY;
 
+            // 判断是否在请假范围内
+            LeaveRequestEntity matchedLeave = null;
+            for (LeaveRequestEntity leave : leaves) {
+                LocalDate leaveStart = leave.getStartTime().toLocalDate();
+                LocalDate leaveEnd = leave.getEndTime().toLocalDate();
+                if (!date.isBefore(leaveStart) && !date.isAfter(leaveEnd)) {
+                    matchedLeave = leave;
+                    break;
+                }
+            }
+
             MyAttendanceRecordEntity record = recordMap.get(date);
 
             if (isWeekend) {
                 day.setStatus("HOLIDAY");
                 day.setStatusDesc("休息日");
+            } else if (matchedLeave != null) {
+                // 请假优先：即使当天有打卡记录也显示为请假
+                day.setStatus("LEAVE");
+                day.setStatusDesc("请假");
+                day.setLeaveType(matchedLeave.getLeaveType());
+                day.setLeaveTypeDesc(getLeaveTypeDesc(matchedLeave.getLeaveType()));
             } else if (record != null) {
                 // 设置打卡时间
                 if (record.getClockInTime() != null) {
@@ -85,6 +117,11 @@ public class AttendanceServiceImpl implements AttendanceService {
                 }
                 if (record.getClockOutTime() != null) {
                     day.setClockOutTime(record.getClockOutTime().format(DateTimeFormatter.ofPattern("HH:mm")));
+                }
+
+                // 补卡状态
+                if (record.getCorrectionStatus() != null) {
+                    day.setCorrectionStatus(record.getCorrectionStatus());
                 }
 
                 // 综合状态判定
@@ -103,6 +140,23 @@ public class AttendanceServiceImpl implements AttendanceService {
         result.setYearMonth(yearMonth);
         result.setDays(days);
         return result;
+    }
+
+    /**
+     * 请假类型 → 中文描述
+     */
+    private String getLeaveTypeDesc(String type) {
+        if (type == null) return "";
+        return switch (type) {
+            case "ANNUAL" -> "年假";
+            case "COMPASSIONATE" -> "调休";
+            case "SICK" -> "病假";
+            case "PERSONAL" -> "事假";
+            case "MARRIAGE" -> "婚假";
+            case "MATERNITY" -> "产假";
+            case "FUNERAL" -> "丧假";
+            default -> type;
+        };
     }
 
     @Override
@@ -375,27 +429,62 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     /**
      * 根据上下班状态判定最终考勤状态
+     * 优先级：ABSENCE(请假) > MISSING(缺卡) > LATE(迟到) > EARLY_LEAVE(早退) > NORMAL(正常)
      */
     private String determineStatus(MyAttendanceRecordEntity record) {
         String inStatus = record.getClockInStatus();
         String outStatus = record.getClockOutStatus();
 
-        if ("LATE".equals(inStatus) && "NORMAL".equals(outStatus)) {
-            return "LATE";
-        }
-        if ("NORMAL".equals(inStatus) && "EARLY_LEAVE".equals(outStatus)) {
-            return "EARLY_LEAVE";
-        }
+        // 任意一方为 ABSENCE → 请假
         if ("ABSENCE".equals(inStatus) || "ABSENCE".equals(outStatus)) {
             return "LEAVE";
         }
-        if (inStatus == null && outStatus == null) {
+
+        // 双方都无记录 → 旷工
+        if (isBlank(inStatus) && isBlank(outStatus)) {
             return "ABSENT";
         }
-        if (inStatus == null || outStatus == null) {
+
+        // 双方至少一方为 MISSING（指该时段应打卡但未打卡）
+        boolean inMissing = isBlank(inStatus) || "MISSING".equals(inStatus);
+        boolean outMissing = isBlank(outStatus) || "MISSING".equals(outStatus);
+        if (inMissing && outMissing) {
             return "MISSED";
         }
+
+        // 迟到 + 正常下班 → 迟到
+        if ("LATE".equals(inStatus) && "NORMAL".equals(outStatus)) {
+            return "LATE";
+        }
+
+        // 正常上班 + 早退 → 早退
+        if ("NORMAL".equals(inStatus) && "EARLY_LEAVE".equals(outStatus)) {
+            return "EARLY_LEAVE";
+        }
+
+        // 迟到 + 早退 → 以迟到计
+        if ("LATE".equals(inStatus) && "EARLY_LEAVE".equals(outStatus)) {
+            return "LATE";
+        }
+
+        // 上班已打卡但下班未打卡
+        if (isBlank(outStatus) || "MISSING".equals(outStatus)) {
+            return "MISSED";
+        }
+
+        // 下班已打卡但上班未打卡
+        if (isBlank(inStatus) || "MISSING".equals(inStatus)) {
+            return "MISSED";
+        }
+
         return "NORMAL";
+    }
+
+    /**
+     * 判断字符串是否为空或空白
+     */
+    private boolean isBlank(String str) {
+        return str == null || str.trim().isEmpty();
     }
 
     private String getStatusDesc(String status) {

@@ -1,42 +1,14 @@
 /**
  * 我的考勤页面
- * 考勤日历月视图 + 打卡 + 补卡申请 + 加班申请
+ * 考勤日历月视图 + 打卡 + 请假申请 + 补卡申请 + 加班申请
  */
-
-import { usePageAutoRefresh } from '@/hooks/usePageAutoRefresh';
-import {
-  CheckCircleOutlined,
-  ClockCircleOutlined,
-  CloseCircleOutlined,
-  ExclamationCircleOutlined,
-  FieldTimeOutlined,
-} from '@ant-design/icons';
-import { history, useRequest } from '@umijs/max';
 import { PageContainer } from '@ant-design/pro-components';
-import {
-  Button,
-  Card,
-  Col,
-  DatePicker,
-  Descriptions,
-  Form,
-  Input,
-  InputNumber,
-  message,
-  Modal,
-  Row,
-  Select,
-  Space,
-  Spin,
-  Statistic,
-  Table,
-  Tag,
-  Typography,
-} from 'antd';
+import { Button, Card, Space, message } from 'antd';
 import dayjs from 'dayjs';
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   clockIn,
+  createLeave,
   createMakeup,
   createOvertime,
   getAttendanceCalendar,
@@ -47,153 +19,103 @@ import type {
   AttendanceCalendarVO,
   AttendanceDayVO,
   MakeupRecordVO,
-  MakeupRequest,
   OvertimeRecordVO,
-  OvertimeRequest,
 } from '@/services/profile';
-
-const { Text, Title } = Typography;
-
-// ============ 考勤状态颜色映射（与后端 AttendanceServiceImpl 对齐） ============
-
-const STATUS_COLOR_MAP: Record<string, string> = {
-  NORMAL: '#52c41a',
-  LATE: '#fa8c16',
-  EARLY_LEAVE: '#faad14',
-  MISSED: '#ff4d4f',
-  LEAVE: '#1677ff',
-  HOLIDAY: '#d9d9d9',
-  ABSENT: '#cf1322',
-};
-
-const STATUS_BG_MAP: Record<string, string> = {
-  NORMAL: '#f6ffed',
-  LATE: '#fff7e6',
-  EARLY_LEAVE: '#fffbe6',
-  MISSED: '#fff2f0',
-  LEAVE: '#e6f4ff',
-  HOLIDAY: '#fafafa',
-  ABSENT: '#fff1f0',
-};
-
-// ============ 页面组件 ============
+import AttendanceStatsBar from './components/AttendanceStatsBar';
+import AttendanceCalendar from './components/AttendanceCalendar';
+import DayDetailDrawer from './components/DayDetailDrawer';
+import MakeupModal from './components/MakeupModal';
+import MakeupRecordsTable from './components/MakeupRecordsTable';
+import OvertimeModal from './components/OvertimeModal';
+import OvertimeRecordsTable from './components/OvertimeRecordsTable';
+import LeaveModal from './components/LeaveModal';
 
 const ProfileAttendancePage: React.FC = () => {
   const [currentMonth, setCurrentMonth] = useState(dayjs().format('YYYY-MM'));
-  const [makeupModalOpen, setMakeupModalOpen] = useState(false);
-  const [makeupForm] = Form.useForm();
+  const [calendarError, setCalendarError] = useState<string | null>(null);
+  const clockInLoading = useRef(false);
 
-  // 考勤日历
-  const {
-    data: calendarData,
-    loading: calendarLoading,
-    refresh: refreshCalendar,
-  } = useRequest<AttendanceCalendarVO>(() => getAttendanceCalendar(currentMonth));
+  // —— 弹窗状态 ——
+  const [detailDay, setDetailDay] = useState<AttendanceDayVO | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [makeupOpen, setMakeupOpen] = useState(false);
+  const [makeupInitialDate, setMakeupInitialDate] = useState<dayjs.Dayjs | undefined>();
+  const [overtimeOpen, setOvertimeOpen] = useState(false);
+  const [leaveOpen, setLeaveOpen] = useState(false);
 
-  // 补卡记录
-  const {
-    data: makeupData,
-    loading: makeupLoading,
-    refresh: refreshMakeup,
-  } = useRequest<MakeupRecordVO[]>(getMakeupRecords);
+  // —— 强制刷新回调 ——
+  // ==================== 数据加载（改用 useState+useEffect 替代 useRequest） ====================
 
-  // 加班记录
-  const [overtimeModalOpen, setOvertimeModalOpen] = useState(false);
-  const [overtimeForm] = Form.useForm();
+  const [calendarData, setCalendarData] = useState<AttendanceCalendarVO | null>(null);
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [makeupRecords, setMakeupRecords] = useState<MakeupRecordVO[]>([]);
+  const [makeupLoading, setMakeupLoading] = useState(false);
+  const [overtimeRecords, setOvertimeRecords] = useState<OvertimeRecordVO[]>([]);
+  const [overtimeLoading, setOvertimeLoading] = useState(false);
 
-  const {
-    data: overtimeData,
-    loading: overtimeLoading,
-    refresh: refreshOvertime,
-  } = useRequest<OvertimeRecordVO[]>(getOvertimeRecords);
+  // 加载触发
+  const [loadKey, setLoadKey] = useState(0);
 
-  usePageAutoRefresh(() => {
-    refreshCalendar();
-    refreshMakeup();
-    refreshOvertime();
-  });
-
-  const calendar = calendarData as AttendanceCalendarVO | undefined;
-  const makeupRecords = (makeupData as MakeupRecordVO[] | undefined) || [];
-  const overtimeRecords = (overtimeData as OvertimeRecordVO[] | undefined) || [];
-
-  // ============ 打卡 ============
-
-  const handleClockIn = async (type: number) => {
+  const fetchAll = useCallback(async () => {
+    // 日历
     try {
-      await clockIn({ type });
-      message.success(type === 1 ? '上班打卡成功' : '下班打卡成功');
-      refreshCalendar();
-    } catch {
-      // 错误由 request 拦截器统一处理
+      setCalendarLoading(true);
+      const cal = await getAttendanceCalendar(currentMonth);
+      console.log('[DEBUG fetch] calendar:', cal, 'days:', cal?.days?.length);
+      setCalendarData(cal);
+      setCalendarError(null);
+    } catch (err: any) {
+      console.error('[DEBUG fetch] calendar error:', err?.message);
+      setCalendarError(err?.message || '获取考勤日历失败');
+    } finally {
+      setCalendarLoading(false);
     }
-  };
 
-  // ============ 补卡申请 ============
-
-  const handleMakeupSubmit = async () => {
+    // 补卡记录
     try {
-      const values = await makeupForm.validateFields();
-      const payload: MakeupRequest = {
-        correctionDate: values.correctionDate.format('YYYY-MM-DD'),
-        correctionType: values.correctionType,
-        correctionReason: values.correctionReason,
-      };
-      await createMakeup(payload);
-      message.success('补卡申请已提交');
-      setMakeupModalOpen(false);
-      makeupForm.resetFields();
-      refreshMakeup();
-      refreshCalendar();
+      setMakeupLoading(true);
+      const mk = await getMakeupRecords();
+      console.log('[DEBUG fetch] makeup:', mk, 'count:', mk?.length);
+      setMakeupRecords(mk || []);
     } catch {
-      // 静默处理
+      setMakeupRecords([]);
+    } finally {
+      setMakeupLoading(false);
     }
-  };
 
-  // ============ 加班申请 ============
-
-  const handleOvertimeSubmit = async () => {
+    // 加班记录
     try {
-      const values = await overtimeForm.validateFields();
-      const payload: OvertimeRequest = {
-        overtimeDate: values.overtimeDate.format('YYYY-MM-DDTHH:mm:ss'),
-        duration: values.duration,
-        reason: values.reason,
-      };
-      await createOvertime(payload);
-      message.success('加班申请已提交');
-      setOvertimeModalOpen(false);
-      overtimeForm.resetFields();
-      refreshOvertime();
+      setOvertimeLoading(true);
+      const ot = await getOvertimeRecords();
+      console.log('[DEBUG fetch] overtime:', ot, 'count:', ot?.length);
+      setOvertimeRecords(ot || []);
     } catch {
-      // 静默处理
+      setOvertimeRecords([]);
+    } finally {
+      setOvertimeLoading(false);
     }
-  };
+  }, [currentMonth]);
 
-  // ============ 日历渲染 ============
+  // 首次加载 + currentMonth/loadKey 变化时重新加载
+  useEffect(() => { fetchAll(); }, [fetchAll, loadKey]);
+
+  // 自动刷新（每分钟）
+  useEffect(() => {
+    const timer = setInterval(fetchAll, 60000);
+    return () => clearInterval(timer);
+  }, [fetchAll]);
+
+  // ============ 日历天数 & 统计 ============
 
   const calendarDays = useMemo<AttendanceDayVO[]>(() => {
-    if (!calendar?.days) return [];
-    return calendar.days;
-  }, [calendar]);
+    const days = calendarData?.days || [];
+    console.log('[DEBUG] calendarDays:', days.length, '条');
+    return days;
+  }, [calendarData]);
 
-  // 月首星期偏移（0=周一，6=周日）
-  const firstDayOffset = useMemo(() => {
-    if (calendarDays.length === 0) return 0;
-    const d = dayjs(calendarDays[0].date).day();
-    return d === 0 ? 6 : d - 1;
-  }, [calendarDays]);
-
-  // 统计
   const statistics = useMemo(() => {
     const stats: Record<string, number> = {
-      NORMAL: 0,
-      LATE: 0,
-      EARLY_LEAVE: 0,
-      MISSED: 0,
-      LEAVE: 0,
-      HOLIDAY: 0,
-      ABSENT: 0,
+      NORMAL: 0, LATE: 0, EARLY_LEAVE: 0, MISSED: 0, LEAVE: 0, HOLIDAY: 0, ABSENT: 0,
     };
     calendarDays.forEach((day) => {
       if (stats[day.status] !== undefined) stats[day.status]++;
@@ -201,333 +123,183 @@ const ProfileAttendancePage: React.FC = () => {
     return stats;
   }, [calendarDays]);
 
-  // ============ 补卡记录表格列 ============
+  // ============ 打卡 ============
 
-  const makeupColumns = [
-    { title: '补卡日期', dataIndex: 'correctionDate', key: 'correctionDate', width: 120 },
-    {
-      title: '补卡类型',
-      dataIndex: 'correctionType',
-      key: 'correctionType',
-      width: 100,
-      render: (t: string) => (t === 'CLOCK_IN' ? '上班卡' : '下班卡'),
-    },
-    { title: '原因', dataIndex: 'correctionReason', key: 'correctionReason', ellipsis: true },
-    {
-      title: '状态',
-      dataIndex: 'approvalStatus',
-      key: 'approvalStatus',
-      width: 100,
-      render: (s: number) => {
-        const map: Record<number, { text: string; color: string }> = {
-          0: { text: '草稿', color: 'default' },
-          1: { text: '审批中', color: 'processing' },
-          2: { text: '已通过', color: 'success' },
-          3: { text: '已拒绝', color: 'error' },
-          4: { text: '已撤回', color: 'warning' },
-        };
-        const item = map[s] || { text: '未知', color: 'default' };
-        return <Tag color={item.color}>{item.text}</Tag>;
-      },
-    },
-    {
-      title: '操作',
-      key: 'action',
-      width: 100,
-      render: (_: any, record: any) =>
-        record.approvalInstanceId ? (
-          <Button type="link" size="small" onClick={() => history.push(`/approval/detail/${record.approvalInstanceId}`)}>
-            查看进度
-          </Button>
-        ) : null,
-    },
-    {
-      title: '申请时间',
-      dataIndex: 'createTime',
-      key: 'createTime',
-      width: 170,
-      render: (t: string) => t || '-',
-    },
-  ];
+  const checkTodayStatus = useMemo(() => {
+    const todayStr = dayjs().format('YYYY-MM-DD');
+    const today = calendarDays.find((d) => d.date === todayStr);
+    if (!today) return { clockIn: false, clockOut: false, isHoliday: false };
+    return {
+      clockIn: !!today.clockInTime,
+      clockOut: !!today.clockOutTime,
+      isHoliday: today.status === 'HOLIDAY',
+    };
+  }, [calendarDays]);
+
+  const clockOutDisabledReason = useMemo(() => {
+    if (checkTodayStatus.clockOut) return '已完成下班打卡';
+    if (checkTodayStatus.isHoliday) return '今日为休息日';
+    if (!checkTodayStatus.clockIn) return '请先进行上班打卡';
+    return '';
+  }, [checkTodayStatus]);
+
+  const clockInDisabledReason = useMemo(() => {
+    if (checkTodayStatus.clockIn) return '已完成上班打卡';
+    if (checkTodayStatus.isHoliday) return '今日为休息日';
+    return '';
+  }, [checkTodayStatus]);
+
+  const handleClockIn = async (type: number) => {
+    if (clockInLoading.current) return;
+    clockInLoading.current = true;
+    try {
+      if (type === 1 && checkTodayStatus.clockIn) {
+        message.info('今天已完成上班打卡');
+        return;
+      }
+      if (type === 2 && checkTodayStatus.clockOut) {
+        message.info('今天已完成下班打卡');
+        return;
+      }
+      await clockIn({ type });
+      message.success(type === 1 ? '上班打卡成功' : '下班打卡成功');
+      setLoadKey((k) => k + 1);
+    } catch {
+      // 错误由 request 拦截器统一处理
+    } finally {
+      clockInLoading.current = false;
+    }
+  };
+
+  // ============ 提交回调 ============
+
+  const handleMakeupSubmit = async (values: any) => {
+    const payload = {
+      correctionDate: values.correctionDate.format('YYYY-MM-DD'),
+      correctionType: values.correctionType,
+      correctionReason: values.correctionReason,
+    };
+    await createMakeup(payload);
+    message.success('补卡申请已提交');
+    setMakeupOpen(false);
+    setLoadKey((k) => k + 1);
+  };
+
+  const handleOvertimeSubmit = async (values: any) => {
+    const payload = {
+      overtimeDate: values.overtimeDate.format('YYYY-MM-DDTHH:mm:ss'),
+      duration: values.duration,
+      reason: values.reason,
+    };
+    await createOvertime(payload);
+    message.success('加班申请已提交');
+    setOvertimeOpen(false);
+    setLoadKey((k) => k + 1);
+  };
+
+  const handleLeaveSubmit = async (values: any) => {
+    const startTime = values.dateRange[0];
+    const endTime = values.dateRange[1];
+    const totalDays = endTime.diff(startTime, 'day') + 1;
+    const payload = {
+      leaveType: values.leaveType,
+      startTime: startTime.format('YYYY-MM-DD HH:mm:ss'),
+      endTime: endTime.format('YYYY-MM-DD HH:mm:ss'),
+      totalDays,
+      leaveReason: values.leaveReason,
+    };
+    await createLeave(payload);
+    message.success('请假申请已提交');
+    setLeaveOpen(false);
+    setLoadKey((k) => k + 1);
+  };
+
+  // ============ 日历交互 ============
+
+  const handleDayClick = (day: AttendanceDayVO) => {
+    setDetailDay(day);
+    setDetailOpen(true);
+  };
+
+  const handleOpenMakeupFromCalendar = (date: dayjs.Dayjs) => {
+    setMakeupInitialDate(date);
+    setMakeupOpen(true);
+  };
 
   // ============ 渲染 ============
 
   return (
     <PageContainer>
-      {/* 月度统计和打卡入口 */}
       <Card bordered={false} style={{ marginBottom: 16 }}>
-        <Row gutter={[16, 16]} align="middle">
-          <Col>
-            <DatePicker
-              picker="month"
-              value={dayjs(currentMonth, 'YYYY-MM')}
-              onChange={(d) => d && setCurrentMonth(d.format('YYYY-MM'))}
-              allowClear={false}
-            />
-          </Col>
-          <Col flex="auto">
-            <Space size="large">
-              <Statistic
-                title="出勤"
-                value={statistics.NORMAL}
-                valueStyle={{ color: '#52c41a', fontSize: 20 }}
-                suffix="天"
-              />
-              <Statistic
-                title="迟到"
-                value={statistics.LATE}
-                valueStyle={{ color: '#fa8c16', fontSize: 20 }}
-                suffix="次"
-              />
-              <Statistic
-                title="早退"
-                value={statistics.EARLY_LEAVE}
-                valueStyle={{ color: '#faad14', fontSize: 20 }}
-                suffix="次"
-              />
-              <Statistic
-                title="缺卡"
-                value={statistics.MISSED}
-                valueStyle={{ color: '#ff4d4f', fontSize: 20 }}
-                suffix="次"
-              />
-              <Statistic
-                title="请假"
-                value={statistics.LEAVE}
-                valueStyle={{ color: '#1677ff', fontSize: 20 }}
-                suffix="天"
-              />
-            </Space>
-          </Col>
-          <Col>
-            <Space>
-              <Button type="primary" icon={<CheckCircleOutlined />} onClick={() => handleClockIn(1)}>
-                上班打卡
-              </Button>
-              <Button icon={<ClockCircleOutlined />} onClick={() => handleClockIn(2)}>
-                下班打卡
-              </Button>
-            </Space>
-          </Col>
-        </Row>
+        <AttendanceStatsBar
+          currentMonth={currentMonth}
+          onMonthChange={setCurrentMonth}
+          statistics={statistics}
+          checkTodayStatus={checkTodayStatus}
+          clockInDisabledReason={clockInDisabledReason}
+          clockOutDisabledReason={clockOutDisabledReason}
+          onClockIn={handleClockIn}
+          onOpenLeaveModal={() => setLeaveOpen(true)}
+        />
       </Card>
 
-      {/* 考勤月历 */}
       <Card
         bordered={false}
         style={{ marginBottom: 16 }}
-        title={
-          <Space>
-            <span>{currentMonth} 考勤日历</span>
-          </Space>
-        }
+        title={<Space><span>{currentMonth} 考勤日历</span></Space>}
       >
-        {calendarLoading ? (
-          <Spin />
-        ) : (
-          <>
-            {/* 星期头 */}
-            <Row gutter={[4, 4]} style={{ marginBottom: 8 }}>
-              {['一', '二', '三', '四', '五', '六', '日'].map((d) => (
-                <Col span={3} key={d} style={{ textAlign: 'center' }}>
-                  <Text strong type="secondary">
-                    {d}
-                  </Text>
-                </Col>
-              ))}
-            </Row>
-            {/* 日期网格 */}
-            <Row gutter={[4, 4]}>
-              {/* 月首空白占位：对齐星期 */}
-              {firstDayOffset > 0 &&
-                Array.from({ length: firstDayOffset }).map((_, i) => (
-                  <Col span={3} key={`offset-${i}`} />
-                ))}
-              {calendarDays.map((day) => {
-                const dayNum = dayjs(day.date).date();
-                const isMissed = day.status === 'MISSED';
-
-                return (
-                  <Col span={3} key={day.date}>
-                    <div
-                      style={{
-                        padding: '6px 4px',
-                        borderRadius: 6,
-                        textAlign: 'center',
-                        backgroundColor: STATUS_BG_MAP[day.status] || '#fff',
-                        border: '1px solid ' + (STATUS_COLOR_MAP[day.status] || '#f0f0f0'),
-                        minHeight: 60,
-                        cursor: isMissed ? 'pointer' : 'default',
-                        transition: 'all 0.2s',
-                      }}
-                      onClick={() => {
-                        if (isMissed) {
-                          makeupForm.setFieldsValue({ correctionDate: dayjs(day.date) });
-                          setMakeupModalOpen(true);
-                        }
-                      }}
-                      title={isMissed ? '点击申请补卡' : undefined}
-                    >
-                      <div style={{ fontWeight: 500, fontSize: 14 }}>{dayNum}</div>
-                      <Tag
-                        color={STATUS_COLOR_MAP[day.status] || 'default'}
-                        style={{ fontSize: 11, padding: '0 4px', lineHeight: '18px' }}
-                      >
-                        {day.statusDesc}
-                      </Tag>
-                      {day.clockInTime && (
-                        <div style={{ fontSize: 11, color: '#666' }}>↑{day.clockInTime}</div>
-                      )}
-                      {day.clockOutTime && (
-                        <div style={{ fontSize: 11, color: '#666' }}>↓{day.clockOutTime}</div>
-                      )}
-                    </div>
-                  </Col>
-                );
-              })}
-            </Row>
-          </>
-        )}
+        <AttendanceCalendar
+          days={calendarDays}
+          loading={calendarLoading}
+          error={calendarError}
+          currentMonth={currentMonth}
+          onRefresh={() => { setCalendarError(null); setLoadKey((k) => k + 1); }}
+          onDayClick={handleDayClick}
+          checkTodayStatus={checkTodayStatus}
+          onClockIn={handleClockIn}
+        />
       </Card>
 
-      {/* 补卡记录 */}
       <Card
         bordered={false}
         title="补卡记录"
-        extra={
-          <Button type="primary" onClick={() => setMakeupModalOpen(true)}>
-            申请补卡
-          </Button>
-        }
+        extra={<Button type="primary" onClick={() => setMakeupOpen(true)}>申请补卡</Button>}
       >
-        <Table
-          dataSource={makeupRecords}
-          columns={makeupColumns}
-          rowKey="id"
-          loading={makeupLoading}
-          pagination={false}
-          locale={{ emptyText: '暂无补卡记录' }}
-        />
+        <MakeupRecordsTable records={makeupRecords} loading={makeupLoading} />
       </Card>
 
-      {/* 补卡申请弹窗 */}
-      <Modal
-        title="申请补卡"
-        open={makeupModalOpen}
-        onOk={handleMakeupSubmit}
-        onCancel={() => {
-          setMakeupModalOpen(false);
-          makeupForm.resetFields();
-        }}
-        destroyOnClose
-      >
-        <Form form={makeupForm} layout="vertical">
-          <Form.Item
-            name="correctionDate"
-            label="补卡日期"
-            rules={[{ required: true, message: '请选择补卡日期' }]}
-          >
-            <DatePicker style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item
-            name="correctionType"
-            label="补卡类型"
-            rules={[{ required: true, message: '请选择补卡类型' }]}
-          >
-            <Select>
-              <Select.Option value="CLOCK_IN">上班卡</Select.Option>
-              <Select.Option value="CLOCK_OUT">下班卡</Select.Option>
-            </Select>
-          </Form.Item>
-          <Form.Item
-            name="correctionReason"
-            label="补卡原因"
-            rules={[{ required: true, message: '请输入补卡原因' }]}
-          >
-            <Input.TextArea rows={3} placeholder="请输入补卡原因" />
-          </Form.Item>
-        </Form>
-      </Modal>
-
-      {/* 加班记录 */}
       <Card
         bordered={false}
-        title={
-          <Space>
-            <FieldTimeOutlined />
-            <span>加班记录</span>
-          </Space>
-        }
-        extra={
-          <Button type="primary" icon={<FieldTimeOutlined />} onClick={() => setOvertimeModalOpen(true)}>
-            申请加班
-          </Button>
-        }
+        title="加班记录"
         style={{ marginTop: 16 }}
+        extra={<Button type="primary" onClick={() => setOvertimeOpen(true)}>申请加班</Button>}
       >
-        <Table
-          dataSource={overtimeRecords}
-          columns={[
-            { title: '加班日期', dataIndex: 'overtimeDate', key: 'overtimeDate', width: 170, render: (t: string) => t || '-' },
-            { title: '时长(小时)', dataIndex: 'duration', key: 'duration', width: 100 },
-            { title: '事由', dataIndex: 'reason', key: 'reason', ellipsis: true },
-            { title: '状态', dataIndex: 'approvalStatusDesc', key: 'approvalStatusDesc', width: 100 },
-            {
-              title: '操作',
-              key: 'action',
-              width: 100,
-              render: (_: any, record: any) =>
-                record.approvalInstanceId ? (
-                  <Button type="link" size="small" onClick={() => history.push(`/approval/detail/${record.approvalInstanceId}`)}>
-                    查看进度
-                  </Button>
-                ) : null,
-            },
-            { title: '申请时间', dataIndex: 'createTime', key: 'createTime', width: 170, render: (t: string) => t || '-' },
-          ]}
-          rowKey="id"
-          loading={overtimeLoading}
-          pagination={false}
-          locale={{ emptyText: '暂无加班记录' }}
-        />
+        <OvertimeRecordsTable records={overtimeRecords} loading={overtimeLoading} />
       </Card>
 
-      {/* 加班申请弹窗 */}
-      <Modal
-        title="申请加班"
-        open={overtimeModalOpen}
-        onOk={handleOvertimeSubmit}
-        onCancel={() => {
-          setOvertimeModalOpen(false);
-          overtimeForm.resetFields();
-        }}
-        destroyOnClose
-      >
-        <Form form={overtimeForm} layout="vertical">
-          <Form.Item
-            name="overtimeDate"
-            label="加班日期"
-            rules={[{ required: true, message: '请选择加班日期' }]}
-          >
-            <DatePicker showTime style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item
-            name="duration"
-            label="加班时长(小时)"
-            rules={[{ required: true, message: '请输入加班时长' }]}
-          >
-            <InputNumber min={0.5} max={24} step={0.5} style={{ width: '100%' }} placeholder="请输入加班时长" />
-          </Form.Item>
-          <Form.Item
-            name="reason"
-            label="加班事由"
-            rules={[{ required: true, message: '请输入加班事由' }]}
-          >
-            <Input.TextArea rows={3} placeholder="请输入加班事由" />
-          </Form.Item>
-        </Form>
-      </Modal>
-
+      {/* ==================== 弹窗/抽屉 ==================== */}
+      <DayDetailDrawer
+        open={detailOpen}
+        day={detailDay}
+        onClose={() => setDetailOpen(false)}
+        onOpenMakeup={handleOpenMakeupFromCalendar}
+      />
+      <MakeupModal
+        open={makeupOpen}
+        onClose={() => setMakeupOpen(false)}
+        onSubmit={handleMakeupSubmit}
+        initialDate={makeupInitialDate}
+      />
+      <OvertimeModal
+        open={overtimeOpen}
+        onClose={() => setOvertimeOpen(false)}
+        onSubmit={handleOvertimeSubmit}
+      />
+      <LeaveModal
+        open={leaveOpen}
+        onClose={() => setLeaveOpen(false)}
+        onSubmit={handleLeaveSubmit}
+      />
     </PageContainer>
   );
 };
