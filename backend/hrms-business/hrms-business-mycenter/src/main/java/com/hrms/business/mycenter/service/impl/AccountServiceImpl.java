@@ -83,7 +83,7 @@ public class AccountServiceImpl implements AccountService {
 
         // 校验当前登录密码
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new GlobalException(ErrorCode.UNAUTHORIZED, "密码错误，更换手机失败");
+            throw new GlobalException(ErrorCode.PASSWORD_MISMATCH, "密码错误，更换手机失败");
         }
 
         user.setPhone(request.getPhone());

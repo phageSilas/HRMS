@@ -45,6 +45,7 @@ public class ErrorCode implements Serializable {
     public static final ErrorCode PARAM_TYPE_MISMATCH = new ErrorCode(40002, "参数类型不匹配");
     public static final ErrorCode PARAM_REQUIRED = new ErrorCode(40003, "参数不能为空");
     public static final ErrorCode PARAM_FORMAT_ERROR = new ErrorCode(40004, "参数格式错误");
+    public static final ErrorCode PASSWORD_MISMATCH = new ErrorCode(40005, "密码错误");
 
     /**
      * 请求方法不支持 (40050-40099)

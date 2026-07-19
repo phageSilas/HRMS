@@ -141,12 +141,8 @@ const ProfileSecurityPage: React.FC = () => {
       message.success('手机更换成功');
       setPhoneModalOpen(false);
       phoneForm.resetFields();
-    } catch (error: any) {
-      if (error?.response?.data?.message) {
-        message.error(error.response.data.message);
-      } else if (error instanceof Error) {
-        message.error(error.message);
-      }
+    } catch {
+      // 错误已被响应拦截器统一提示，此处无需重复处理
     }
   };
 
