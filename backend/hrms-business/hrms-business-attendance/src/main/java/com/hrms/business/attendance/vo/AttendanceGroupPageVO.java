@@ -59,6 +59,16 @@ public class AttendanceGroupPageVO {
     private Integer monthlyCorrectionLimit;
 
     /**
+     * 打卡 IP 白名单。
+     */
+    private String clockIpWhitelist;
+
+    /**
+     * 打卡 GPS 范围配置原始 JSON。
+     */
+    private String clockGpsScope;
+
+    /**
      * 状态：1-启用，0-禁用。
      */
     private Integer status;
