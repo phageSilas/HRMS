@@ -285,7 +285,7 @@ const HomePage: React.FC = () => {
               今天是高效工作的一天
             </Title>
             <Paragraph className={styles.bannerDescription}>
-              聚焦今日关键事项，先完成打卡，再快速进入个人中心处理日常工作。
+
             </Paragraph>
           </div>
 
