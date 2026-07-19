@@ -82,7 +82,7 @@ const RECORD_QUERY_STORAGE_PREFIX = 'attendance-record-query';
 const DEPARTMENT_PAGE_SIZE = 200;
 
 function parseUrlGroupId() {
-  const groupId = new URLSearchParams(history.location.search).get('groupId');
+  const groupId = new URLSearchParams(window.location.search).get('groupId');
   const parsed = Number(groupId);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
