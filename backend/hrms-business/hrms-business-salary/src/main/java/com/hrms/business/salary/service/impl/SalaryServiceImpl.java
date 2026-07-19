@@ -2105,7 +2105,7 @@ public class SalaryServiceImpl implements SalaryService {
                 writeSalaryBatchRow(sheet.createRow(index + 1), items.get(index));
             }
             for (int index = 0; index < 12; index++) {
-                sheet.autoSizeColumn(index);
+                sheet.setColumnWidth(index, 15 * 256);
             }
             workbook.write(outputStream);
         } catch (IOException ex) {
