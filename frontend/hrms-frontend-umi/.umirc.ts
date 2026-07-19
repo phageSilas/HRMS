@@ -5,7 +5,7 @@ export default defineConfig({
   access: {},
   model: {},
   initialState: {},
-  request: {},
+  请求: {},
   layout: {
     title: 'HRMS 人资管理系统',
   },
@@ -291,7 +291,7 @@ export default defineConfig({
         {
           path: '/profile/leave',
           name: '我的请假',
-          component: '@/pages/attendance/leave',
+          component: '@/pages/profile/leave',
         },
         {
           path: '/profile/salary',
