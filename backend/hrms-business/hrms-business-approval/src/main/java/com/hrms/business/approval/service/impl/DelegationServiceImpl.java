@@ -4,8 +4,10 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.hrms.business.approval.dto.DelegationCreateRequest;
 import com.hrms.business.approval.dto.DelegationListVO;
 import com.hrms.business.approval.dto.DelegationVO;
+import com.hrms.business.approval.dto.EmployeeBriefDTO;
 import com.hrms.business.approval.entity.ApprovalDelegationEntity;
 import com.hrms.business.approval.mapper.ApprovalDelegationMapper;
+import com.hrms.business.approval.mapper.ApprovalEmployeeMapper;
 import com.hrms.business.approval.service.DelegationService;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
@@ -32,6 +34,7 @@ public class DelegationServiceImpl implements DelegationService {
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final ApprovalDelegationMapper delegationMapper;
+    private final ApprovalEmployeeMapper approvalEmployeeMapper;
     private final UserMapper userMapper;
 
     @Override
@@ -61,12 +64,16 @@ public class DelegationServiceImpl implements DelegationService {
             throw new GlobalException(ErrorCode.DATA_DUPLICATE, "存在重叠的生效委托，请调整时间后重试");
         }
 
-        // 创建委托
+        // 创建委托：将员工ID转换为系统用户ID
+        EmployeeBriefDTO emp = approvalEmployeeMapper.findById(request.getDelegateeId());
+        if (emp == null || emp.getUserId() == null) {
+            throw new GlobalException(ErrorCode.NOT_FOUND, "被委托人不存在或未关联系统用户");
+        }
         ApprovalDelegationEntity entity = new ApprovalDelegationEntity();
         entity.setDelegatorId(userId);
         entity.setDelegatorName(getUserName(userId));
-        entity.setDelegateToId(request.getDelegateeId());
-        entity.setDelegateToName(getUserName(request.getDelegateeId()));
+        entity.setDelegateToId(emp.getUserId());
+        entity.setDelegateToName(getUserName(emp.getUserId()));
         entity.setStartDate(startDate);
         entity.setEndDate(endDate);
         entity.setReason(request.getReason());
@@ -142,6 +149,14 @@ public class DelegationServiceImpl implements DelegationService {
         vo.setStartTime(entity.getStartDate().format(DTF));
         vo.setEndTime(entity.getEndDate().format(DTF));
         vo.setReason(entity.getReason());
+
+        // 查询被委托人职位信息
+        if (entity.getDelegateToId() != null) {
+            EmployeeBriefDTO emp = approvalEmployeeMapper.findByUserId(entity.getDelegateToId());
+            if (emp != null) {
+                vo.setPosition(emp.getPostName());
+            }
+        }
 
         // 计算状态
         if (entity.getStatus() == 0) {

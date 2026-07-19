@@ -1,11 +1,9 @@
 /**
- * 委托审批设置页面
+ * 审批中心 - 委托审批页面
  *
- * 功能：查看当前生效委托、创建新委托、查看历史委托记录、取消委托
+ * 功能：规则说明、新增委托、当前有效委托列表、取消委托
  */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { PageContainer, ProTable } from '@ant-design/pro-components';
-import type { ProColumns } from '@ant-design/pro-components';
 import {
   Card,
   Form,
@@ -18,7 +16,15 @@ import {
   Tag,
   Modal,
   message,
+  Row,
+  Col,
+  Space,
+  Typography,
 } from 'antd';
+import {
+  UserOutlined,
+  CheckCircleFilled,
+} from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { Delegation, DelegationCreateData } from '@/services/approval';
 import {
@@ -29,9 +35,11 @@ import {
 import { getEmployeeList } from '@/services/employee';
 import type { EmployeeBrief } from '@/services/employee';
 
+const { Text } = Typography;
+
 // ============ 常量定义 ============
 
-/** 委托状态标签颜色映射 */
+/** 委托状态标签配置 */
 const DELEGATION_STATUS_MAP: Record<string, { color: string; text: string }> = {
   active: { color: 'green', text: '生效中' },
   expired: { color: 'default', text: '已过期' },
@@ -46,9 +54,6 @@ const DelegationPage: React.FC = () => {
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [employeeOptions, setEmployeeOptions] = useState<EmployeeBrief[]>([]);
   const [searching, setSearching] = useState<boolean>(false);
-  const [activeDelegation, setActiveDelegation] = useState<Delegation | null>(
-    null,
-  );
   const [delegations, setDelegations] = useState<Delegation[]>([]);
 
   // ============ 数据加载 ============
@@ -58,8 +63,7 @@ const DelegationPage: React.FC = () => {
     setLoading(true);
     try {
       const result = await getMyDelegations();
-      setActiveDelegation(result.activeDelegation);
-      setDelegations(result.records);
+      setDelegations(result.records || []);
     } catch {
       message.error('获取委托信息失败');
     } finally {
@@ -125,8 +129,8 @@ const DelegationPage: React.FC = () => {
       setSubmitting(true);
       const data: DelegationCreateData = {
         delegateeId: values.delegateeId,
-        startTime: values.startTime.format('YYYY-MM-DD HH:mm:ss'),
-        endTime: values.endTime.format('YYYY-MM-DD HH:mm:ss'),
+        startTime: values.dateRange[0].format('YYYY-MM-DD') + ' 00:00:00',
+        endTime: values.dateRange[1].format('YYYY-MM-DD') + ' 23:59:59',
         reason: values.reason,
       };
       await createDelegation(data);
@@ -142,174 +146,306 @@ const DelegationPage: React.FC = () => {
     }
   };
 
-  // ============ 表格列定义 ============
+  /** 重置表单 */
+  const handleReset = () => {
+    form.resetFields();
+  };
 
-  const columns: ProColumns<Delegation>[] = [
-    { title: '被委托人', dataIndex: 'delegateeName', width: 120 },
-    {
-      title: '生效时间',
-      dataIndex: 'startTime',
-      width: 170,
-      valueType: 'dateTime',
-    },
-    {
-      title: '结束时间',
-      dataIndex: 'endTime',
-      width: 170,
-      valueType: 'dateTime',
-    },
-    {
-      title: '状态',
-      dataIndex: 'status',
-      width: 100,
-      render: (_, record) => (
-        <Tag
-          color={DELEGATION_STATUS_MAP[record.status]?.color || 'default'}
+  // ============ 工具方法 ============
+
+  /** 格式化时间范围为展示字符串 */
+  const formatDateRange = (startTime: string, endTime: string): string => {
+    const fmt = 'YYYY-MM-DD';
+    const start = dayjs(startTime).format(fmt);
+    const end = dayjs(endTime).format(fmt);
+    return `${start} 至 ${end}`;
+  };
+
+  /** 过滤有效委托（status 为 active） */
+  const activeDelegations = delegations.filter((d) => d.status === 'active');
+
+  // ============ 渲染：规则说明提示框 ============
+
+  const renderRulesAlert = () => (
+    <Alert
+      type="info"
+      showIcon
+      style={{
+        borderRadius: 8,
+        padding: '12px 20px',
+        marginBottom: 16,
+      }}
+      message={
+        <div>
+          <Text strong style={{ fontSize: 14, marginBottom: 8, display: 'block' }}>
+            委托审批规则说明
+          </Text>
+          <ul style={{ margin: 0, paddingLeft: 20, lineHeight: 2, fontSize: 13 }}>
+            <li>委托期间产生的审批任务将自动转给被委托人处理</li>
+            <li>被委托人审批时，系统将记录&ldquo;XXX 代 YYY 审批&rdquo;</li>
+            <li>委托人可随时取消委托，取消后新任务不再转交</li>
+            <li>同一时间只能有一个有效委托</li>
+          </ul>
+        </div>
+      }
+    />
+  );
+
+  // ============ 渲染：新增委托表单 ============
+
+  const renderDelegationForm = () => (
+    <Card
+      title="新增委托"
+      style={{ marginBottom: 16, borderRadius: 8 }}
+      size="small"
+    >
+      <Form
+        form={form}
+        layout="vertical"
+        style={{ maxWidth: 600 }}
+      >
+        {/* 被委托人 */}
+        <Form.Item
+          name="delegateeId"
+          label={
+            <span>
+              被委托人 <Text type="danger">*</Text>
+            </span>
+          }
+          rules={[{ required: true, message: '请选择被委托人' }]}
         >
-          {DELEGATION_STATUS_MAP[record.status]?.text || record.status}
-        </Tag>
-      ),
-    },
-    {
-      title: '操作',
-      width: 100,
-      render: (_, record) =>
-        record.status === 'active' && (
-          <a onClick={() => handleCancel(record.id)}>取消</a>
-        ),
-    },
-  ];
+          <Select
+            showSearch
+            placeholder="请选择被委托人"
+            filterOption={false}
+            notFoundContent={searching ? '搜索中...' : '请输入姓名或工号搜索'}
+            loading={searching}
+            onSearch={handleEmployeeSearch}
+            labelInValue={false}
+            options={employeeOptions.map((emp) => ({
+              label: `${emp.employeeName}（${emp.employeeNo}）- ${emp.deptName || ''}${emp.postName ? '/' + emp.postName : ''}`,
+              value: emp.id,
+            }))}
+          />
+        </Form.Item>
 
-  // ============ 渲染 ============
-
-  return (
-    <PageContainer>
-      <Spin spinning={loading}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* 当前生效委托提示卡片 */}
-          {activeDelegation && (
-            <Alert
-              type="info"
-              showIcon
-              message={
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                  }}
-                >
-                  <span>
-                    当前已委托 <strong>{activeDelegation.delegateeName}</strong>
-                    {activeDelegation.startTime &&
-                      `（生效时间：${activeDelegation.startTime}`}
-                    {activeDelegation.endTime &&
-                      ` 至 ${activeDelegation.endTime}）`}
-                  </span>
-                  <Button
-                    size="small"
-                    danger
-                    onClick={() => handleCancel(activeDelegation.id)}
-                  >
-                    取消委托
-                  </Button>
-                </div>
-              }
-            />
-          )}
-
-          {/* 新建委托表单 */}
-          <Card title="新建委托">
-            <Form form={form} layout="vertical" style={{ maxWidth: 500 }}>
+        {/* 日期范围：同一行展示 */}
+        <Form.Item
+          label={
+            <span>
+              日期范围 <Text type="danger">*</Text>
+            </span>
+          }
+          required
+          style={{ marginBottom: 0 }}
+        >
+          <Row gutter={16}>
+            <Col span={12}>
               <Form.Item
-                name="delegateeId"
-                label="被委托人"
-                rules={[{ required: true, message: '请选择被委托人' }]}
-              >
-                <Select
-                  showSearch
-                  placeholder="输入姓名或工号搜索员工"
-                  filterOption={false}
-                  notFoundContent={searching ? '搜索中...' : '未找到匹配员工'}
-                  loading={searching}
-                  onSearch={handleEmployeeSearch}
-                  labelInValue={false}
-                  options={employeeOptions.map((emp) => ({
-                    label: `${emp.employeeName}（${emp.employeeNo}）- ${emp.deptName || ''}${emp.postName ? '/' + emp.postName : ''}`,
-                    value: emp.id,
-                  }))}
-                />
-              </Form.Item>
-              <Form.Item
-                name="startTime"
-                label="生效时间"
-                rules={[{ required: true, message: '请选择生效时间' }]}
+                name={['dateRange', 0]}
+                rules={[{ required: true, message: '请选择开始日期' }]}
+                style={{ marginBottom: 0 }}
               >
                 <DatePicker
-                  showTime
                   style={{ width: '100%' }}
+                  format="YYYY/MM/DD"
+                  placeholder="开始日期"
                   disabledDate={(current) =>
                     current && current.isBefore(dayjs().startOf('day'))
                   }
-                  placeholder="请选择生效时间"
                 />
               </Form.Item>
+            </Col>
+            <Col span={12}>
               <Form.Item
-                name="endTime"
-                label="结束时间"
+                name={['dateRange', 1]}
                 rules={[
-                  { required: true, message: '请选择结束时间' },
+                  { required: true, message: '请选择结束日期' },
                   ({ getFieldValue }) => ({
                     validator(_, value) {
-                      if (!value || !getFieldValue('startTime'))
-                        return Promise.resolve();
-                      if (value.isAfter(getFieldValue('startTime')))
+                      const range = getFieldValue('dateRange');
+                      if (!value || !range || !range[0]) return Promise.resolve();
+                      if (value.isAfter(range[0]) || value.isSame(range[0], 'day'))
                         return Promise.resolve();
                       return Promise.reject(
-                        new Error('结束时间必须晚于生效时间'),
+                        new Error('结束日期必须不早于开始日期'),
                       );
                     },
                   }),
                 ]}
+                style={{ marginBottom: 0 }}
               >
                 <DatePicker
-                  showTime
                   style={{ width: '100%' }}
-                  placeholder="请选择结束时间"
+                  format="YYYY/MM/DD"
+                  placeholder="结束日期"
                 />
               </Form.Item>
-              <Form.Item name="reason" label="委托原因">
-                <Input.TextArea rows={3} placeholder="可选填写委托原因" />
-              </Form.Item>
-              <Form.Item>
-                <Button
-                  type="primary"
-                  onClick={handleSubmit}
-                  loading={submitting}
-                >
-                  提交委托
-                </Button>
-              </Form.Item>
-            </Form>
-          </Card>
+            </Col>
+          </Row>
+        </Form.Item>
 
-          {/* 委托记录表格 */}
-          <Card title="委托记录">
-            <ProTable<Delegation>
-              columns={columns}
-              dataSource={delegations}
-              rowKey="id"
-              search={false}
-              pagination={{
-                showSizeChanger: true,
-                showTotal: (total: number) => `共 ${total} 条`,
-              }}
-              toolBarRender={false}
-            />
-          </Card>
+        {/* 委托原因 */}
+        <Form.Item name="reason" label="委托原因" style={{ marginTop: 24 }}>
+          <Input placeholder="请输入委托原因（选填）" />
+        </Form.Item>
+
+        {/* 按钮区域 */}
+        <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
+          <Space>
+            <Button onClick={handleReset}>取消</Button>
+            <Button
+              type="primary"
+              onClick={handleSubmit}
+              loading={submitting}
+            >
+              确认添加
+            </Button>
+          </Space>
+        </Form.Item>
+      </Form>
+    </Card>
+  );
+
+  // ============ 渲染：委托列表项 ============
+
+  const renderDelegationItem = (record: Delegation) => {
+    const statusConfig = DELEGATION_STATUS_MAP[record.status] || {
+      color: 'default',
+      text: record.status,
+    };
+
+    return (
+      <div
+        key={record.id}
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          padding: '16px 0',
+          borderBottom: '1px solid #f0f0f0',
+        }}
+      >
+        {/* 左侧头像 */}
+        <div
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: '50%',
+            backgroundColor: '#faad14',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            marginRight: 12,
+          }}
+        >
+          <UserOutlined style={{ color: '#fff', fontSize: 20 }} />
         </div>
+
+        {/* 中间信息 */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {/* 第一行：姓名 + 职位标签 + 状态标签 */}
+          <div style={{ marginBottom: 4 }}>
+            <Text strong style={{ fontSize: 14, marginRight: 8 }}>
+              {record.delegateeName}
+            </Text>
+            {record.position && (
+              <Tag color="default" style={{ marginRight: 6 }}>
+                {record.position}
+              </Tag>
+            )}
+            <Tag color={statusConfig.color}>{statusConfig.text}</Tag>
+          </div>
+
+          {/* 第二行：时间范围 + 委托原因 */}
+          <div>
+            <Text type="secondary" style={{ fontSize: 12, marginRight: 12 }}>
+              {formatDateRange(record.startTime, record.endTime)}
+            </Text>
+            {record.reason && (
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {record.reason}
+              </Text>
+            )}
+          </div>
+        </div>
+
+        {/* 右侧操作 */}
+        <div style={{ flexShrink: 0, marginLeft: 12 }}>
+          {record.status === 'active' && (
+            <Button
+              type="link"
+              danger
+              size="small"
+              onClick={() => handleCancel(record.id)}
+            >
+              取消委托
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // ============ 渲染：委托列表卡片 ============
+
+  const renderDelegationList = () => (
+    <Card
+      style={{ borderRadius: 8 }}
+      size="small"
+    >
+      {/* 自定义标题栏 */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 0,
+        }}
+      >
+        <Space>
+          <CheckCircleFilled style={{ color: '#52c41a', fontSize: 16 }} />
+          <Text strong style={{ fontSize: 14 }}>
+            当前有效委托
+          </Text>
+        </Space>
+        <Text type="secondary" style={{ fontSize: 13 }}>
+          {activeDelegations.length}条
+        </Text>
+      </div>
+
+      {/* 列表内容 */}
+      <Spin spinning={loading}>
+        {delegations.length > 0 ? (
+          <div style={{ marginTop: 8 }}>
+            {delegations.map((record) => renderDelegationItem(record))}
+          </div>
+        ) : (
+          !loading && (
+            <div
+              style={{
+                textAlign: 'center',
+                padding: '40px 0',
+                color: '#999',
+                marginTop: 8,
+              }}
+            >
+              暂无委托记录
+            </div>
+          )
+        )}
       </Spin>
-    </PageContainer>
+    </Card>
+  );
+
+  // ============ 主渲染 ============
+
+  return (
+    <div style={{ padding: 0 }}>
+      {renderRulesAlert()}
+      {renderDelegationForm()}
+      {renderDelegationList()}
+    </div>
   );
 };
 

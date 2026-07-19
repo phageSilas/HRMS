@@ -97,6 +97,7 @@ export interface Delegation {
   endTime: string;
   reason: string;
   status: 'active' | 'expired' | 'cancelled';
+  position?: string;
 }
 
 export interface DelegationCreateData {
