@@ -5,8 +5,8 @@
 
 import {
   ArrowRightOutlined,
+  ArrowUpOutlined,
   EnvironmentOutlined,
-  SendOutlined,
   UserOutlined,
 } from '@ant-design/icons';
 import { history, useModel } from '@umijs/max';
@@ -16,6 +16,9 @@ import React, { useMemo, useState } from 'react';
 import styles from './index.less';
 
 const { Paragraph, Text, Title } = Typography;
+const { TextArea } = Input;
+
+const HOME_AI_PENDING_PROMPT_STORAGE_KEY = 'hrms-ai-pending-prompt';
 
 type WeatherType = '晴天' | '多云' | '阴天' | '雨天' | string;
 
@@ -201,6 +204,43 @@ const HomePage: React.FC = () => {
     return currentUser?.nickname || currentUser?.username || '同事';
   }, [currentUser?.nickname, currentUser?.username]);
 
+  /**
+   * 发送首页 AI 问题并跳转到助手页
+   *
+   * 本方法使用的工具类: sessionStorage(Web API),history(@umijs/max),Date(JavaScript 内置)
+   */
+  const handleAssistantSubmit = () => {
+    const content = assistantInput.trim();
+    if (!content) {
+      return;
+    }
+
+    sessionStorage.setItem(
+      HOME_AI_PENDING_PROMPT_STORAGE_KEY,
+      JSON.stringify({
+        content,
+        createdAt: new Date().toISOString(),
+        source: 'home',
+      }),
+    );
+    setAssistantInput('');
+    history.push('/ai');
+  };
+
+  /**
+   * 处理首页 AI 输入框回车发送
+   *
+   * 本方法使用的工具类: handleAssistantSubmit(当前文件)
+   */
+  const handleAssistantKeyDown = (
+    event: React.KeyboardEvent<HTMLTextAreaElement>,
+  ) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      handleAssistantSubmit();
+    }
+  };
+
   return (
     <div className={styles.homePage}>
       <Card
@@ -290,23 +330,31 @@ const HomePage: React.FC = () => {
           </Paragraph>
         </div>
         <div className={styles.aiComposer}>
-          <Input
-            value={assistantInput}
-            size="large"
-            className={styles.aiInput}
-            placeholder="输入问题，按回车发送..."
-            onChange={(event) => setAssistantInput(event.target.value)}
-            onPressEnter={() => undefined}
-          />
-          <Button
-            type="primary"
-            size="large"
-            className={styles.aiSendButton}
-            icon={<SendOutlined />}
-            data-testid="home-ai-send"
+          <div
+            className={styles.aiInputShell}
+            data-testid="home-ai-input-shell"
           >
-            发送
-          </Button>
+            <TextArea
+              value={assistantInput}
+              className={styles.aiInput}
+              placeholder="输入你的问题..."
+              autoSize={{ minRows: 3, maxRows: 3 }}
+              maxLength={2000}
+              onChange={(event) => setAssistantInput(event.target.value)}
+              onKeyDown={handleAssistantKeyDown}
+            />
+            <Button
+              type="text"
+              shape="circle"
+              className={styles.aiSendButton}
+              icon={<ArrowUpOutlined />}
+              data-testid="home-ai-send"
+              disabled={!assistantInput.trim()}
+              onClick={handleAssistantSubmit}
+            />
+          </div>
+          {/* 保留占位列，维持该区域整体位置与卡片结构稳定 */}
+          <div className={styles.aiComposerSpacer} aria-hidden="true" />
         </div>
       </Card>
     </div>

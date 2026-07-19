@@ -383,32 +383,67 @@
 
 .aiComposer {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px;
-  gap: 18px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
   align-items: center;
+}
+
+.aiInputShell {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  padding: 12px 14px 12px 18px;
+  border-radius: 28px;
+  background: linear-gradient(180deg, #171717 0%, #111111 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 8px 24px rgba(0, 0, 0, 0.14);
 }
 
 .aiInput {
   :global(.ant-input) {
-    height: 78px;
-    border: 0;
-    border-radius: 22px;
-    padding: 0 24px;
-    background: linear-gradient(180deg, #f8fbff 0%, #f3f6fc 100%);
-    color: #1f2940;
+    border: 0 !important;
+    padding: 8px 0 !important;
+    background: transparent !important;
+    color: rgba(255, 255, 255, 0.96) !important;
     font-size: 18px;
-    box-shadow: inset 0 0 0 1px #edf2fb;
+    line-height: 1.65;
+    resize: none !important;
+    box-shadow: none !important;
+  }
+
+  :global(.ant-input::placeholder) {
+    color: rgba(255, 255, 255, 0.42) !important;
+  }
+
+  :global(.ant-input-data-count) {
+    display: none;
   }
 }
 
 .aiSendButton {
-  height: 78px !important;
+  width: 52px !important;
+  min-width: 52px !important;
+  height: 52px !important;
   border: 0 !important;
-  border-radius: 24px !important;
-  background: linear-gradient(90deg, #5965ff 0%, #455ff4 100%) !important;
-  box-shadow: 0 16px 36px rgba(75, 96, 255, 0.26) !important;
-  font-size: 18px !important;
-  font-weight: 600;
+  background: rgba(255, 255, 255, 0.14) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  box-shadow: none !important;
+  font-size: 22px !important;
+
+  &:hover,
+  &:focus {
+    background: rgba(255, 255, 255, 0.2) !important;
+    color: #fff !important;
+  }
+
+  &:disabled {
+    background: rgba(255, 255, 255, 0.08) !important;
+    color: rgba(255, 255, 255, 0.3) !important;
+  }
+}
+
+.aiComposerSpacer {
+  display: none;
 }
 
 @media (max-width: 1280px) {
@@ -460,7 +495,7 @@
     flex-direction: column;
   }
 
-  .aiSendButton {
+  .aiInputShell {
     width: 100%;
   }
 }
@@ -538,13 +573,14 @@
 
   .aiInput {
     :global(.ant-input) {
-      height: 72px;
       font-size: 18px;
     }
   }
 
   .aiSendButton {
-    height: 72px !important;
+    width: 46px !important;
+    min-width: 46px !important;
+    height: 46px !important;
     font-size: 18px !important;
   }
 }
