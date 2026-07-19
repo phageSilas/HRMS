@@ -258,6 +258,7 @@ const SalaryBatchPage: React.FC = () => {
   const [departmentOptions, setDepartmentOptions] = useState<DeptListItem[]>([]);
   const [departmentLoading, setDepartmentLoading] = useState(false);
   const [selectedDeptName, setSelectedDeptName] = useState<string>();
+  const [onlyAbnormalPreview, setOnlyAbnormalPreview] = useState(false);
   const [previewPageNum, setPreviewPageNum] = useState(1);
   const [previewPageSize, setPreviewPageSize] = useState(PREVIEW_DEFAULT_PAGE_SIZE);
   const [loadingCurrent, setLoadingCurrent] = useState(false);
@@ -368,7 +369,7 @@ const SalaryBatchPage: React.FC = () => {
 
   useEffect(() => {
     setPreviewPageNum(1);
-  }, [selectedDeptName, previewData?.batch?.id]);
+  }, [onlyAbnormalPreview, selectedDeptName, previewData?.batch?.id]);
 
   useEffect(() => {
     if (pollingRef.current) {
@@ -556,11 +557,14 @@ const SalaryBatchPage: React.FC = () => {
           }
         : item,
     );
+    const abnormalFilteredItems = onlyAbnormalPreview
+      ? items.filter((item) => item.warningLevel && item.warningLevel !== 'NONE')
+      : items;
     if (!selectedDeptName) {
-      return items;
+      return abnormalFilteredItems;
     }
-    return items.filter((item) => item.deptName === selectedDeptName);
-  }, [previewData?.items, selectedDeptName]);
+    return abnormalFilteredItems.filter((item) => item.deptName === selectedDeptName);
+  }, [onlyAbnormalPreview, previewData?.items, selectedDeptName]);
 
   const pagedPreviewItems = useMemo(() => {
     const startIndex = (previewPageNum - 1) * previewPageSize;
@@ -796,6 +800,15 @@ const SalaryBatchPage: React.FC = () => {
               title="核算预览"
               extra={
                 <Space>
+                  <Button
+                    type={onlyAbnormalPreview ? 'primary' : 'default'}
+                    onClick={() => {
+                      setOnlyAbnormalPreview((previous) => !previous);
+                      setPreviewPageNum(1);
+                    }}
+                  >
+                    异常薪资
+                  </Button>
                   <Select
                     allowClear
                     showSearch
