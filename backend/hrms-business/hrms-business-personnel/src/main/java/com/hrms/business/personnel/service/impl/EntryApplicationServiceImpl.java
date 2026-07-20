@@ -33,8 +33,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -392,6 +394,7 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
      * @return 查询条件
      */
     private LambdaQueryWrapper<EntryApplicationEntity> buildPageQueryWrapper(EntryApplicationQueryDTO queryDTO) {
+        List<Long> targetDeptIds = resolveTargetDeptIds(queryDTO.getDepartmentId());
         LambdaQueryWrapper<EntryApplicationEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.and(StrUtil.isNotBlank(queryDTO.getKeyword()), keywordWrapper -> keywordWrapper
                 .like(EntryApplicationEntity::getCandidateName, queryDTO.getKeyword())
@@ -400,7 +403,7 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         // 根据审批状态进行过滤
         wrapper.eq(queryDTO.getApprovalStatus() != null, EntryApplicationEntity::getApprovalStatus, queryDTO.getApprovalStatus());
         // 根据部门ID进行过滤
-        wrapper.eq(queryDTO.getDepartmentId() != null, EntryApplicationEntity::getDeptId, queryDTO.getDepartmentId());
+        wrapper.in(!targetDeptIds.isEmpty(), EntryApplicationEntity::getDeptId, targetDeptIds);
         // 根据申请日期起始进行过滤
         wrapper.ge(queryDTO.getDateStart() != null, EntryApplicationEntity::getCreateTime,
                 queryDTO.getDateStart() == null ? null : LocalDateTime.of(queryDTO.getDateStart(), LocalTime.MIN));
@@ -410,6 +413,23 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         // 按创建时间降序排列
         wrapper.orderByDesc(EntryApplicationEntity::getCreateTime);
         return wrapper;
+    }
+
+    /**
+     * 解析部门树范围ID，包含所选部门自身及全部子孙部门。
+     *
+     * @param departmentId 所选部门ID
+     * @return 部门树范围ID列表
+     */
+    private List<Long> resolveTargetDeptIds(Long departmentId) {
+        if (departmentId == null) {
+            return List.of();
+        }
+        List<Long> deptIds = deptService.getSubDeptIds(departmentId);
+        if (deptIds == null || deptIds.isEmpty()) {
+            return List.of(departmentId);
+        }
+        return new ArrayList<>(Set.copyOf(deptIds));
     }
 
     /**

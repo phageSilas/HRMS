@@ -252,7 +252,7 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
         // 跨模块调用已完成：当前调用 EmployeeService#listEmployees(employeeQueryDTO) 按部门和关键词查询员工列表。
         EmployeeQueryDTO employeeQueryDTO = new EmployeeQueryDTO();
         employeeQueryDTO.setKeyword(queryDTO.getKeyword());
-        employeeQueryDTO.setDeptIds(queryDTO.getDepartmentId() == null ? null : List.of(queryDTO.getDepartmentId()));
+        employeeQueryDTO.setDeptIds(resolveTargetDeptIds(queryDTO.getDepartmentId()));
         employeeQueryDTO.setPageNum(1);
         employeeQueryDTO.setPageSize(MAX_PAGE_SIZE);
         return employeeService.listEmployees(employeeQueryDTO).getRecords().stream()
@@ -283,6 +283,17 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
      * @return 员工快照映射
      * 本方法使用的工具类: CollUtil(hutool)
      */
+    private List<Long> resolveTargetDeptIds(Long departmentId) {
+        if (departmentId == null) {
+            return null;
+        }
+        List<Long> deptIds = deptService.getSubDeptIds(departmentId);
+        if (CollUtil.isEmpty(deptIds)) {
+            return List.of(departmentId);
+        }
+        return deptIds;
+    }
+
     private Map<Long, EmployeeSnapshotEntity> listEmployeeSnapshotMap(List<Long> employeeIds) {
         if (CollUtil.isEmpty(employeeIds)) {
             return Collections.emptyMap();

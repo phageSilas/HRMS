@@ -33,10 +33,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -220,8 +222,9 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
      * 本方法使用的工具类: 无
      */
     private LambdaQueryWrapper<TransferApplicationEntity> buildTransferApplicationWrapper(TransferApplicationQueryDTO queryDTO) {
+        List<Long> targetDeptIds = resolveTargetDeptIds(queryDTO.getDepartmentId());
         LambdaQueryWrapper<TransferApplicationEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(queryDTO.getDepartmentId() != null, TransferApplicationEntity::getFromDeptId, queryDTO.getDepartmentId());
+        wrapper.in(CollUtil.isNotEmpty(targetDeptIds), TransferApplicationEntity::getFromDeptId, targetDeptIds);
         wrapper.eq(queryDTO.getApprovalStatus() != null, TransferApplicationEntity::getApprovalStatus, queryDTO.getApprovalStatus());
         if (StrUtil.isNotBlank(queryDTO.getKeyword())) {
             List<Long> employeeIds = listEmployeeIdsByKeyword(queryDTO.getKeyword());
@@ -230,6 +233,23 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
         }
         wrapper.orderByDesc(TransferApplicationEntity::getCreateTime);
         return wrapper;
+    }
+
+    /**
+     * 解析部门树范围ID，包含所选部门自身及全部子孙部门。
+     *
+     * @param departmentId 所选部门ID
+     * @return 部门树范围ID列表
+     */
+    private List<Long> resolveTargetDeptIds(Long departmentId) {
+        if (departmentId == null) {
+            return List.of();
+        }
+        List<Long> deptIds = deptService.getSubDeptIds(departmentId);
+        if (CollUtil.isEmpty(deptIds)) {
+            return List.of(departmentId);
+        }
+        return new ArrayList<>(Set.copyOf(deptIds));
     }
 
     /**

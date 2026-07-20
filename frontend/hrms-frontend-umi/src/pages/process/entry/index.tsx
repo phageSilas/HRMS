@@ -307,7 +307,16 @@ const EntryPage: React.FC = () => {
       dataIndex: 'departmentId',
       hideInTable: true,
       valueType: 'select',
-      fieldProps: { options: realDepartmentOptions, allowClear: true },
+      fieldProps: {
+        options: realDepartmentOptions,
+        allowClear: true,
+        showSearch: true,
+        optionFilterProp: 'label',
+        filterOption: (input: string, option?: { label?: string | number }) =>
+          String(option?.label || '')
+            .toLowerCase()
+            .includes(input.trim().toLowerCase()),
+      },
     },
     {
       title: '申请日期',
