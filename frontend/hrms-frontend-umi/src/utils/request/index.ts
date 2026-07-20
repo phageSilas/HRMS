@@ -18,7 +18,7 @@ import { message } from 'antd';
 // 走 Umi 代理（开发环境 proxy 配置见 .umirc.ts），不设 baseURL 直连后端
 const instance: AxiosInstance = axios.create({
   baseURL: process.env.API_BASE_URL || '',
-  timeout: 10000,
+  timeout: 0,
   headers: {
     'Content-Type': 'application/json',
   },
