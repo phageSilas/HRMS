@@ -587,7 +587,7 @@ const AttendanceSummaryPage: React.FC = () => {
               />
             </Space>
           </Col>
-          <Col xs={24} md={8} xl={6}>
+          <Col xs={24} md={20} xl={15}>
             <Space direction="vertical" size={6} style={{ width: '100%' }}>
               <Text type="secondary">部门</Text>
               <Select
@@ -610,7 +610,7 @@ const AttendanceSummaryPage: React.FC = () => {
               />
             </Space>
           </Col>
-          <Col xs={24} xl={12}>
+          <Col xs={24} md={24} xl={3}>
             <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
               <Button
                 type="primary"
