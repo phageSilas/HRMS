@@ -1,0 +1,162 @@
+/**
+ * 考勤子组件通用样式
+ */
+
+/* === 日历加载 & 错误态 === */
+.calendarLoading {
+  text-align: center;
+  padding: 40px 0;
+}
+
+.calendarLoadingText {
+  margin-top: 12px;
+  color: #999;
+}
+
+.calendarError {
+  text-align: center;
+  padding: 40px 0;
+}
+
+.calendarErrorIcon {
+  margin-right: 6px;
+}
+
+.calendarErrorText {
+  font-size: 13px;
+}
+
+/* === 日历网格 === */
+.calendarGrid {
+  margin-bottom: 8px;
+}
+
+.weekdayCell {
+  text-align: center;
+}
+
+.weekdayLabel {
+  color: #666;
+}
+
+.weekdayWeekend {
+  color: #ff4d4f !important;
+}
+
+/* 日期格 */
+.dayCell {
+  height: 80px;
+  border-radius: 6px;
+  border: 1px solid #f0f0f0;
+  padding: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.dayCell:hover {
+  border-color: #1677ff;
+  box-shadow: 0 2px 8px rgba(22, 119, 255, 0.15);
+}
+
+.dayCellToday {
+  border-color: #1677ff;
+  border-width: 2px;
+}
+
+.dayCellEmpty {
+  background: #fafafa;
+  cursor: default;
+  opacity: 0.5;
+}
+
+.dayCellEmpty:hover {
+  border-color: #f0f0f0;
+  box-shadow: none;
+}
+
+.dayDate {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dayDateWeekend {
+  color: #ff4d4f;
+}
+
+.dayDateToday {
+  color: #1677ff;
+}
+
+.dayStatusTag {
+  font-size: 11px;
+  padding: 0 4px;
+  line-height: 18px;
+}
+
+.dayStatusText {
+  font-size: 11px;
+  color: #ccc;
+  margin-top: 2px;
+}
+
+.dayClockIn {
+  font-size: 11px;
+  color: #52c41a;
+}
+
+.dayClockOut {
+  font-size: 11px;
+  color: #1677ff;
+}
+
+/* === 图例 === */
+.legendBar {
+  margin-top: 16px;
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.legendDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.legendLabel {
+  font-size: 12px;
+}
+
+/* === 详情抽屉 === */
+.drawerSection {
+  margin-bottom: 24px;
+}
+
+.drawerDescriptions {
+  margin-bottom: 24px;
+}
+
+.drawerClockIn {
+  color: #52c41a;
+}
+
+.drawerClockOut {
+  color: #1677ff;
+}
+
+.drawerActions {
+  width: 100%;
+}
+
+/* === 弹窗表单 === */
+.modalDatePicker {
+  width: 100%;
+}
