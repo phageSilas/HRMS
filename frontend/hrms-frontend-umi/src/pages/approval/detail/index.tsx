@@ -1,8 +1,19 @@
 /**
  * 审批详情页面（卡片式布局）
  *
- * 展示申请信息、审批流程时间轴、当前节点操作
+ * 展示审批申请的详细信息，包括：
+ * - 申请人信息卡片（头像、姓名、状态、审批类型、时间）
+ * - 业务表单详情（两列布局，根据 businessType 动态渲染字段中文名）
+ * - 审批流程时间轴（各节点状态及操作人）
+ * - 当前审批人操作区（通过 / 拒绝 / 转交）
+ * - 加载态 / 错误态处理
+ *
+ * 数据流：从路由参数获取 :id → 调用 getApprovalDetail 加载详情，
+ *         当前审批人可发起操作 → 调用 operateApproval 提交。
+ *
+ * @module ApprovalDetail
  */
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, history } from '@umijs/max';
 import { PageContainer } from '@ant-design/pro-components';
@@ -41,6 +52,12 @@ import type { EmployeeBrief } from '@/services/employee';
 
 // ============ 业务类型表单字段中文映射 ============
 
+/**
+ * 各业务类型的表单字段中文名映射
+ *
+ * key 为业务类型编码，value 为该类型下各字段中文名。
+ * 用于将后端返回的 formData 字段 key 转换为可读的中文标签。
+ */
 const FORM_LABEL_MAP: Record<string, Record<string, string>> = {
   LEAVE_REQUEST: {
     leaveType: '请假类型',
@@ -112,7 +129,7 @@ const LEAVE_TYPE_MAP: Record<string, string> = {
   FUNERAL: '丧假',
 };
 
-/** 审批状态颜色映射 */
+/** 审批状态 → Ant Design Tag 颜色映射 */
 const STATUS_COLOR_MAP: Record<string, string> = {
   PENDING: 'processing',
   APPROVED: 'success',
@@ -123,7 +140,7 @@ const STATUS_COLOR_MAP: Record<string, string> = {
   EXPIRED: 'warning',
 };
 
-/** 业务类型标签颜色映射 */
+/** 业务类型 → Tag 颜色映射 */
 const BUSINESS_TYPE_COLOR_MAP: Record<string, string> = {
   ENTRY: 'green',
   REGULAR: 'blue',
@@ -137,6 +154,10 @@ const BUSINESS_TYPE_COLOR_MAP: Record<string, string> = {
 
 /**
  * 根据业务类型和字段名获取中文标签
+ *
+ * @param businessType 业务类型编码
+ * @param key          表单字段 key
+ * @returns 中文字段名，未匹配时返回原 key
  */
 const getFormLabel = (businessType: string, key: string): string => {
   const typeMap = FORM_LABEL_MAP[businessType];
@@ -144,7 +165,15 @@ const getFormLabel = (businessType: string, key: string): string => {
 };
 
 /**
- * 根据业务类型和字段名格式化值
+ * 根据业务类型和字段名格式化表单值为展示文本
+ *
+ * 对特殊字段（如补卡类型、请假类型）做值映射转换，
+ * 空值统一显示为 "-"。
+ *
+ * @param businessType 业务类型编码
+ * @param key          表单字段 key
+ * @param value        表单原始值
+ * @returns 格式化后的展示文本
  */
 const formatFormValue = (businessType: string, key: string, value: any): string => {
   if (value === null || value === undefined || value === '') return '-';
@@ -162,23 +191,33 @@ const formatFormValue = (businessType: string, key: string, value: any): string 
 
 // ============ 页面组件 ============
 
+/** 审批详情主页面 */
 const DetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [detail, setDetail] = useState<ApprovalDetail | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  /** 操作弹窗状态 */
   const [operateModal, setOperateModal] = useState<{
     visible: boolean;
     action: 'approve' | 'reject' | 'transfer';
   }>({ visible: false, action: 'approve' });
   const [operateLoading, setOperateLoading] = useState<boolean>(false);
   const [operateForm] = Form.useForm();
+  /** 转交目标员工选项列表 */
   const [employeeOptions, setEmployeeOptions] = useState<EmployeeBrief[]>([]);
   const [searching, setSearching] = useState<boolean>(false);
+  /** 搜索防抖 timer */
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ============ 数据加载 ============
 
+  /**
+   * 加载审批详情
+   *
+   * 从 API 获取审批详细数据，成功后更新 detail 状态，
+   * 失败时设置 loadError 供 UI 展示错误提示。
+   */
   const fetchDetail = useCallback(async () => {
     if (!id) return;
     setLoading(true);
@@ -197,8 +236,13 @@ const DetailPage: React.FC = () => {
     fetchDetail();
   }, [fetchDetail]);
 
-  // ============ 员工搜索 ============
+  // ============ 员工搜索（转交目标选取）============
 
+  /**
+   * 搜索员工（防抖 300ms）
+   *
+   * 用于转交操作中选择目标审批人。关键词为空或太短时清空选项。
+   */
   const handleEmployeeSearch = useCallback((keyword: string) => {
     if (searchTimerRef.current) {
       clearTimeout(searchTimerRef.current);
@@ -222,6 +266,13 @@ const DetailPage: React.FC = () => {
 
   // ============ 审批操作 ============
 
+  /**
+   * 执行审批操作（通过 / 拒绝 / 转交）
+   *
+   * 先校验操作弹窗表单，然后调用 operateApproval API，
+   * 成功后自动刷新详情页并关闭弹窗。
+   * 表单校验失败时（Ant Design 错误）不处理。
+   */
   const handleOperate = useCallback(async () => {
     try {
       const values = await operateForm.validateFields();
@@ -238,6 +289,7 @@ const DetailPage: React.FC = () => {
       operateForm.resetFields();
       fetchDetail();
     } catch (error: any) {
+      // Ant Design 表单校验失败时 error 包含 errorFields，此时不额外提示
       if (error?.errorFields) return;
       message.error(error?.message || '操作失败');
     } finally {
@@ -245,11 +297,13 @@ const DetailPage: React.FC = () => {
     }
   }, [detail, operateModal.action, operateForm, fetchDetail]);
 
+  /** 打开操作弹窗 */
   const showOperateModal = (action: 'approve' | 'reject' | 'transfer') => {
     operateForm.resetFields();
     setOperateModal({ visible: true, action });
   };
 
+  /** 关闭操作弹窗 */
   const closeOperateModal = () => {
     setOperateModal({ visible: false, action: 'approve' });
     operateForm.resetFields();
@@ -257,7 +311,7 @@ const DetailPage: React.FC = () => {
 
   // ============ 渲染函数 ============
 
-  /** 渲染面包屑 + 单号 */
+  /** 渲染面包屑导航 + 审批单号 */
   const renderBreadcrumb = () => (
     <div
       style={{
@@ -290,7 +344,7 @@ const DetailPage: React.FC = () => {
     </div>
   );
 
-  /** 渲染申请人信息卡片 */
+  /** 渲染申请人信息卡片（头像、姓名、状态、审批类型、时间） */
   const renderApplicantCard = () => {
     if (!detail) return null;
     const isPending = detail.status === 'PENDING';
@@ -304,7 +358,7 @@ const DetailPage: React.FC = () => {
         }}
         bodyStyle={{ padding: '24px' }}
       >
-        {/* 头部：头像 + 姓名 + 部门 + 状态 */}
+        {/* 头部：头像 + 姓名 + 状态 */}
         <div
           style={{
             display: 'flex',
@@ -342,7 +396,7 @@ const DetailPage: React.FC = () => {
           </Tag>
         </div>
 
-        {/* 三列信息 */}
+        {/* 三列信息：审批类型 / 申请时间 / 截止时间 */}
         <Row gutter={24}>
           <Col span={8}>
             <div style={{ fontSize: 13, color: '#8c8c8c', marginBottom: 4 }}>审批类型</div>
@@ -369,7 +423,7 @@ const DetailPage: React.FC = () => {
     );
   };
 
-  /** 渲染申请详情卡片（两列布局） */
+  /** 渲染申请详情卡片（两列布局，动态渲染表单字段） */
   const renderFormDataCard = () => {
     if (!detail) return null;
     const formData = detail.formData;
@@ -455,12 +509,13 @@ const DetailPage: React.FC = () => {
       );
     }
 
+    // 将每个审批节点映射为 Timeline.Item 配置
     const timelineItems = nodes.map((node: ApprovalNode, index: number) => {
       const isCurrent = node.status === 'current';
       const isCompleted = node.status === 'completed';
       const isPending = node.status === 'pending' || (!isCurrent && !isCompleted);
 
-      // 根据状态确定颜色和图标
+      // 根据节点状态确定时间轴圆点的颜色和图标
       let dotColor: string;
       let dotIcon: React.ReactNode;
 
@@ -544,7 +599,7 @@ const DetailPage: React.FC = () => {
     );
   };
 
-  /** 渲染审批操作区 */
+  /** 渲染审批操作区（仅当前审批人可见） */
   const renderOperationArea = () => {
     if (!detail || !detail.currentOperator) return null;
 
@@ -607,10 +662,11 @@ const DetailPage: React.FC = () => {
     );
   };
 
-  /** 操作弹窗表单 */
+  /** 渲染操作弹窗表单（转交时显示员工搜索，拒绝时必填意见） */
   const renderOperateFormItems = () => {
     const items: React.ReactNode[] = [];
 
+    // 转交操作时需要选择目标审批人
     if (operateModal.action === 'transfer') {
       items.push(
         <Form.Item
@@ -636,6 +692,7 @@ const DetailPage: React.FC = () => {
       );
     }
 
+    // 审批意见字段（拒绝时必填）
     items.push(
       <Form.Item
         key="comment"
@@ -697,19 +754,10 @@ const DetailPage: React.FC = () => {
 
   return (
     <PageContainer>
-      {/* 面包屑 + 单号 */}
       {renderBreadcrumb()}
-
-      {/* 申请人信息卡片 */}
       {renderApplicantCard()}
-
-      {/* 申请详情卡片 */}
       {renderFormDataCard()}
-
-      {/* 审批流程时间轴 */}
       {renderApprovalTimeline()}
-
-      {/* 审批操作区 */}
       {renderOperationArea()}
 
       {/* 操作弹窗 */}

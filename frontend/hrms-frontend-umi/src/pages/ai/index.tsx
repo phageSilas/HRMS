@@ -3,6 +3,15 @@
  *
  * 布局：左侧会话列表 + 右侧对话区
  * 功能：SSE 流式对话、Markdown 渲染、会话切换、新建/删除/重命名会话、路由建议卡片
+ *
+ * 数据流：
+ * - 会话列表通过手动调用 getConversations 管理（避免 useRequest 不可控的副作用）
+ * - 消息加载通过 useRequest 封装 getMessages
+ * - 发送消息通过 sendChatMessage（基于 fetch + ReadableStream 的 SSE 客户端）
+ * - SSE 事件通过回调更新 messages 状态和 streamingContent
+ * - 首页传入的待发送消息通过 sessionStorage 传递
+ *
+ * @module AiChat
  */
 
 import {
@@ -12,6 +21,7 @@ import {
   sendChatMessage,
   updateTitle,
   type Conversation,
+  type ConversationDetail,
   type Message,
 } from '@/services/ai';
 import type { PageResult } from '@/types/api';
@@ -43,13 +53,16 @@ import remarkGfm from 'remark-gfm';
 
 const { Text, Title } = Typography;
 const { TextArea } = Input;
+/** sessionStorage 中首页待发送消息的 key */
 const HOME_AI_PENDING_PROMPT_STORAGE_KEY = 'hrms-ai-pending-prompt';
 
 // ============ 欢迎语 + 推荐问题 ============
 
+/** 首次进入无会话时的欢迎文案 */
 const WELCOME_MESSAGE =
   '你好！我是 HRMS 智能助手，可以帮你解答制度问题、查询流程、提供操作引导。';
 
+/** 首页推荐问题列表（点击直接填入输入框） */
 const SUGGESTED_QUESTIONS = [
   '今年的年假政策是什么？',
   '怎么申请加班？',
@@ -59,7 +72,9 @@ const SUGGESTED_QUESTIONS = [
 
 // ============ 样式常量 ============
 
+/** 左侧会话栏宽度 */
 const SIDEBAR_WIDTH = 280;
+/** 聊天区头部高度 */
 const HEADER_HEIGHT = 56;
 
 const styles = {
@@ -145,6 +160,10 @@ const styles = {
 
 // ============ Markdown 渲染覆盖样式 ============
 
+/**
+ * react-markdown 渲染 AI 回复的 Markdown 样式
+ * 覆盖标题、代码块、表格、引用等元素的默认样式
+ */
 const markdownStyles = `
   .ai-markdown h1, .ai-markdown h2, .ai-markdown h3,
   .ai-markdown h4, .ai-markdown h5, .ai-markdown h6 {
@@ -197,11 +216,13 @@ const markdownStyles = `
 
 // ============ 建议卡片组件 ============
 
+/** 路由建议：label 为按钮文本，path 为跳转路径 */
 interface Suggestion {
   label: string;
   path: string;
 }
 
+/** 建议卡片组件：AI 返回的路由建议，以可点击卡片方式展示 */
 interface SuggestionCardsProps {
   suggestions: Suggestion[];
 }
@@ -251,6 +272,7 @@ const SuggestionCards: React.FC<SuggestionCardsProps> = ({ suggestions }) => {
 
 // ============ 消息气泡组件 ============
 
+/** 消息气泡组件：用户消息（纯文本右对齐蓝色气泡） / AI 消息（Markdown 渲染左对齐灰色气泡） */
 interface MessageBubbleProps {
   message: Message;
   isStreaming?: boolean;
@@ -262,7 +284,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 }) => {
   const isUser = message.role === 'user';
 
-  // 解析 metadata 中的路由建议
+  // 解析 metadata 中的路由建议（AI 回复可附带可点击的路由建议卡片）
   let suggestions: Suggestion[] = [];
   if (!isUser && message.metadata) {
     try {
@@ -298,6 +320,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           alignItems: isUser ? 'flex-end' : 'flex-start',
         }}
       >
+        {/* 消息气泡本体 */}
         <div
           style={{
             ...styles.messageBubble,
@@ -337,6 +360,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
 // ============ 可编辑标题组件 ============
 
+/** 可编辑标题组件：双击进入编辑模式，失去焦点或按 Enter 保存 */
 interface EditableTitleProps {
   value: string;
   onSave: (newTitle: string) => void;
@@ -345,7 +369,8 @@ interface EditableTitleProps {
 const EditableTitle: React.FC<EditableTitleProps> = ({ value, onSave }) => {
   const [editing, setEditing] = useState(false);
   const [inputValue, setInputValue] = useState(value);
-  const inputRef = useRef<Input>(null);
+  // 使用 React.ElementRef 获取 antd Input 组件正确的 ref 类型（InputRef）
+  const inputRef = useRef<React.ElementRef<typeof Input>>(null);
 
   useEffect(() => {
     if (editing && inputRef.current) {
@@ -358,6 +383,7 @@ const EditableTitle: React.FC<EditableTitleProps> = ({ value, onSave }) => {
     setInputValue(value);
   }, [value]);
 
+  /** 保存标题（去掉首尾空格） */
   const handleSave = () => {
     const trimmed = inputValue.trim();
     if (trimmed && trimmed !== value) {
@@ -393,12 +419,14 @@ const EditableTitle: React.FC<EditableTitleProps> = ({ value, onSave }) => {
 
 // ============ SSE 事件解析扩展 ============
 
+/** SSE end 事件扩展：携带路由建议（由后端在 end 事件中额外返回） */
 interface SseEndEventExt {
   type: 'end';
   reason: string;
   suggestions?: Suggestion[];
 }
 
+/** 首页传入的待发送消息结构 */
 interface PendingHomePromptPayload {
   content: string;
   createdAt: string;
@@ -407,25 +435,36 @@ interface PendingHomePromptPayload {
 
 // ============ 主页面组件 ============
 
+/** AI 智能助手主页面 */
 const AiChatPage: React.FC = () => {
   // ---- 状态 ----
-  // conversations 由 useRequest(convData)+useMemo 管理（见下方数据加载）
+  // conversations 由 useMemo 派生自 convData（见下方 fetchConversations）
   const [currentId, setCurrentId] = useState<number | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
   const [error, setError] = useState<string | null>(null);
+  /** 会话列表刷新标识 — 递增时重新加载 */
   const [listRefreshKey, setListRefreshKey] = useState(0);
+  /** 首页传入的待发送 prompt */
   const [pendingHomePrompt, setPendingHomePrompt] = useState<string | null>(
     null,
   );
 
   const messageListRef = useRef<HTMLDivElement>(null);
+  /** SSE 已收到的完整流式内容（streamingContent 的副本，用于在回调中获取最新值） */
   const streamingRef = useRef('');
+  /** sendChatMessage 返回的 abort 函数 */
   const abortRef = useRef<(() => void) | null>(null);
+  /**
+   * SSE onStart 中收到的会话 ID
+   * 用于区分：currentId 变化是由 SSE 触发的还是用户手动切换的
+   */
   const sseConversationIdRef = useRef<number | null>(null);
+  /** 首页待发送消息是否已消费 */
   const pendingHomePromptConsumedRef = useRef(false);
+  /** 是否正在创建新会话（用于抑制自动选中第一条的逻辑） */
   const creatingNewConversationRef = useRef(false);
 
   // ---- 会话列表数据管理（手动管理，不用 useRequest 避免不可控） ----
@@ -436,6 +475,7 @@ const AiChatPage: React.FC = () => {
   const [convLoading, setConvLoading] = useState(false);
   const [convError, setConvError] = useState<any>(null);
 
+  /** 加载会话列表 */
   const fetchConversations = useCallback(async () => {
     setConvLoading(true);
     try {
@@ -454,6 +494,12 @@ const AiChatPage: React.FC = () => {
     fetchConversations();
   }, [fetchConversations]);
 
+  /**
+   * 读取首页传入的待发送消息
+   *
+   * 从 sessionStorage 中读取首页用户输入的 prompt，
+   * 读出后立即移除，避免重复消费。
+   */
   useEffect(() => {
     const rawValue = sessionStorage.getItem(HOME_AI_PENDING_PROMPT_STORAGE_KEY);
     if (!rawValue) {
@@ -484,7 +530,11 @@ const AiChatPage: React.FC = () => {
     [convData],
   );
 
-  // 数据加载后自动选中第一条会话（仅在无当前会话时）
+  /**
+   * 数据加载后自动选中第一条会话
+   *
+   * 仅在无当前会话时触发，创建新会话时通过 creatingNewConversationRef 抑制。
+   */
   useEffect(() => {
     if (creatingNewConversationRef.current) {
       return;
@@ -494,12 +544,15 @@ const AiChatPage: React.FC = () => {
     }
   }, [conversations, currentId]);
 
+  /** 加载消息记录 */
   const { loading: msgLoading, run: loadMessages } = useRequest(
     (id: number) => getMessages(id),
     {
       manual: true,
       onSuccess: (data) => {
-        setMessages(data?.messages || []);
+        // useRequest 未正确推导 getMessages 的返回类型，此处使用类型断言
+        const detail = data as ConversationDetail;
+        setMessages(detail.messages || []);
         setError(null);
       },
       onError: () => {
@@ -508,12 +561,17 @@ const AiChatPage: React.FC = () => {
     },
   );
 
+  /**
+   * currentId 变化时加载对应会话的消息
+   *
+   * 注意：
+   * 1. 如果 currentId 的变化是由 SSE onStart 触发的（新会话），
+   *    跳过 loadMessages，因为 SSE 流式回调会自动填充消息，不需要从后端拉历史。
+   * 2. 不能用布尔标志 isSseActiveRef 来判断 SSE 是否活跃，因为 SSE 事件可能
+   *    在同一轮同步解析中完成（onStart→onContent→onEnd），标志会被提前重置，
+   *    导致守卫失效。改用 sseConversationIdRef 比对 ID。
+   */
   useEffect(() => {
-    // 如果 currentId 的变化是由 SSE onStart 触发的（新会话），
-    // 跳过 loadMessages，因为 SSE 流式回调会自动填充消息。
-    // 注意不能用布尔标志 isSseActiveRef，因为 SSE 事件可能
-    // 在同一轮同步解析中完成（onStart→onContent→onEnd），
-    // 标志会被提前重置，导致守卫失效。
     if (currentId && sseConversationIdRef.current === currentId) {
       sseConversationIdRef.current = null;
       return;
@@ -529,6 +587,7 @@ const AiChatPage: React.FC = () => {
     }
   }, [currentId]);
 
+  /** 滚动消息列表到底部（延时 50ms 等待 DOM 更新） */
   const scrollToBottom = useCallback(() => {
     setTimeout(() => {
       if (messageListRef.current) {
@@ -543,6 +602,12 @@ const AiChatPage: React.FC = () => {
 
   // ---- 暂停当前回答 ----
 
+  /**
+   * 暂停 AI 回复
+   *
+   * 调用 abortRef 中止 SSE 请求，然后将已收到的流式内容
+   * 作为完整助手消息添加到消息列表。
+   */
   const handlePause = useCallback(() => {
     if (abortRef.current) {
       abortRef.current();
@@ -568,6 +633,18 @@ const AiChatPage: React.FC = () => {
 
   // ---- SSE 发送消息 ----
 
+  /**
+   * 发送消息（SSE 流式）
+   *
+   * 1. 根据参数决定是否强制新建会话
+   * 2. 在 messages 中添加临时用户消息
+   * 3. 调用 sendChatMessage 启动 SSE 连接
+   * 4. 通过回调逐步更新 streamingContent 和 messages
+   * 5. 结束时刷新会话列表
+   *
+   * @param rawContent  消息内容（去除首尾空格）
+   * @param options.forceNewConversation 是否强制新建会话（首页进入时使用）
+   */
   const sendMessageByContent = useCallback(
     async (
       rawContent: string,
@@ -594,6 +671,7 @@ const AiChatPage: React.FC = () => {
       abortRef.current = null;
       sseConversationIdRef.current = null;
 
+      // 添加临时用户消息
       const tempUserMsg: Message = {
         id: Date.now(),
         role: 'user',
@@ -612,12 +690,8 @@ const AiChatPage: React.FC = () => {
         { conversationId: targetConversationId, content },
         {
           onStart: (conversationId) => {
-            console.log(
-              '[SSE] onStart:',
-              conversationId,
-              'currentId:',
-              currentId,
-            );
+            // 记录 SSE 分配的会话 ID，用于在 currentId 变化时
+            // 避免重复加载历史消息（见 currentId useEffect 守卫）
             sseConversationIdRef.current = conversationId;
             creatingNewConversationRef.current = false;
             if (conversationId !== currentId) {
@@ -625,22 +699,11 @@ const AiChatPage: React.FC = () => {
             }
           },
           onContent: (text) => {
-            console.log(
-              '[SSE] onContent, text长度:',
-              text.length,
-              '累计:',
-              streamingRef.current.length + text.length,
-            );
+            // 累加增量内容到 streamingRef 和 state
             streamingRef.current += text;
             setStreamingContent(streamingRef.current);
           },
           onEnd: (reason, rawData) => {
-            console.log(
-              '[SSE] onEnd:',
-              reason,
-              '累计内容长度:',
-              streamingRef.current.length,
-            );
             abortRef.current = null;
             // 如果用户手动中止，已由 handlePause 处理
             if (reason === 'abort') return;
@@ -676,18 +739,10 @@ const AiChatPage: React.FC = () => {
             setStreamingContent('');
             streamingRef.current = '';
             setIsStreaming(false);
-            console.log('[SSE] 刷新会话列表');
+            // 刷新会话列表使最新消息出现在侧边栏
             setListRefreshKey((k) => k + 1);
           },
           onError: (code, msg) => {
-            console.log(
-              '[SSE] onError, code:',
-              code,
-              'msg:',
-              msg,
-              '累计内容长度:',
-              streamingRef.current.length,
-            );
             abortRef.current = null;
             creatingNewConversationRef.current = false;
             // 即使出错，已有消息已在数据库，刷新列表让新会话出现在侧边栏
@@ -705,10 +760,16 @@ const AiChatPage: React.FC = () => {
     [inputValue, isStreaming, currentId, setListRefreshKey],
   );
 
+  /** 点击发送按钮触发 */
   const handleSend = useCallback(async () => {
     await sendMessageByContent(inputValue);
   }, [inputValue, sendMessageByContent]);
 
+  /**
+   * 消费首页传入的待发送消息
+   *
+   * 在 isStreaming 为 false 时发送（避免与用户当前操作冲突）。
+   */
   useEffect(() => {
     if (
       !pendingHomePrompt ||
@@ -727,6 +788,7 @@ const AiChatPage: React.FC = () => {
 
   // ---- 键盘事件 ----
 
+  /** Enter 发送消息（Shift+Enter 换行） */
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -747,11 +809,15 @@ const AiChatPage: React.FC = () => {
 
   // ---- 删除会话 ----
 
+  /**
+   * 删除会话
+   *
+   * 如果删除的是当前会话，自动切换到最近会话。
+   */
   const handleDeleteConversation = async (id: number) => {
     try {
       await deleteConversation(id);
       antMsg.success('已删除');
-      // 如果删除的是当前会话，跳转到最近会话
       if (id === currentId) {
         const remaining = conversations.filter((c) => c.id !== id);
         setCurrentId(remaining.length > 0 ? remaining[0].id : null);
@@ -959,6 +1025,7 @@ const AiChatPage: React.FC = () => {
                   <MessageBubble key={msg.id} message={msg} />
                 ))}
 
+                {/* 流式内容气泡：正在接收的 AI 回复 */}
                 {isStreaming && streamingContent && (
                   <MessageBubble
                     message={{
@@ -971,6 +1038,7 @@ const AiChatPage: React.FC = () => {
                   />
                 )}
 
+                {/* 思考中占位：SSE 已连接但尚未收到内容块 */}
                 {isStreaming && !streamingContent && (
                   <div style={{ ...styles.messageRow, flexDirection: 'row' }}>
                     <Avatar
@@ -991,6 +1059,7 @@ const AiChatPage: React.FC = () => {
                   </div>
                 )}
 
+                {/* 错误提示 + 重试（仅在已有消息时显示） */}
                 {error && messages.length > 0 && (
                   <div style={{ textAlign: 'center', padding: 12 }}>
                     <Text type="danger" style={{ fontSize: 12 }}>
@@ -1012,6 +1081,7 @@ const AiChatPage: React.FC = () => {
             )}
           </div>
 
+          {/* 输入区 */}
           <div style={styles.inputArea}>
             <TextArea
               value={inputValue}
@@ -1054,6 +1124,12 @@ export default AiChatPage;
 
 // ============ 错误边界 ============
 
+/**
+ * AI 页面渲染错误边界
+ *
+ * 捕获子组件渲染时的异常，展示降级 UI 并允许用户刷新重试，
+ * 避免整个页面白屏。
+ */
 class AiErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; error: any }
