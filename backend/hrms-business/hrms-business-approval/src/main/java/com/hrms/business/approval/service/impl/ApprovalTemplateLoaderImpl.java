@@ -31,6 +31,13 @@ import java.util.Map;
 @Service
 public class ApprovalTemplateLoaderImpl implements ApprovalTemplateLoader {
 
+    /**
+     * 审批模板定义映射
+     * <p>
+     * Key 为审批业务类型（如 ENTRY、LEAVE），Value 为审批节点链。
+     * 使用 LinkedHashMap 保证模板插入顺序与迭代顺序一致。
+     * </p>
+     */
     private static final Map<String, List<ApprovalNodeDef>> TEMPLATES = new LinkedHashMap<>();
 
     static {

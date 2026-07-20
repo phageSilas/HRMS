@@ -24,6 +24,11 @@ import java.util.stream.Collectors;
 
 /**
  * 请假服务实现
+ * <p>
+ * 提供请假申请、取消、记录查询和余额查询功能。
+ * 请假申请通过 {@link com.hrms.business.approval.service.ApprovalService} 发起 LEAVE_REQUEST 类型审批。
+ * 余额数据从 hr_leave_balance 表按月统计。
+ * </p>
  */
 @Slf4j
 @Service
@@ -97,6 +102,12 @@ public class LeaveServiceImpl implements LeaveService {
                     .replace("\t", "\\t");
     }
 
+    /**
+     * 查询请假记录列表
+     *
+     * @param employeeId 员工 ID
+     * @return 请假记录 VO 列表
+     */
     @Override
     public List<LeaveVO> listLeaves(Long employeeId) {
         List<LeaveRequestEntity> list = leaveRequestMapper.selectList(
@@ -108,6 +119,17 @@ public class LeaveServiceImpl implements LeaveService {
         return list.stream().map(this::toLeaveVO).collect(Collectors.toList());
     }
 
+    /**
+     * 取消请假
+     * <p>
+     * 仅允许本人取消自己的请假记录，仅草稿（状态 0）或审批中（状态 1）的请假可取消。
+     * 取消后状态变更为"已撤回"（状态 4）。
+     * </p>
+     *
+     * @param employeeId 员工 ID
+     * @param leaveId    请假记录 ID
+     * @throws GlobalException 记录不存在、非本人或状态不可取消时抛出
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void cancelLeave(Long employeeId, Long leaveId) {
@@ -126,6 +148,16 @@ public class LeaveServiceImpl implements LeaveService {
         leaveRequestMapper.updateById(entity);
     }
 
+    /**
+     * 查询当前年度的请假余额
+     * <p>
+     * 查询本年度的年假、病假、调休的总额度、已使用和剩余天数。
+     * 若某假期类型未配置余额，则返回 0。
+     * </p>
+     *
+     * @param employeeId 员工 ID
+     * @return 请假余额 VO
+     */
     @Override
     public LeaveBalanceVO getLeaveBalance(Long employeeId) {
         int currentYear = LocalDate.now().getYear();

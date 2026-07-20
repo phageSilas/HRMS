@@ -37,12 +37,18 @@ import java.util.stream.Collectors;
 
 /**
  * 审批任务服务实现
+ * <p>
+ * 提供待办任务查询、已办任务查询、我发起的申请、审批详情查询、撤回审批等核心功能。
+ * 待办任务通过分页查询 {@link ApprovalTaskEntity} 并关联 {@link ApprovalInstanceEntity} 获取完整的审批上下文。
+ * 查询中显式添加 is_deleted = 0 条件作为 @TableLogic 逻辑删除的双重保险。
+ * </p>
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ApprovalTaskServiceImpl implements ApprovalTaskService {
 
+    /** 日期时间格式化器：yyyy-MM-dd HH:mm:ss */
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final ApprovalInstanceMapper instanceMapper;
@@ -51,6 +57,17 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
     private final ApprovalEngine approvalEngine;
     private final UserMapper userMapper;
 
+    /**
+     * 查询待办任务列表（分页）
+     * <p>
+     * 先根据筛选条件查询符合条件的实例 ID，再基于这些实例分页查询当前用户的待办任务。
+     * 额外返回全局待办总数用于前端角标展示。
+     * </p>
+     *
+     * @param userId 当前用户 ID
+     * @param query  分页及筛选条件
+     * @return 分页待办任务结果（含 badgeCount 角标数）
+     */
     @Override
     public PageResult<PendingTaskVO> findPendingTasks(Long userId, PendingTaskQuery query) {
         // 1. 按筛选条件查询符合条件的实例ID
@@ -81,6 +98,17 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
         return result;
     }
 
+    /**
+     * 查询已办任务列表（分页）
+     * <p>
+     * 与待办查询逻辑相似，但只查询已处理（PROCESSED）和已转交（TRANSFERRED）的任务，
+     * 并按审批时间倒序排列。
+     * </p>
+     *
+     * @param userId 当前用户 ID
+     * @param query  分页及筛选条件
+     * @return 分页已办任务结果
+     */
     @Override
     public PageResult<PendingTaskVO> findHistoryTasks(Long userId, PendingTaskQuery query) {
         List<Long> instanceIds = queryFilteredInstanceIds(query);
@@ -100,6 +128,16 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
         return buildTaskPageResult(mpPage);
     }
 
+    /**
+     * 查询我发起的申请列表（分页）
+     * <p>
+     * 直接查询审批实例表，按申请人 ID 过滤，关联查询每个实例下所有任务用于构建审批步骤状态。
+     * </p>
+     *
+     * @param userId 当前用户 ID
+     * @param query  分页及筛选条件
+     * @return 分页申请记录结果
+     */
     @Override
     public PageResult<PendingTaskVO> findMyApplications(Long userId, PendingTaskQuery query) {
         // 直接查询实例表
@@ -136,6 +174,18 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
         return result;
     }
 
+    /**
+     * 查询审批详情
+     * <p>
+     * 构建审批详情 VO，包含：审批节点（Steps）、审批历史（Timeline）、
+     * 当前操作人标识、表单快照、超期状态等信息。
+     * </p>
+     *
+     * @param instanceId    审批实例 ID
+     * @param currentUserId 当前用户 ID（用于判断是否为当前审批人）
+     * @return 审批详情 VO
+     * @throws GlobalException 审批实例不存在时抛出
+     */
     @Override
     public ApprovalDetailVO getDetail(Long instanceId, Long currentUserId) {
         log.debug("查询审批详情: instanceId={}, currentUserId={}", instanceId, currentUserId);
@@ -210,6 +260,17 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
         return vo;
     }
 
+    /**
+     * 撤回审批
+     * <p>
+     * 仅申请人可撤回，仅审批中（PENDING）状态的实例可撤回。
+     * 撤回后实例状态变更为 WITHDRAWN，同时取消当前待办任务。
+     * </p>
+     *
+     * @param instanceId 审批实例 ID
+     * @param userId     当前用户 ID
+     * @throws GlobalException 实例不存在、非本人申请或状态不允许撤回时抛出
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void withdraw(Long instanceId, Long userId) {
@@ -239,6 +300,12 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
         log.info("审批撤回: instanceId={}, userId={}", instanceId, userId);
     }
 
+    /**
+     * 查询用户待办任务总数（用于角标）
+     *
+     * @param userId 用户 ID
+     * @return 待办任务总数
+     */
     @Override
     public Integer getPendingCount(Long userId) {
         return Math.toIntExact(taskMapper.selectCount(
@@ -248,6 +315,17 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
         ));
     }
 
+    /**
+     * 按筛选类型查询任务列表（分页）
+     * <p>
+     * 支持三类筛选：pending（待办）、today-approved（今日已审批）、overdue（已逾期）。
+     * 待办视图额外返回角标数，其他视图不覆盖角标。
+     * </p>
+     *
+     * @param userId 当前用户 ID
+     * @param query  分页及筛选条件（含 filterType）
+     * @return 分页任务结果
+     */
     @Override
     public PageResult<PendingTaskVO> findFilteredTasks(Long userId, PendingTaskQuery query) {
         // 1. 按筛选条件查询符合条件的实例ID（复用实例级筛选逻辑）
@@ -300,6 +378,12 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
         return result;
     }
 
+    /**
+     * 查询用户今日已审批的任务数
+     *
+     * @param userId 用户 ID
+     * @return 今日已审批数
+     */
     @Override
     public Integer getTodayApprovedCount(Long userId) {
         LocalDateTime todayStart = LocalDateTime.now()
@@ -314,6 +398,15 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
         ));
     }
 
+    /**
+     * 查询用户逾期的待办任务数
+     * <p>
+     * 逾期定义为：任务处于待办状态且截止时间已过当前时间。
+     * </p>
+     *
+     * @param userId 用户 ID
+     * @return 逾期任务数
+     */
     @Override
     public Integer getOverdueCount(Long userId) {
         return Math.toIntExact(taskMapper.selectCount(

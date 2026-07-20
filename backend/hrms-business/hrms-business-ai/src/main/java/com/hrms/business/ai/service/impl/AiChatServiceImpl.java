@@ -580,6 +580,17 @@ public class AiChatServiceImpl implements AiChatService {
 
     // ==================== 数据库操作 ====================
 
+    /**
+     * 创建新会话
+     * <p>
+     * 使用用户的第一条消息作为默认标题（超过 20 字时截断）。
+     * AI 生成回复后将通过 parseTitle 解析出更精确的标题并更新。
+     * </p>
+     *
+     * @param userId  用户 ID
+     * @param content 用户的第一条消息内容
+     * @return 新建会话 ID
+     */
     private Long createConversation(Long userId, String content) {
         String title = content;
         if (title != null && title.length() > 20) {
@@ -594,6 +605,13 @@ public class AiChatServiceImpl implements AiChatService {
         return entity.getId();
     }
 
+    /**
+     * 校验会话归属权
+     *
+     * @param userId         用户 ID
+     * @param conversationId 会话 ID
+     * @throws GlobalException 会话不存在或不属于该用户时抛出
+     */
     private void checkConversationOwnership(Long userId, Long conversationId) {
         ConversationEntity conversation = conversationMapper.selectById(conversationId);
         if (conversation == null || !userId.equals(conversation.getUserId())) {
@@ -601,6 +619,12 @@ public class AiChatServiceImpl implements AiChatService {
         }
     }
 
+    /**
+     * 保存用户消息到数据库
+     *
+     * @param conversationId 会话 ID
+     * @param content        用户消息内容
+     */
     private void saveUserMessage(Long conversationId, String content) {
         MessageEntity msg = new MessageEntity();
         msg.setConversationId(conversationId);
@@ -652,6 +676,11 @@ public class AiChatServiceImpl implements AiChatService {
         incrementMessageCount(conversationId);
     }
 
+    /**
+     * 递增会话的消息计数
+     *
+     * @param conversationId 会话 ID
+     */
     private void incrementMessageCount(Long conversationId) {
         ConversationEntity entity = conversationMapper.selectById(conversationId);
         if (entity != null) {

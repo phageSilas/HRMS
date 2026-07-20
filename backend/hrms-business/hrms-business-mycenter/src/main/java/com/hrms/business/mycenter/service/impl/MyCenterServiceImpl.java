@@ -25,16 +25,34 @@ public class MyCenterServiceImpl implements MyCenterService {
     private final ProfileService profileService;
     private final ApprovalTaskService approvalTaskService;
 
+    /**
+     * 获取个人档案信息
+     *
+     * @param userId 用户 ID
+     * @return 个人档案 VO
+     */
     @Override
     public ProfileVO getProfile(Long userId) {
         return profileService.getProfile(userId);
     }
 
+    /**
+     * 更新个人档案信息
+     *
+     * @param userId  用户 ID
+     * @param profile 档案更新请求
+     */
     @Override
     public void updateProfile(Long userId, ProfileUpdateRequest profile) {
         profileService.updateProfile(userId, profile);
     }
 
+    /**
+     * 获取我发起的审批申请（最近 10 条）
+     *
+     * @param userId 用户 ID
+     * @return 分页申请记录
+     */
     @Override
     public PageResult<?> getMyApplications(Long userId) {
         PendingTaskQuery query = new PendingTaskQuery();
@@ -43,6 +61,12 @@ public class MyCenterServiceImpl implements MyCenterService {
         return approvalTaskService.findMyApplications(userId, query);
     }
 
+    /**
+     * 获取我的待审批任务（最近 10 条）
+     *
+     * @param userId 用户 ID
+     * @return 分页待办任务
+     */
     @Override
     public PageResult<?> getMyApprovals(Long userId) {
         PendingTaskQuery query = new PendingTaskQuery();
