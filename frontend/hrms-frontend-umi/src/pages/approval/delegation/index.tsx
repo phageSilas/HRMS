@@ -1,8 +1,19 @@
 /**
  * 审批中心 - 委托审批页面
  *
- * 功能：规则说明、新增委托、当前有效委托列表、取消委托
+ * 核心功能：
+ * - 规则说明提示：一次性展示委托审批的业务规则
+ * - 新增委托表单：选择被委托人 + 日期范围 + 委托原因
+ * - 委托记录列表：展示全部委托，支持取消生效中的委托
+ *
+ * 数据流：
+ * 初始化时调用 getMyDelegations 加载委托列表，
+ * 新增委托提交调用 createDelegation，取消调用 cancelDelegation。
+ * 每次操作成功后自动刷新列表。
+ *
+ * @module ApprovalDelegation
  */
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Card,
@@ -39,7 +50,7 @@ const { Text } = Typography;
 
 // ============ 常量定义 ============
 
-/** 委托状态标签配置 */
+/** 委托状态 → Tag 颜色 + 文本映射 */
 const DELEGATION_STATUS_MAP: Record<string, { color: string; text: string }> = {
   active: { color: 'green', text: '生效中' },
   expired: { color: 'default', text: '已过期' },
@@ -48,6 +59,7 @@ const DELEGATION_STATUS_MAP: Record<string, { color: string; text: string }> = {
 
 // ============ 页面组件 ============
 
+/** 委托审批主页面 */
 const DelegationPage: React.FC = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState<boolean>(true);
@@ -58,7 +70,11 @@ const DelegationPage: React.FC = () => {
 
   // ============ 数据加载 ============
 
-  /** 获取委托数据 */
+  /**
+   * 获取委托数据
+   *
+   * 从 API 加载当前用户的所有委托记录（含已过期和已取消的）。
+   */
   const fetchDelegations = useCallback(async () => {
     setLoading(true);
     try {
@@ -75,11 +91,15 @@ const DelegationPage: React.FC = () => {
     fetchDelegations();
   }, [fetchDelegations]);
 
-  // ============ 员工搜索 ============
+  // ============ 员工搜索（被委托人选取）============
 
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  /** 输入姓名/工号搜索员工（300ms 防抖） */
+  /**
+   * 搜索员工（300ms 防抖）
+   *
+   * 用于选择被委托人时搜索，关键词为空或太短时清空选项。
+   */
   const handleEmployeeSearch = useCallback((keyword: string) => {
     if (searchTimerRef.current) {
       clearTimeout(searchTimerRef.current);
@@ -103,7 +123,11 @@ const DelegationPage: React.FC = () => {
 
   // ============ 事件处理 ============
 
-  /** 取消委托（二次确认） */
+  /**
+   * 取消委托
+   *
+   * 弹出二次确认对话框，确认后调用取消接口并刷新列表。
+   */
   const handleCancel = (id: number) => {
     Modal.confirm({
       title: '确认取消委托',
@@ -122,13 +146,20 @@ const DelegationPage: React.FC = () => {
     });
   };
 
-  /** 提交新建委托 */
+  /**
+   * 提交新建委托
+   *
+   * 校验表单 → 构建 DelegationCreateData → 调用 createDelegation，
+   * 成功后重置表单并刷新列表。
+   * 表单校验失败（Ant Design 校验错误）时不处理。
+   */
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
       setSubmitting(true);
       const data: DelegationCreateData = {
         delegateeId: values.delegateeId,
+        // 委托开始日期取当日 00:00:00，结束日期取 23:59:59 以覆盖全天
         startTime: values.dateRange[0].format('YYYY-MM-DD') + ' 00:00:00',
         endTime: values.dateRange[1].format('YYYY-MM-DD') + ' 23:59:59',
         reason: values.reason,
@@ -153,7 +184,7 @@ const DelegationPage: React.FC = () => {
 
   // ============ 工具方法 ============
 
-  /** 格式化时间范围为展示字符串 */
+  /** 格式化时间范围为展示字符串：yyyy-MM-dd 至 yyyy-MM-dd */
   const formatDateRange = (startTime: string, endTime: string): string => {
     const fmt = 'YYYY-MM-DD';
     const start = dayjs(startTime).format(fmt);
@@ -161,7 +192,7 @@ const DelegationPage: React.FC = () => {
     return `${start} 至 ${end}`;
   };
 
-  /** 过滤有效委托（status 为 active） */
+  /** 当前生效中的委托列表 */
   const activeDelegations = delegations.filter((d) => d.status === 'active');
 
   // ============ 渲染：规则说明提示框 ============
@@ -204,7 +235,7 @@ const DelegationPage: React.FC = () => {
         layout="vertical"
         style={{ maxWidth: 600 }}
       >
-        {/* 被委托人 */}
+        {/* 被委托人：支持搜索的员工选择器 */}
         <Form.Item
           name="delegateeId"
           label={
@@ -229,7 +260,7 @@ const DelegationPage: React.FC = () => {
           />
         </Form.Item>
 
-        {/* 日期范围：同一行展示 */}
+        {/* 日期范围：起止日期并排显示 */}
         <Form.Item
           label={
             <span>
@@ -250,6 +281,7 @@ const DelegationPage: React.FC = () => {
                   style={{ width: '100%' }}
                   format="YYYY/MM/DD"
                   placeholder="开始日期"
+                  // 禁止选择今天之前的日期
                   disabledDate={(current) =>
                     current && current.isBefore(dayjs().startOf('day'))
                   }
@@ -261,6 +293,7 @@ const DelegationPage: React.FC = () => {
                 name={['dateRange', 1]}
                 rules={[
                   { required: true, message: '请选择结束日期' },
+                  // 自定义校验：结束日期不能早于开始日期
                   ({ getFieldValue }) => ({
                     validator(_, value) {
                       const range = getFieldValue('dateRange');
@@ -309,6 +342,7 @@ const DelegationPage: React.FC = () => {
 
   // ============ 渲染：委托列表项 ============
 
+  /** 渲染单个委托记录项 */
   const renderDelegationItem = (record: Delegation) => {
     const statusConfig = DELEGATION_STATUS_MAP[record.status] || {
       color: 'default',
@@ -370,7 +404,7 @@ const DelegationPage: React.FC = () => {
           </div>
         </div>
 
-        {/* 右侧操作 */}
+        {/* 右侧操作（仅生效中可见取消按钮） */}
         <div style={{ flexShrink: 0, marginLeft: 12 }}>
           {record.status === 'active' && (
             <Button

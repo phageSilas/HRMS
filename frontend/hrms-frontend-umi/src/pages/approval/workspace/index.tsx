@@ -1,8 +1,21 @@
 /**
  * 审批工作台页面（卡片式布局）
  *
- * 功能：统计卡片 + 搜索筛选 + 卡片式待办列表 + 审批操作
+ * 核心功能：
+ * - 顶部三个统计卡片（待审批 / 今日已审批 / 已逾期），点击可切换列表筛选
+ * - 关键词搜索 + 业务类型下拉筛选
+ * - 卡片式任务列表，每条展示申请人信息、时间节点、操作按钮
+ * - 弹出式审批操作（通过 / 拒绝），支持填写审批意见
+ * - 加载态 / 错误态 / 空态处理
+ *
+ * 数据流：
+ * 初始化时加载统计数据 + 列表数据，
+ * 搜索/分页/筛选变化时重新请求 getTasks，
+ * 操作成功后自动刷新统计和列表。
+ *
+ * @module ApprovalWorkspace
  */
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { history } from '@umijs/max';
 import { PageContainer } from '@ant-design/pro-components';
@@ -42,6 +55,7 @@ import {
 
 // ============ 业务类型标签颜色映射 ============
 
+/** 业务类型编码 → Tag 颜色映射 */
 const BUSINESS_TYPE_COLOR_MAP: Record<string, string> = {
   ENTRY: 'green',        // 入职审批
   REGULAR: 'blue',       // 转正审批
@@ -53,6 +67,7 @@ const BUSINESS_TYPE_COLOR_MAP: Record<string, string> = {
   SALARY: 'magenta',     // 薪资审批
 };
 
+/** 业务类型筛选选项 */
 const BUSINESS_TYPE_OPTIONS = [
   { label: '全部类型', value: '' },
   { label: '入职申请', value: 'ENTRY' },
@@ -67,6 +82,7 @@ const BUSINESS_TYPE_OPTIONS = [
 
 // ============ 页面组件 ============
 
+/** 审批工作台主页面 */
 const WorkspacePage: React.FC = () => {
   // ---- 统计卡片数据 ----
   const [pendingCount, setPendingCount] = useState<number>(0);
@@ -85,9 +101,14 @@ const WorkspacePage: React.FC = () => {
   // ---- 搜索筛选 ----
   const [keyword, setKeyword] = useState<string>('');
   const [businessType, setBusinessType] = useState<string>('');
-  /** 筛选类型（统计卡片点击控制）: pending / today-approved / overdue */
+  /** 筛选类型（统计卡片点击控制）：pending / today-approved / overdue */
   const [filterType, setFilterType] = useState<string>('pending');
-  /** 搜索版本号 — 递增时重新加载列表（解决同页重复搜索不触发的问题） */
+  /**
+   * 搜索版本号 — 递增时触发重新加载
+   *
+   * 用于解决"同参数重复搜索"时 useEffect 无法检测变更的问题。
+   * 每次点击查询/重置/卡片筛选时递增该值。
+   */
   const [searchVersion, setSearchVersion] = useState<number>(0);
 
   // ---- 操作弹窗 ----
@@ -104,7 +125,9 @@ const WorkspacePage: React.FC = () => {
 
   /**
    * 加载统计卡片数据
-   * 并行请求三个统计数据
+   *
+   * 并行请求待审批数、今日已审批数、已逾期数三个统计数据。
+   * 接口异常时静默降级为默认值 0。
    */
   const fetchStats = useCallback(async () => {
     setStatsLoading(true);
@@ -124,7 +147,17 @@ const WorkspacePage: React.FC = () => {
     }
   }, []);
 
-  /** 加载任务列表（所有参数显式传入，不依赖闭包） */
+  /**
+   * 加载任务列表
+   *
+   * 所有参数显式传入，不依赖闭包，确保在 useEffect 中调用时行为一致。
+   *
+   * @param params.page  页码
+   * @param params.size  每页条数
+   * @param params.kw    关键词
+   * @param params.biz   业务类型筛选
+   * @param params.filter 筛选类型（pending/today-approved/overdue）
+   */
   const fetchTaskList = useCallback(
     async (params: { page: number; size: number; kw: string; biz: string; filter: string }) => {
       setListLoading(true);
@@ -150,7 +183,7 @@ const WorkspacePage: React.FC = () => {
     [],
   );
 
-  // 初始化数据
+  // 初始化时加载统计数据
   useEffect(() => {
     fetchStats();
   }, [fetchStats]);
@@ -163,12 +196,13 @@ const WorkspacePage: React.FC = () => {
 
   // ============ 搜索操作 ============
 
+  /** 触发搜索：重置到第一页 + 递增版本号触发重新加载 */
   const handleSearch = useCallback(() => {
-    // 重置到第一页 + 递增搜索版本号触发重新加载
     setCurrentPage(1);
     setSearchVersion((v) => v + 1);
   }, []);
 
+  /** 重置所有搜索条件和筛选 */
   const handleReset = useCallback(() => {
     setKeyword('');
     setBusinessType('');
@@ -179,6 +213,7 @@ const WorkspacePage: React.FC = () => {
 
   // ============ 审批操作 ============
 
+  /** 打开审批操作弹窗 */
   const showOperateModal = (action: 'approve' | 'reject', task: ApprovalTask) => {
     operateForm.resetFields();
     setOperateModal({
@@ -189,11 +224,18 @@ const WorkspacePage: React.FC = () => {
     });
   };
 
+  /** 关闭审批操作弹窗 */
   const closeOperateModal = () => {
     setOperateModal({ visible: false, action: 'approve' });
     operateForm.resetFields();
   };
 
+  /**
+   * 执行审批操作（通过 / 拒绝）
+   *
+   * 提交成功后自动刷新统计卡片和任务列表，
+   * 表单校验失败时（Ant Design 错误）不处理。
+   */
   const handleOperate = useCallback(async () => {
     const { taskId, action } = operateModal;
     if (!taskId) return;
@@ -206,9 +248,7 @@ const WorkspacePage: React.FC = () => {
       });
       message.success(action === 'approve' ? '已通过' : '已拒绝');
       closeOperateModal();
-      // 刷新统计数据
       fetchStats();
-      // 刷新列表（使用当前分页和搜索参数）
       fetchTaskList({ page: currentPage, size: pageSize, kw: keyword, biz: businessType, filter: filterType });
     } catch (error: any) {
       if (error?.errorFields) return;
@@ -295,8 +335,8 @@ const WorkspacePage: React.FC = () => {
               }}
               bodyStyle={{ padding: '20px 24px' }}
               onClick={() => {
+                // 再次点击已选中卡片 → 回到"待审批"视图
                 if (filterType === card.key) {
-                  // 再次点击已选中卡片 → 重置为 pending（显示全部待审批）
                   setFilterType('pending');
                 } else {
                   setFilterType(card.key);
@@ -439,7 +479,7 @@ const WorkspacePage: React.FC = () => {
             <div>{renderBusinessTypeTag(task.businessType, task.businessTypeName)}</div>
           </div>
 
-          {/* 中间：时间信息 + 节点 */}
+          {/* 中间：时间信息 + 当前审批节点 */}
           <div style={{ flex: 1, minWidth: 200 }}>
             <div style={{ fontSize: 13, color: '#8c8c8c', lineHeight: 2 }}>
               <div>
@@ -463,10 +503,7 @@ const WorkspacePage: React.FC = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, justifyContent: 'center', minWidth: 100 }}>
             <Button
               type="default"
-              style={{
-                borderRadius: 8,
-                borderColor: '#d9d9d9',
-              }}
+              style={{ borderRadius: 8, borderColor: '#d9d9d9' }}
               onClick={() => history.push(`/approval/detail/${task.id}`)}
             >
               查看详情
@@ -514,6 +551,7 @@ const WorkspacePage: React.FC = () => {
   // ============ 渲染列表区域 ============
 
   const renderTaskList = () => {
+    // 首次加载态
     if (listLoading && taskList.length === 0) {
       return (
         <div style={{ textAlign: 'center', padding: '80px 0' }}>
@@ -522,6 +560,7 @@ const WorkspacePage: React.FC = () => {
       );
     }
 
+    // 错误态：展示错误信息和重新加载按钮
     if (listError) {
       return (
         <Card style={{ borderRadius: 12, textAlign: 'center', padding: '40px 0' }}>
@@ -538,6 +577,7 @@ const WorkspacePage: React.FC = () => {
       );
     }
 
+    // 空态：根据当前筛选类型展示不同的空状态提示
     if (taskList.length === 0) {
       return (
         <Card style={{ borderRadius: 12 }}>
@@ -549,6 +589,7 @@ const WorkspacePage: React.FC = () => {
       );
     }
 
+    // 正常列表
     return (
       <>
         {taskList.map(renderTaskCard)}
@@ -570,7 +611,6 @@ const WorkspacePage: React.FC = () => {
 
   return (
     <PageContainer>
-      {/* 页面标题 */}
       <div style={{ marginBottom: 24 }}>
         <h2 style={{ margin: 0, fontSize: 22, fontWeight: 600, color: '#262626' }}>
           审批工作台
@@ -580,13 +620,8 @@ const WorkspacePage: React.FC = () => {
         </p>
       </div>
 
-      {/* 统计卡片 */}
       {renderStatCards()}
-
-      {/* 搜索筛选 */}
       {renderSearchBar()}
-
-      {/* 任务列表 */}
       {renderTaskList()}
 
       {/* 审批操作弹窗 */}
