@@ -20,6 +20,7 @@ import com.hrms.business.personnel.convert.PersonnelDisplayEnricher;
 import com.hrms.business.personnel.service.EntryApplicationService;
 import com.hrms.business.personnel.vo.EntryApplicationConfirmVO;
 import com.hrms.business.personnel.vo.EntryApplicationPageVO;
+import com.hrms.business.personnel.vo.EntryApplicationStatsVO;
 import com.hrms.business.personnel.vo.EntryApplicationSubmitVO;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
@@ -94,6 +95,18 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
                 .map(displayEnricher::enrichEntryApplication)// 填充关联信息
                 .toList();
         return PageResult.of(records, page.getTotal(), pageNum, pageSize);
+    }
+
+    @Override
+    public EntryApplicationStatsVO statsEntryApplications(EntryApplicationQueryDTO queryDTO) {
+        return EntryApplicationStatsVO.builder()
+                .all(countByStatus(queryDTO, null))
+                .draft(countByStatus(queryDTO, ApplicationStatusEnum.DRAFT.getCode()))
+                .approving(countByStatus(queryDTO, ApplicationStatusEnum.APPROVING.getCode()))
+                .approved(countByStatus(queryDTO, ApplicationStatusEnum.APPROVED.getCode()))
+                .rejected(countByStatus(queryDTO, ApplicationStatusEnum.REJECTED.getCode()))
+                .entered(countByStatus(queryDTO, ApplicationStatusEnum.ENTERED.getCode()))
+                .build();
     }
 
     /**
@@ -394,6 +407,11 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
      * @return 查询条件
      */
     private LambdaQueryWrapper<EntryApplicationEntity> buildPageQueryWrapper(EntryApplicationQueryDTO queryDTO) {
+        return buildPageQueryWrapper(queryDTO, queryDTO.getApprovalStatus());
+    }
+
+    private LambdaQueryWrapper<EntryApplicationEntity> buildPageQueryWrapper(EntryApplicationQueryDTO queryDTO,
+                                                                             Integer approvalStatus) {
         List<Long> targetDeptIds = resolveTargetDeptIds(queryDTO.getDepartmentId());
         LambdaQueryWrapper<EntryApplicationEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.and(StrUtil.isNotBlank(queryDTO.getKeyword()), keywordWrapper -> keywordWrapper
@@ -401,7 +419,7 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
                 .or()
                 .like(EntryApplicationEntity::getPhone, queryDTO.getKeyword()));
         // 根据审批状态进行过滤
-        wrapper.eq(queryDTO.getApprovalStatus() != null, EntryApplicationEntity::getApprovalStatus, queryDTO.getApprovalStatus());
+        wrapper.eq(approvalStatus != null, EntryApplicationEntity::getApprovalStatus, approvalStatus);
         // 根据部门ID进行过滤
         wrapper.in(!targetDeptIds.isEmpty(), EntryApplicationEntity::getDeptId, targetDeptIds);
         // 根据申请日期起始进行过滤
@@ -413,6 +431,11 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         // 按创建时间降序排列
         wrapper.orderByDesc(EntryApplicationEntity::getCreateTime);
         return wrapper;
+    }
+
+    private Long countByStatus(EntryApplicationQueryDTO queryDTO, Integer approvalStatus) {
+        Long count = entryApplicationMapper.selectCount(buildPageQueryWrapper(queryDTO, approvalStatus));
+        return count == null ? 0L : count;
     }
 
     /**

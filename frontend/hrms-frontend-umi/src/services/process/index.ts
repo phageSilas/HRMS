@@ -80,6 +80,15 @@ export interface EntryApplicationConfirmResult {
   employeeNo: string;
 }
 
+export interface EntryApplicationStats {
+  all: number;
+  draft: number;
+  approving: number;
+  approved: number;
+  rejected: number;
+  entered: number;
+}
+
 export interface RegularApplication {
   id?: number;
   employeeId: number;
@@ -200,6 +209,12 @@ export async function getEntryApplication(
   id: number,
 ): Promise<EntryApplication> {
   return request.get(`/api/v1/entry-applications/${id}`);
+}
+
+export async function getEntryApplicationStats(
+  params: Omit<EntryApplicationQuery, 'pageNum' | 'pageSize' | 'approvalStatus'>,
+): Promise<EntryApplicationStats> {
+  return request.get('/api/v1/entry-applications/stats', { params });
 }
 
 export async function createEntryApplication(
