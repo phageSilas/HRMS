@@ -72,7 +72,9 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
     public PageResult<TransferApplicationPageVO> pageTransferApplications(TransferApplicationQueryDTO queryDTO) {
         int pageNum = normalizePageNum(queryDTO.getPageNum());
         int pageSize = normalizePageSize(queryDTO.getPageSize());
+        // 类型转换
         PersonnelDisplayEnricher displayEnricher = new PersonnelDisplayEnricher(deptService, postService);
+
         Page<TransferApplicationEntity> page = transferApplicationMapper.selectPage(
                 Page.of(pageNum, pageSize),
                 buildTransferApplicationWrapper(queryDTO)
@@ -81,6 +83,7 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
                 page.getRecords().stream().map(TransferApplicationEntity::getEmployeeId).toList()
         );
         List<TransferApplicationPageVO> records = page.getRecords().stream()
+                // 转换为调岗申请分页列表
                 .map(entity -> displayEnricher.enrichTransferApplication(
                         TransferApplicationConvert.toPageVO(entity, employeeSnapshotMap.get(entity.getEmployeeId())),
                         entity.getFromDeptId(),
@@ -101,7 +104,9 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
     @Override
     @Transactional(rollbackFor = Exception.class)
     public TransferApplicationCreateVO createTransferApplication(TransferApplicationCreateRequestDTO requestDTO) {
+        //查询必须存在的员工快照。
         EmployeeSnapshotEntity employeeSnapshot = getRequiredEmployeeSnapshot(requestDTO.getEmployeeId());
+        // 确保员工没有进行中的调岗申请
         assertNoProcessingTransferApplication(requestDTO.getEmployeeId());
 
         TransferApplicationEntity entity = new TransferApplicationEntity();
@@ -129,6 +134,7 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
                 employeeSnapshot.getDeptId(),
                 requestDTO.getEmployeeId()
         );
+        // 更新调岗申请的审批实例ID
         entity.setApprovalInstanceId(approvalInstanceId);
         transferApplicationMapper.updateById(entity);
 
@@ -212,15 +218,21 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
      * 本方法使用的工具类: 无
      */
     private LambdaQueryWrapper<TransferApplicationEntity> buildTransferApplicationWrapper(TransferApplicationQueryDTO queryDTO) {
+        //解析部门树范围ID，包含所选部门自身及全部子孙部门
         List<Long> targetDeptIds = resolveTargetDeptIds(queryDTO.getDepartmentId());
         LambdaQueryWrapper<TransferApplicationEntity> wrapper = new LambdaQueryWrapper<>();
+        //筛选部门树范围
         wrapper.in(CollUtil.isNotEmpty(targetDeptIds), TransferApplicationEntity::getFromDeptId, targetDeptIds);
+        //筛选审批状态
         wrapper.eq(queryDTO.getApprovalStatus() != null, TransferApplicationEntity::getApprovalStatus, queryDTO.getApprovalStatus());
         if (StrUtil.isNotBlank(queryDTO.getKeyword())) {
             List<Long> employeeIds = listEmployeeIdsByKeyword(queryDTO.getKeyword());
+            //筛选员工ID
             wrapper.in(CollUtil.isNotEmpty(employeeIds), TransferApplicationEntity::getEmployeeId, employeeIds);
+            //如果无匹配员工，则筛选无员工ID
             wrapper.eq(CollUtil.isEmpty(employeeIds), TransferApplicationEntity::getEmployeeId, IMPOSSIBLE_EMPLOYEE_ID);
         }
+        //按创建时间降序排序
         wrapper.orderByDesc(TransferApplicationEntity::getCreateTime);
         return wrapper;
     }

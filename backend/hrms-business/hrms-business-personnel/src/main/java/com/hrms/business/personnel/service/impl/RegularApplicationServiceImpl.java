@@ -93,6 +93,7 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
         if (evaluateResult == RegularEvaluateResultEnum.EXTEND && requestDTO.getExtendMonth() == null) {
             throw new GlobalException(REGULAR_EXTEND_MONTH_REQUIRED);
         }
+        // 校验员工没有进行中的转正申请
         assertNoProcessingRegularApplication(employeeId);
 
         RegularApplicationEntity entity = new RegularApplicationEntity();
@@ -230,11 +231,14 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
     private PageResult<RegularApplicationPageVO> pageEvaluatedRegularApplications(RegularApplicationQueryDTO queryDTO) {
         int pageNum = normalizePageNum(queryDTO.getPageNum());
         int pageSize = normalizePageSize(queryDTO.getPageSize());
+        // 筛选待转正员工ID列表
         List<Long> targetEmployeeIds = listFilteredEmployeeIds(queryDTO, false);
+        // 如果查询条件不为空且待转正员工ID列表为空，则返回空结果
         if ((queryDTO.getDepartmentId() != null || StrUtil.isNotBlank(queryDTO.getKeyword()))
                 && CollUtil.isEmpty(targetEmployeeIds)) {
             return PageResult.of(Collections.emptyList(), 0, pageNum, pageSize);
         }
+        // 类型转换,VO增强
         PersonnelDisplayEnricher displayEnricher = new PersonnelDisplayEnricher(deptService, postService);
         Page<RegularApplicationEntity> page = regularApplicationMapper.selectPage(
                 Page.of(pageNum, pageSize),
@@ -247,6 +251,7 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
                 page.getRecords().stream().map(RegularApplicationEntity::getEmployeeId).toList()
         );
         List<RegularApplicationPageVO> records = page.getRecords().stream()
+                // map 方法: 将流中的每个元素（在这里是 RegularApplicationEntity 对象）转换为另一种形式（RegularApplicationPageVO 对象）。
                 .map(entity -> RegularApplicationConvert.toEvaluatedVO(entity, employeeSnapshotMap.get(entity.getEmployeeId())))
                 .map(displayEnricher::enrichRegularApplication)
                 .toList();
@@ -261,7 +266,9 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
      * 本方法使用的工具类: StrUtil(hutool)
      */
     private LambdaQueryWrapper<EmployeeSnapshotEntity> buildPendingEmployeeWrapper(RegularApplicationQueryDTO queryDTO) {
+        // 解析部门树范围ID，包含所选部门自身及全部子孙部门。
         List<Long> targetDeptIds = resolveTargetDeptIds(queryDTO.getDepartmentId());
+
         LambdaQueryWrapper<EmployeeSnapshotEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(EmployeeSnapshotEntity::getEmploymentStatus, EMPLOYMENT_STATUS_PROBATION);
         wrapper.in(CollUtil.isNotEmpty(targetDeptIds), EmployeeSnapshotEntity::getDeptId, targetDeptIds);
@@ -330,10 +337,13 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
      */
     private List<Long> listFilteredEmployeeIds(RegularApplicationQueryDTO queryDTO, boolean probationOnly) {
         LambdaQueryWrapper<EmployeeSnapshotEntity> wrapper = new LambdaQueryWrapper<>();
+        // 只筛选试用期员工
         if (probationOnly) {
             wrapper.eq(EmployeeSnapshotEntity::getEmploymentStatus, EMPLOYMENT_STATUS_PROBATION);
         }
+        // 解析部门树范围ID，包含所选部门自身及全部子孙部门。
         List<Long> targetDeptIds = resolveTargetDeptIds(queryDTO.getDepartmentId());
+        //筛选部门树范围
         wrapper.in(CollUtil.isNotEmpty(targetDeptIds), EmployeeSnapshotEntity::getDeptId, targetDeptIds);
         wrapper.and(StrUtil.isNotBlank(queryDTO.getKeyword()), keywordWrapper -> keywordWrapper
                 .like(EmployeeSnapshotEntity::getEmployeeName, queryDTO.getKeyword())

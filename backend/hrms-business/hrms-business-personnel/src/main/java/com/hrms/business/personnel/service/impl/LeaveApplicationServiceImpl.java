@@ -57,8 +57,6 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
 
     private final LeaveApplicationMapper leaveApplicationMapper;
 
-    private final EmployeeSnapshotMapper employeeSnapshotMapper;
-
     private final EmployeeService employeeService;
 
     private final ApprovalEngine approvalEngine;

@@ -71,7 +71,9 @@ public class PaySlipServiceImpl implements PaySlipService {
     private final SalaryPayslipViewRecordMapper salaryPayslipViewRecordMapper;
     private final SalaryEmployeeSnapshotMapper employeeSnapshotMapper;
     private final SalarySysUserMapper salarySysUserMapper;
+    // Redis模板提供者
     private final ObjectProvider<StringRedisTemplate> redisTemplateProvider;
+    // 密码编码器提供者
     private final ObjectProvider<PasswordEncoder> passwordEncoderProvider;
     private final RoleService roleService;
     private final DeptService deptService;
@@ -85,6 +87,7 @@ public class PaySlipServiceImpl implements PaySlipService {
      */
     @Override
     public List<SalaryPayslipListVO> listPayslips(String month) {
+        //获取当前登录用户绑定的员工ID
         Long employeeId = getCurrentEmployeeId();
         List<SalaryBatchEntity> batches = salaryBatchMapper.selectList(Wrappers.lambdaQuery(SalaryBatchEntity.class)
                 .eq(StrUtil.isNotBlank(month), SalaryBatchEntity::getSalaryMonth, month)
@@ -103,13 +106,7 @@ public class PaySlipServiceImpl implements PaySlipService {
         return items.stream().map(item -> toPayslipListVO(item, batchMap.get(item.getBatchId()))).toList();
     }
 
-    /**
-     * 工资条二次验证。
-     *
-     * @param requestDTO 验证请求
-     * @return 验证结果
-     * 本方法使用的工具类: PasswordEncoder(spring-security-crypto),StringRedisTemplate(spring-data-redis),IdUtil(hutool)
-     */
+
     /**
      * 分页查询当前员工工资条列表。
      *
@@ -139,6 +136,13 @@ public class PaySlipServiceImpl implements PaySlipService {
         return PageResult.of(page.getRecords(), page.getTotal(), (int) page.getCurrent(), (int) page.getSize());
     }
 
+    /**
+     * 工资条二次验证。
+     *
+     * @param requestDTO 验证请求
+     * @return 验证结果
+     * 本方法使用的工具类: PasswordEncoder(spring-security-crypto),StringRedisTemplate(spring-data-redis),IdUtil(hutool)
+     */
     @Override
     public SalaryPayslipVerifyVO verifyPayslip(SalaryPayslipVerifyRequestDTO requestDTO) {
         // 获取当前用户ID和员工ID，判断用户是否可用
@@ -214,13 +218,17 @@ public class PaySlipServiceImpl implements PaySlipService {
      */
     @Override
     public PageResult<SalaryManagePayslipPageVO> pageManagePayslips(SalaryManagePayslipQueryDTO queryDTO) {
+        // 判断当前用户是否具有工资条管理权限
         assertSalaryManagerRole();
         queryDTO.setViewStatus(normalizeManagePayslipViewStatus(queryDTO.getViewStatus()));
         int pageNum = Optional.ofNullable(queryDTO.getPageNum()).orElse(1);
         int pageSize = Optional.ofNullable(queryDTO.getPageSize()).orElse(10);
+
         Page<SalaryManagePayslipPageVO> page = salaryBatchItemMapper.selectManagePayslipPage(
                 Page.of(pageNum, pageSize), queryDTO, PAYSLIP_VISIBLE_STATUS);
+        // 判断当前用户是否已进行管理端工资条二次验证
         boolean verified = hasManagePayslipVerified();
+
         page.getRecords().forEach(record -> {
             SalaryEmployeeSnapshotEntity employee = new SalaryEmployeeSnapshotEntity();
             employee.setId(record.getEmployeeId());
@@ -264,12 +272,7 @@ public class PaySlipServiceImpl implements PaySlipService {
                 .build();
     }
 
-    /**
-     * 查询当前员工近 6 个月薪资趋势。
-     *
-     * @return 薪资趋势
-     * 本方法使用的工具类: YearMonth(JDK),Wrappers(MyBatis-Plus),List(JDK)
-     */
+
     /**
      * 查询管理端工资条详情。
      *
@@ -281,6 +284,7 @@ public class PaySlipServiceImpl implements PaySlipService {
     public SalaryPayslipDetailVO getManagePayslipDetail(Long payslipId) {
         // 判断当前用户是否具有工资条管理权限
         assertSalaryManagerRole();
+        // 判断当前用户是否已进行管理端工资条二次验证
         if (!hasManagePayslipVerified()) {
             throw new GlobalException(ErrorCode.FORBIDDEN, "请先完成管理端工资条二次验证");
         }
@@ -288,6 +292,7 @@ public class PaySlipServiceImpl implements PaySlipService {
         if (item == null) {
             throw new GlobalException(ErrorCode.NOT_FOUND, "工资条不存在");
         }
+        //获取薪资批次
         SalaryBatchEntity batch = getBatchRequired(item.getBatchId());
         SalaryEmployeeSnapshotEntity employee = employeeSnapshotMapper.selectById(item.getEmployeeId());
         return payslipDetailBuilder(item, employee)
@@ -304,14 +309,17 @@ public class PaySlipServiceImpl implements PaySlipService {
     public List<SalaryTrendVO> getTrend() {
         Long employeeId = getCurrentEmployeeId();
         String startMonth = YearMonth.now().minusMonths(5).toString();
+
         List<SalaryBatchEntity> batches = salaryBatchMapper.selectList(Wrappers.lambdaQuery(SalaryBatchEntity.class)
                 .ge(SalaryBatchEntity::getSalaryMonth, startMonth)// 大于等于
                 .in(SalaryBatchEntity::getBatchStatus, PAYSLIP_VISIBLE_STATUS)// 在...内
                 .orderByAsc(SalaryBatchEntity::getSalaryMonth));// 按工资月份升序排序
+
         // 判断是否存在可查看的薪资批次,若不存在则返回空列表
         if (CollUtil.isEmpty(batches)) {
             return List.of();
         }
+
         Map<Long, SalaryBatchEntity> batchMap = batches.stream()
                 .collect(Collectors.toMap(SalaryBatchEntity::getId, Function.identity()));
         List<SalaryBatchItemEntity> items = salaryBatchItemMapper.selectList(Wrappers
@@ -321,9 +329,9 @@ public class PaySlipServiceImpl implements PaySlipService {
         return items.stream()
                 .map(item -> SalaryTrendVO.builder()
                         .month(batchMap.get(item.getBatchId()).getSalaryMonth())
-                        .netSalary(item.getNetSalary())
+                        .netSalary(item.getNetSalary()) // 净工资
                         .build())
-                .sorted(Comparator.comparing(SalaryTrendVO::getMonth))
+                .sorted(Comparator.comparing(SalaryTrendVO::getMonth)) // 按月份升序排序
                 .toList();
     }
 
@@ -444,7 +452,7 @@ public class PaySlipServiceImpl implements PaySlipService {
         if (StrUtil.isBlank(viewStatus)) {
             return null;
         }
-        String normalized = viewStatus.trim().toUpperCase();
+        String normalized = viewStatus.trim().toUpperCase(); // 去除空格并转换为大写
         if (!PAYSLIP_MANAGE_VIEW_STATUS.contains(normalized)) {
             throw new GlobalException(ErrorCode.PARAM_FORMAT_ERROR, "查看状态仅支持 VIEWED/UNVIEWED/UNPUBLISHED");
         }

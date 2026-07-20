@@ -55,7 +55,6 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
 
     private final EntryApplicationMapper entryApplicationMapper;
 
-
     private final ApprovalEngine approvalEngine;
 
     private final EmployeeService employeeService;
@@ -115,10 +114,12 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
      */
     @Override
     public EntryApplicationPageVO createEntryApplication(EntryApplicationCreateOrUpdateRequestDTO requestDTO) {
+        // 确保手机号唯一
         checkPhoneAvailable(requestDTO.getPhone(), null);
         EntryApplicationEntity entity = EntryApplicationConvert.toEntity(requestDTO);
         entity.setApprovalStatus(ApplicationStatusEnum.DRAFT.getCode());
         entryApplicationMapper.insert(entity);
+        // 转换为页面VO并填充关联信息
         return new PersonnelDisplayEnricher(deptService, postService)
                 .enrichEntryApplication(EntryApplicationConvert.toPageVO(entity));
     }
@@ -131,8 +132,11 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
     @Override
     public EntryApplicationPageVO updateEntryApplication(Long id, EntryApplicationCreateOrUpdateRequestDTO requestDTO) {
         EntryApplicationEntity entity = getRequiredEntryApplication(id);
+        // 确保状态为草稿
         assertDraft(entity);
+        // 确保手机号唯一
         checkPhoneAvailable(requestDTO.getPhone(), id);
+        // 填充更新内容
         EntryApplicationConvert.fillEntity(entity, requestDTO);
         entryApplicationMapper.updateById(entity);
         return enrichEntryApplication(entity);
@@ -209,7 +213,6 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
             String employeeNo = createdEmployee.getEmployeeNo();
 
             //  跨模块调用已完成：账号创建已由 EmployeeService#createEmployee(createDTO) 内部完成，personnel 不再重复调用 UserService#createUser(...)。
-
             lockedEntity.setEmployeeId(employeeId);
             lockedEntity.setEmployeeNo(employeeNo);
             lockedEntity.setApprovalStatus(ApplicationStatusEnum.ENTERED.getCode());
@@ -297,7 +300,7 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         createDTO.setProbationSalaryRatio(entity.getProbationSalaryRatio());
         createDTO.setIdCardNo(entity.getIdCardNo());
         createDTO.setRemark("由入职申请确认创建，申请ID：" + entity.getId());
-        // TODO 跨模块调用已完成：当前调用 EmployeeService#createEmployee(createDTO) 创建员工档案并由员工模块生成工号。
+        // 跨模块调用已完成：当前调用 EmployeeService#createEmployee(createDTO) 创建员工档案并由员工模块生成工号。
         return employeeService.createEmployee(createDTO);
     }
 
