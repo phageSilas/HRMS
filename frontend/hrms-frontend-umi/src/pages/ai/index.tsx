@@ -556,20 +556,6 @@ const AiChatPage: React.FC = () => {
     [convData],
   );
 
-  /**
-   * 数据加载后自动选中第一条会话
-   *
-   * 仅在无当前会话时触发，创建新会话时通过 creatingNewConversationRef 抑制。
-   */
-  useEffect(() => {
-    if (creatingNewConversationRef.current) {
-      return;
-    }
-    if (conversations.length > 0 && !currentId) {
-      setCurrentId(conversations[0].id);
-    }
-  }, [conversations, currentId]);
-
   /** 加载消息记录 */
   const [msgLoading, setMsgLoading] = useState(false);
   const loadMessages = useCallback(async (id: number) => {
