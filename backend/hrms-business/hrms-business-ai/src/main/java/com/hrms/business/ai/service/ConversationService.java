@@ -7,9 +7,11 @@ import com.hrms.common.web.PageResult;
 /**
  * 会话管理服务接口
  * <p>
- * 提供 AI 对话会话的 CRUD 操作，包括：列表分页查询、详情查询（含消息列表）、
- * 创建、更新标题、逻辑删除、消息计数递增。
+ * 提供 AI 对话会话的查询与操作，包括：列表分页查询、详情查询（含消息列表）、
+ * 更新标题、逻辑删除。
  * </p>
+ *
+ * @since 2026-07-20
  */
 public interface ConversationService {
 
@@ -33,15 +35,6 @@ public interface ConversationService {
     ConversationDetailVO getConversationDetail(Long userId, Long conversationId);
 
     /**
-     * 创建新会话
-     *
-     * @param userId 用户ID
-     * @param title  会话标题
-     * @return 会话ID
-     */
-    Long createConversation(Long userId, String title);
-
-    /**
      * 更新会话标题
      *
      * @param userId         用户ID
@@ -57,12 +50,5 @@ public interface ConversationService {
      * @param conversationId 会话ID
      */
     void deleteConversation(Long userId, Long conversationId);
-
-    /**
-     * 增加会话消息计数
-     *
-     * @param conversationId 会话ID
-     */
-    void incrementMessageCount(Long conversationId);
 
 }
