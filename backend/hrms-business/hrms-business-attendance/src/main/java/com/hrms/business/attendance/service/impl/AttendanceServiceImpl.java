@@ -1468,6 +1468,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     public List<LeaveBalanceVO> listLeaveBalances() {
         EmployeeSnapshotEntity employee = getCurrentEmployeeSnapshot();
         int currentYear = LocalDate.now().getYear();
+        //查询当前员工指定年份的假期余额
         List<LeaveBalanceEntity> balances = leaveBalanceMapper.selectList(new LambdaQueryWrapper<LeaveBalanceEntity>()
                 .eq(LeaveBalanceEntity::getEmployeeId, employee.getId())
                 .eq(LeaveBalanceEntity::getBalanceYear, currentYear)
@@ -1480,6 +1481,7 @@ public class AttendanceServiceImpl implements AttendanceService {
             LeaveBalanceVO vo = toLeaveBalanceVO(balance);
             balanceMap.putIfAbsent(vo.getLeaveType(), vo);
         }
+        // 为缺失的基础假期类型补默认 0 余额
         appendDefaultLeaveBalance(balanceMap, "annual", "年假");
         appendDefaultLeaveBalance(balanceMap, "sick", "病假");
         appendDefaultLeaveBalance(balanceMap, "personal", "事假");
@@ -1620,7 +1622,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         entity.setApprovalStatus(1);
         leaveRequestMapper.insert(entity);
 
-        // TODO 跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起请假审批。
+        //  跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起请假审批。
         Long approvalInstanceId = approvalEngine.startApproval(
                 ApprovalTypeEnum.LEAVE_REQUEST.getCode(),
                 entity.getId(),

@@ -36,6 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -127,7 +128,7 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
         entity.setApprovalStatus(ApplicationStatusEnum.APPROVING.getCode());
         transferApplicationMapper.insert(entity);
 
-        // TODO 跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起调岗审批。
+        //  跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起调岗审批。
         Long approvalInstanceId = approvalEngine.startApproval(
                 ApprovalTypeEnum.TRANSFER.getCode(),
                 entity.getId(),
@@ -164,7 +165,7 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
      * 本方法使用的工具类: 无
      */
     private EmployeeSnapshotEntity getRequiredEmployeeSnapshot(Long employeeId) {
-        // TODO 跨模块调用已完成：当前调用 EmployeeService#getEmployeeBrief(employeeId) 获取员工简要信息。
+        // 跨模块调用已完成：当前调用 EmployeeService#getEmployeeBrief(employeeId) 获取员工简要信息。
         EmployeeEntity employee = employeeService.getEmployeeBrief(employeeId);
         if (employee == null) {
             throw new GlobalException(EMPLOYEE_NOT_FOUND);
@@ -242,14 +243,14 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
         if (StrUtil.isBlank(keyword)) {
             return Collections.emptyList();
         }
-        // TODO 跨模块调用已完成：当前调用 EmployeeService#listEmployees(queryDTO) 按关键词查询员工列表。
+        //  跨模块调用已完成：当前调用 EmployeeService#listEmployees(queryDTO) 按关键词查询员工列表。
         EmployeeQueryDTO queryDTO = new EmployeeQueryDTO();
         queryDTO.setKeyword(keyword);
         queryDTO.setPageNum(1);
         queryDTO.setPageSize(MAX_PAGE_SIZE);
         return employeeService.listEmployees(queryDTO).getRecords().stream()
                 .map(EmployeeListVO::getId)
-                .filter(id -> id != null)
+                .filter(Objects::nonNull)
                 .toList();
     }
 
@@ -261,13 +262,14 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
      * 本方法使用的工具类: CollUtil(hutool)
      */
     private Map<Long, EmployeeSnapshotEntity> listEmployeeSnapshotMap(List<Long> employeeIds) {
+        //
         if (CollUtil.isEmpty(employeeIds)) {
             return Collections.emptyMap();
         }
-        // TODO 跨模块调用已完成：当前员工模块暂无批量快照接口，暂用 EmployeeService#getEmployeeBrief(employeeId) 循环补全。
+        //  跨模块调用已完成：当前员工模块暂无批量快照接口，暂用 EmployeeService#getEmployeeBrief(employeeId) 循环补全。
         return employeeIds.stream()
                 .map(employeeService::getEmployeeBrief)
-                .filter(employee -> employee != null)
+                .filter(Objects::nonNull)
                 .map(this::toEmployeeSnapshot)
                 .collect(Collectors.toMap(EmployeeSnapshotEntity::getId, Function.identity(), (left, right) -> left));
     }

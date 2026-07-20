@@ -49,8 +49,8 @@ public class SalaryRabbitMqConfig {
     public Binding salaryBatchCalculateBinding(DirectExchange salaryExchange,
                                                @Qualifier("salaryBatchCalculateQueue")
                                                Queue salaryBatchCalculateQueue) {
-        return BindingBuilder.bind(salaryBatchCalculateQueue)
-                .to(salaryExchange)
-                .with(SalaryMqConstants.BATCH_CALCULATE_ROUTING_KEY);
+        return BindingBuilder.bind(salaryBatchCalculateQueue)//指定要绑定的队列
+                .to(salaryExchange)//指定要绑定的交换机
+                .with(SalaryMqConstants.BATCH_CALCULATE_ROUTING_KEY);//指定绑定时使用的路由键
     }
 }

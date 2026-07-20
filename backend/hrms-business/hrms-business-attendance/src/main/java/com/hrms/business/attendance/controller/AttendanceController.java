@@ -63,11 +63,23 @@ public class AttendanceController {
         return Result.success(attendanceService.pageAttendanceGroups(queryDTO));
     }
 
+    /**
+     * 获取考勤日历配置。
+     *
+     * @param year 年份
+     * @return 考勤日历配置
+     */
     @GetMapping("/calendar-config")
     public Result<AttendanceCalendarConfigVO> getCalendarConfig(@RequestParam Integer year) {
         return Result.success(attendanceCalendarConfigService.getCalendarConfig(year));
     }
 
+    /**
+     * 保存考勤日历配置。
+     *
+     * @param requestDTO 请求参数
+     * @return 保存后的考勤日历配置
+     */
     @PutMapping("/calendar-config")
     public Result<AttendanceCalendarConfigVO> saveCalendarConfig(
             @Valid @RequestBody AttendanceCalendarConfigRequestDTO requestDTO) {
@@ -79,7 +91,7 @@ public class AttendanceController {
      *
      * @param requestDTO 创建请求
      * @return 创建后的考勤组
-     * 本方法使用的工具类: Result(hrms-common)
+     *
      */
     @PostMapping("/groups")
     public Result<AttendanceGroupPageVO> createAttendanceGroup(
@@ -93,7 +105,7 @@ public class AttendanceController {
      * @param id         考勤组ID
      * @param requestDTO 更新请求
      * @return 更新后的考勤组
-     * 本方法使用的工具类: Result(hrms-common)
+     *
      */
     @PutMapping("/groups/{id}")
     public Result<AttendanceGroupPageVO> updateAttendanceGroup(
@@ -107,7 +119,7 @@ public class AttendanceController {
      *
      * @param id 考勤组ID
      * @return 删除结果
-     * 本方法使用的工具类: Result(hrms-common)
+     *
      */
     @DeleteMapping("/groups/{id}")
     public Result<Void> deleteAttendanceGroup(@PathVariable Long id) {
@@ -121,7 +133,7 @@ public class AttendanceController {
      * @param groupId  考勤组ID
      * @param queryDTO 查询参数
      * @return 考勤组打卡记录分页结果
-     * 本方法使用的工具类: Result(hrms-common),PageResult(hrms-common)
+     *
      */
     @GetMapping("/groups/{groupId}/records")
     public Result<PageResult<AttendanceGroupRecordPageVO>> pageGroupAttendanceRecords(
@@ -136,7 +148,7 @@ public class AttendanceController {
      * @param requestDTO     打卡请求
      * @param servletRequest HTTP 请求
      * @return 打卡结果
-     * 本方法使用的工具类: Result(hrms-common)
+     *
      */
     @PostMapping("/clock")
     public Result<AttendanceClockVO> clock(@RequestBody AttendanceClockRequestDTO requestDTO,
@@ -149,7 +161,7 @@ public class AttendanceController {
      *
      * @param yearMonth 月份，格式 yyyy-MM
      * @return 个人月度打卡日历
-     * 本方法使用的工具类: Result(hrms-common)
+     *
      */
     @GetMapping("/records/my-calendar")
     public Result<AttendanceCalendarVO> getMyCalendar(@RequestParam String yearMonth) {
@@ -162,7 +174,7 @@ public class AttendanceController {
      * @param yearMonth 月份，格式yyyy-MM
      * @param deptId    部门ID
      * @return 考勤统计看板
-     * 本方法使用的工具类: Result(hrms-common)
+     *
      */
     @GetMapping("/summary/dashboard")
     public Result<AttendanceSummaryDashboardVO> getSummaryDashboard(@RequestParam String yearMonth,
@@ -175,7 +187,7 @@ public class AttendanceController {
      *
      * @param queryDTO 查询参数
      * @return 请假管理列表
-     * 本方法使用的工具类: Result(hrms-common),PageResult(hrms-common)
+     *
      */
     @GetMapping("/leaves")
     public Result<PageResult<AttendanceLeaveManageItemVO>> pageLeaveManageList(
@@ -188,7 +200,7 @@ public class AttendanceController {
      *
      * @param requestDTO 补卡申请请求
      * @return 补卡申请创建结果
-     * 本方法使用的工具类: Result(hrms-common)
+     *
      */
     @PostMapping("/corrections")
     public Result<AttendanceCorrectionCreateVO> createCorrection(
@@ -201,7 +213,7 @@ public class AttendanceController {
      *
      * @param requestDTO 生成请求
      * @return 生成结果
-     * 本方法使用的工具类: Result(hrms-common)
+     *
      */
     @PostMapping("/stats/monthly/generate")
     public Result<MonthlyStatGenerateVO> generateMonthlyStat(
@@ -215,7 +227,7 @@ public class AttendanceController {
      * @param month       月份
      * @param employeeIds 员工ID逗号分隔
      * @return 薪资考勤数据源
-     * 本方法使用的工具类: Result(hrms-common),Arrays(JDK),List(JDK)
+     *
      */
     @GetMapping("/stats/monthly/payroll-source")
     public Result<List<AttendancePayrollSourceVO>> getPayrollSource(@RequestParam String month,

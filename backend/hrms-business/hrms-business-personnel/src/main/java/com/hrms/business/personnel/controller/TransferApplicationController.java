@@ -33,7 +33,7 @@ public class TransferApplicationController {
      *
      * @param queryDTO 调岗申请查询参数
      * @return 调岗申请分页结果
-     * 本方法使用的工具类: 无
+     *
      */
     @GetMapping
     @Operation(summary = "调岗申请列表")
@@ -46,7 +46,7 @@ public class TransferApplicationController {
      *
      * @param requestDTO 调岗申请创建参数
      * @return 调岗申请创建结果
-     * 本方法使用的工具类: 无
+     *
      */
     @PostMapping
     @Operation(summary = "创建调岗申请")

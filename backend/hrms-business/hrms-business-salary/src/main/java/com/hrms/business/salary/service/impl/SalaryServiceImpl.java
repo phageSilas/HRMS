@@ -1062,8 +1062,8 @@ public class SalaryServiceImpl implements SalaryService {
                 .deductionTotal(item.getDeductionTotal())
                 .netSalary(item.getNetSalary())
                 .batchStatus(batch.getBatchStatus())
-                .verified(redisTemplate != null && Boolean.TRUE.equals(redisTemplate.hasKey(
-                        SalaryCacheKeys.payslipVerify(item.getEmployeeId(), batch.getSalaryMonth()))))
+                .verified(redisTemplate != null && redisTemplate.hasKey(
+                        SalaryCacheKeys.payslipVerify(item.getEmployeeId(), batch.getSalaryMonth())))
                 .build();
     }
 
@@ -1192,7 +1192,6 @@ public class SalaryServiceImpl implements SalaryService {
     /**
      * 校验当前用户是否具备薪资管理操作角色。
      *
-     * @return 无返回值
      * 本方法使用的工具类: SecurityContextHolder(hrms-common),RoleService(hrms-system-auth),StrUtil(hutool)
      */
     private void assertSalaryManagerRole() {
@@ -1604,7 +1603,6 @@ public class SalaryServiceImpl implements SalaryService {
     /**
      * 解析员工部门名称。
      *
-     * @param employee 员工快照
      * @return 部门名称
      * 本方法使用的工具类: DeptService(hrms-system-organization)
      */

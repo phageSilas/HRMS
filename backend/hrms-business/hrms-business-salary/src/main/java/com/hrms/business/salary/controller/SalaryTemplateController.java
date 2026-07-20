@@ -33,7 +33,7 @@ public class SalaryTemplateController {
      *
      * @param queryDTO 查询参数
      * @return 薪资账套分页结果
-     * 本方法使用的工具类: Result(hrms-common),PageResult(hrms-common)
+     *
      */
     @GetMapping
     public Result<PageResult<SalaryTemplatePageVO>> pageTemplates(@Valid SalaryTemplateQueryDTO queryDTO) {
@@ -45,7 +45,7 @@ public class SalaryTemplateController {
      *
      * @param requestDTO 创建请求
      * @return 创建后的薪资账套
-     * 本方法使用的工具类: Result(hrms-common)
+     *
      */
     @PostMapping
     public Result<SalaryTemplatePageVO> createTemplate(
@@ -59,7 +59,7 @@ public class SalaryTemplateController {
      * @param id         账套ID
      * @param requestDTO 更新请求
      * @return 更新后的薪资账套
-     * 本方法使用的工具类: Result(hrms-common)
+     *
      */
     @PutMapping("/{id}")
     public Result<SalaryTemplatePageVO> updateTemplate(

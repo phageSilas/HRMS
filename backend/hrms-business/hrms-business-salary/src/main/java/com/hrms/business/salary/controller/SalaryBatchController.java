@@ -52,7 +52,7 @@ public class SalaryBatchController {
      * @param scopeType   核算范围类型
      * @param scopeValue  核算范围值
      * @return 当前薪资批次，未找到时为 null
-     * 本方法使用的工具类: Result(hrms-common)
+     *
      */
     @GetMapping("/current")
     public Result<SalaryBatchVO> getCurrentBatch(@RequestParam String salaryMonth,
@@ -69,7 +69,7 @@ public class SalaryBatchController {
      * @param scopeType   核算范围类型
      * @param scopeValue  核算范围值
      * @return 薪资趋势列表
-     * 本方法使用的工具类: Result(hrms-common),List(JDK)
+     *
      */
     @GetMapping("/trend")
     public Result<List<SalaryBatchTrendVO>> listBatchTrend(@RequestParam String anchorMonth,
@@ -85,7 +85,7 @@ public class SalaryBatchController {
      * @param id         薪资批次ID
      * @param requestDTO 人工调整请求
      * @return 调整后的员工薪资明细
-     * 本方法使用的工具类: Result(hrms-common)
+     *
      */
     @PostMapping("/{id}/adjustments")
     public Result<SalaryBatchItemVO> saveBatchAdjustments(@PathVariable Long id,
@@ -98,7 +98,7 @@ public class SalaryBatchController {
      *
      * @param id 薪资批次ID
      * @return 重新计算后的薪资批次
-     * 本方法使用的工具类: Result(hrms-common)
+     *
      */
     @PostMapping("/{id}/recalculate")
     public Result<SalaryBatchVO> recalculateBatch(@PathVariable Long id) {
@@ -110,7 +110,7 @@ public class SalaryBatchController {
      *
      * @param id 批次ID
      * @return 核算后的批次
-     * 本方法使用的工具类: Result(hrms-common)
+     *
      */
     @PostMapping("/{id}/calculate")
     public Result<SalaryBatchVO> calculateBatch(@PathVariable Long id) {
@@ -122,7 +122,7 @@ public class SalaryBatchController {
      *
      * @param id 批次ID
      * @return 薪资预览
-     * 本方法使用的工具类: Result(hrms-common)
+     *
      */
     @GetMapping("/{id}/preview")
     public Result<SalaryBatchPreviewVO> previewBatch(@PathVariable Long id) {
@@ -145,7 +145,7 @@ public class SalaryBatchController {
      *
      * @param id 批次ID
      * @return 提交后的批次
-     * 本方法使用的工具类: Result(hrms-common)
+     *
      */
     @PostMapping("/{id}/submit")
     public Result<SalaryBatchVO> submitBatch(@PathVariable Long id) {

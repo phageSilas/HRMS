@@ -69,6 +69,7 @@ public class SalaryPayslipController {
      */
     @PostMapping("/payslip/verify")
     public Result<SalaryPayslipVerifyVO> verifyPayslip(
+            // Spring 会自动对带有 @Valid 注解的参数对象进行验证,验证失败抛异常
             @Valid @RequestBody SalaryPayslipVerifyRequestDTO requestDTO) {
         return Result.success(paySlipService.verifyPayslip(requestDTO));
     }

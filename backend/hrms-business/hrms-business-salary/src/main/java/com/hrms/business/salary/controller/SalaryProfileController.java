@@ -30,7 +30,7 @@ public class SalaryProfileController {
      *
      * @param employeeId 员工ID
      * @return 薪资档案
-     * 本方法使用的工具类: Result(hrms-common)
+     *
      */
     @GetMapping("/{employeeId}/profile")
     public Result<EmployeeSalaryProfileVO> getEmployeeProfile(@PathVariable("employeeId") Long employeeId) {
@@ -43,7 +43,7 @@ public class SalaryProfileController {
      * @param employeeId 员工ID
      * @param requestDTO 设置请求
      * @return 设置后的薪资档案
-     * 本方法使用的工具类: Result(hrms-common)
+     *
      */
     @PutMapping("/{employeeId}/profile")
     public Result<EmployeeSalaryProfileVO> setEmployeeProfile(
