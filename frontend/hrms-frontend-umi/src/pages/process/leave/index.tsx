@@ -1,8 +1,9 @@
 /**
  * 离职申请页面。
- * 接入离职申请分页和创建接口。
+ * 对接离职申请分页和创建接口。
  */
 
+import { getDeptList } from '@/services/organization';
 import {
   ApprovalStatus,
   createLeaveApplication,
@@ -26,8 +27,8 @@ import {
 } from '@ant-design/pro-components';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { Avatar, Button, Card, Space, Tag, Typography, message } from 'antd';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { formatProcessDateTime } from '../utils';
-import React, { useRef, useState } from 'react';
 
 const { Text } = Typography;
 
@@ -35,29 +36,22 @@ const statusMeta: Record<number, { text: string; color: string }> = {
   [ApprovalStatus.DRAFT]: { text: '草稿', color: 'default' },
   [ApprovalStatus.APPROVING]: { text: '审批中', color: 'processing' },
   [ApprovalStatus.APPROVED]: { text: '已通过', color: 'success' },
-  [ApprovalStatus.REJECTED]: { text: '已拒绝', color: 'error' },
+  [ApprovalStatus.REJECTED]: { text: '已驳回', color: 'error' },
   [ApprovalStatus.WITHDRAWN]: { text: '已撤回', color: 'default' },
   [ApprovalStatus.ENTERED]: { text: '已离职', color: 'cyan' },
 };
 
 const leaveTypeOptions = [
-  { label: '主动离职', value: 'resign' },
+  { label: '主动辞职', value: 'resign' },
   { label: '公司辞退', value: 'terminate' },
   { label: '协商解除', value: 'mutual' },
   { label: '合同到期', value: 'contract_end' },
 ];
 
-const departmentOptions = [
-  { label: '人力资源部', value: 1 },
-  { label: '技术部', value: 2 },
-  { label: '产品部', value: 3 },
-  { label: '财务部', value: 4 },
-];
-
 const handoverOptions = [
   { label: '王敏（1001）', value: 1001 },
   { label: '李强（1002）', value: 1002 },
-  { label: '赵琳（1003）', value: 1003 },
+  { label: '赵玲（1003）', value: 1003 },
 ];
 
 type LeaveFormValues = LeaveApplicationCreateRequest & {
@@ -73,6 +67,9 @@ function getInitial(name?: string) {
 const LeavePage: React.FC = () => {
   const actionRef = useRef<ActionType>();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [departmentOptions, setDepartmentOptions] = useState<
+    { label: string; value: number }[]
+  >([]);
   const [employeePreview, setEmployeePreview] = useState<{
     employeeName?: string;
     employeeId?: number;
@@ -80,26 +77,66 @@ const LeavePage: React.FC = () => {
     positionName?: string;
   }>({});
 
+  useEffect(() => {
+    const loadDepartments = async () => {
+      try {
+        const departments = await getDeptList();
+        setDepartmentOptions(
+          (departments || []).map((item) => ({
+            label: item.deptName,
+            value: item.id,
+          })),
+        );
+      } catch (error) {
+        message.error('部门数据加载失败，请刷新后重试');
+      }
+    };
+    loadDepartments();
+  }, []);
+
+  const departmentFilterOption = useMemo(
+    () =>
+      (input: string, option?: { label?: string | number }) =>
+        String(option?.label || '')
+          .toLowerCase()
+          .includes(input.trim().toLowerCase()),
+    [],
+  );
+
   const columns: ProColumns<LeaveApplication>[] = [
     {
       title: '员工姓名',
       dataIndex: 'keyword',
       hideInTable: true,
-      fieldProps: { placeholder: '请输入员工姓名 / 工号' },
+      fieldProps: {
+        placeholder: '请输入员工姓名 / 工号',
+        allowClear: true,
+      },
     },
     {
       title: '部门',
       dataIndex: 'departmentId',
       hideInTable: true,
       valueType: 'select',
-      fieldProps: { options: departmentOptions, allowClear: true, placeholder: '请选择部门' },
+      fieldProps: {
+        options: departmentOptions,
+        allowClear: true,
+        showSearch: true,
+        filterOption: departmentFilterOption,
+        optionFilterProp: 'label',
+        placeholder: '请输入部门名称',
+      },
     },
     {
       title: '离职类型',
       dataIndex: 'leaveType',
       hideInTable: true,
       valueType: 'select',
-      fieldProps: { options: leaveTypeOptions, allowClear: true, placeholder: '请选择离职类型' },
+      fieldProps: {
+        options: leaveTypeOptions,
+        allowClear: true,
+        placeholder: '请选择离职类型',
+      },
     },
     {
       title: '离职状态',
@@ -110,7 +147,7 @@ const LeavePage: React.FC = () => {
         [ApprovalStatus.DRAFT]: { text: '草稿' },
         [ApprovalStatus.APPROVING]: { text: '审批中' },
         [ApprovalStatus.APPROVED]: { text: '已通过' },
-        [ApprovalStatus.REJECTED]: { text: '已拒绝' },
+        [ApprovalStatus.REJECTED]: { text: '已驳回' },
       },
     },
     {

@@ -2,7 +2,7 @@ package com.hrms.business.personnel.convert;
 
 import com.hrms.business.personnel.entity.EmployeeSnapshotEntity;
 import com.hrms.business.personnel.entity.RegularApplicationEntity;
-import com.hrms.business.personnel.enums.ApplicationStatusEnum;
+import com.hrms.business.personnel.common.enums.ApplicationStatusEnum;
 import com.hrms.business.personnel.vo.RegularApplicationPageVO;
 
 import java.time.LocalDate;

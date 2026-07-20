@@ -6,7 +6,6 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hrms.business.attendance.service.AttendanceService;
 import com.hrms.business.attendance.vo.AttendancePayrollSourceVO;
 import com.hrms.business.approval.enums.ApprovalTypeEnum;
@@ -19,8 +18,8 @@ import com.hrms.business.salary.entity.SalaryBatchAdjustmentEntity;
 import com.hrms.business.salary.entity.SalaryBatchEntity;
 import com.hrms.business.salary.entity.SalaryBatchItemEntity;
 import com.hrms.business.salary.entity.SalaryEmployeeSnapshotEntity;
-import com.hrms.business.salary.enums.SalaryBatchStatusEnum;
-import com.hrms.business.salary.enums.SalaryWarningLevelEnum;
+import com.hrms.business.salary.common.enums.SalaryBatchStatusEnum;
+import com.hrms.business.salary.common.enums.SalaryWarningLevelEnum;
 import com.hrms.business.salary.mapper.EmployeeSalaryProfileMapper;
 import com.hrms.business.salary.mapper.SalaryBatchAdjustmentMapper;
 import com.hrms.business.salary.mapper.SalaryBatchItemMapper;
@@ -62,7 +61,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.YearMonth;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -72,6 +70,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.hrms.business.salary.common.constant.SalaryCalculateConstant.*;
+
 /**
  * 薪资核算服务实现。
  */
@@ -80,53 +80,19 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class SalaryCalculateServiceImpl implements SalaryCalculateService {
 
-    private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-    private static final BigDecimal DEFAULT_PENSION_INSURANCE_RATE = new BigDecimal("0.0800");
-    private static final BigDecimal DEFAULT_MEDICAL_INSURANCE_RATE = new BigDecimal("0.0200");
-    private static final BigDecimal DEFAULT_UNEMPLOYMENT_INSURANCE_RATE = new BigDecimal("0.0050");
-    // 薪资条可见状态
-    private static final Set<String> PAYSLIP_VISIBLE_STATUS = Set.of(
-            SalaryBatchStatusEnum.APPROVING.name(),
-            SalaryBatchStatusEnum.APPROVED.name(),
-            SalaryBatchStatusEnum.RELEASED.name(),
-            SalaryBatchStatusEnum.ARCHIVED.name()
-    );
-    // 薪资批次导出允许状态
-    private static final Set<String> BATCH_EXPORT_ALLOWED_STATUS = Set.of(
-            SalaryBatchStatusEnum.APPROVED.name(),
-            SalaryBatchStatusEnum.RELEASED.name()
-    );
-    // 薪资管理员角色码
-    private static final Set<String> SALARY_MANAGER_ROLE_CODES = Set.of(
-            "FINANCE", "HR", "HR_TEST", "ADMIN", "ROLE_ADMIN"
-    );
-    // 薪资调整项码
-    private static final Set<String> SALARY_ADJUST_ITEM_CODES = Set.of(
-            "BASE_SALARY",
-            "ALLOWANCE",
-            "PERFORMANCE_BONUS",
-            "OVERTIME_PAY",
-            "LATE_DEDUCTION",
-            "LEAVE_DEDUCTION",
-            "SOCIAL_INSURANCE",
-            "PENSION_INSURANCE",
-            "MEDICAL_INSURANCE",
-            "UNEMPLOYMENT_INSURANCE",
-            "HOUSING_FUND",
-            "INCOME_TAX"
-    );
-    private static final String SALARY_EXPORT_MIME_TYPE =
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-    private static final String SALARY_EXPORT_FILE_TYPE = "xlsx";
-    private static final String SALARY_EXPORT_BUSINESS_TYPE = "SALARY_BATCH_EXPORT";
+
 
     private final SalaryBatchMapper salaryBatchMapper;
     private final SalaryBatchAdjustmentMapper salaryBatchAdjustmentMapper;
     private final SalaryBatchItemMapper salaryBatchItemMapper;
     private final SalaryEmployeeSnapshotMapper employeeSnapshotMapper;
     private final EmployeeSalaryProfileMapper employeeSalaryProfileMapper;
+    // Redis模板提供者
     private final ObjectProvider<StringRedisTemplate> redisTemplateProvider;
+
+    // 出勤服务提供者
     private final ObjectProvider<AttendanceService> attendanceServiceProvider;
+    // 批次审批引擎
     private final SalaryBatchCalculateProducer salaryBatchCalculateProducer;
     private final ApprovalEngine approvalEngine;
     private final RoleService roleService;
@@ -185,9 +151,13 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
      */
     @Override
     public SalaryBatchVO getCurrentBatch(String salaryMonth, String scopeType, String scopeValue) {
+        // 校验薪资核算角色
         assertSalaryManagerRole();
+        // 校验薪资月份格式
         String month = normalizeMonth(salaryMonth);
+        // 校验薪资范围类型
         String normalizedScopeType = normalizeScopeType(scopeType);
+        // 校验薪资范围值
         String normalizedScopeValue = normalizeBatchScopeValue(normalizedScopeType, scopeValue);
         SalaryBatchEntity batch = salaryBatchMapper.selectOne(Wrappers.lambdaQuery(SalaryBatchEntity.class)
                 .eq(SalaryBatchEntity::getSalaryMonth, month)
@@ -217,10 +187,15 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
         assertSalaryManagerRole();
         //YearMonth.parse() 方法解析字符串为标准格式（如 "2024-01"）
         YearMonth endMonth = YearMonth.parse(normalizeMonth(anchorMonth));
+        // 校验统计月份数
         int monthCount = normalizeTrendMonths(months);
+        // 计算起始月份
         YearMonth startMonth = endMonth.minusMonths(monthCount - 1L);
+        // 校验薪资范围类型
         String normalizedScopeType = normalizeScopeType(scopeType);
+        // 校验薪资范围值
         String normalizedScopeValue = normalizeBatchScopeValue(normalizedScopeType, scopeValue);
+        // 查询薪资批次
         List<SalaryBatchEntity> batches = salaryBatchMapper.selectList(Wrappers.lambdaQuery(SalaryBatchEntity.class)
                 .ge(SalaryBatchEntity::getSalaryMonth, startMonth.toString())
                 .le(SalaryBatchEntity::getSalaryMonth, endMonth.toString())
@@ -228,7 +203,8 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
                 .eq(StrUtil.isNotBlank(normalizedScopeValue), SalaryBatchEntity::getScopeValue, normalizedScopeValue)
                 .notIn(SalaryBatchEntity::getBatchStatus, SalaryBatchStatusEnum.ARCHIVED.name()));
         Map<String, List<SalaryBatchEntity>> monthBatchMap = batches.stream()
-                .collect(Collectors.groupingBy(SalaryBatchEntity::getSalaryMonth));
+                .collect(Collectors.groupingBy(SalaryBatchEntity::getSalaryMonth)// 按月份分组
+                );
         List<SalaryBatchTrendVO> trends = new ArrayList<>();
         for (int index = 0; index < monthCount; index++) {
             String trendMonth = startMonth.plusMonths(index).toString();
@@ -248,8 +224,11 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public SalaryBatchItemVO saveBatchAdjustments(Long batchId, SalaryBatchAdjustmentRequestDTO requestDTO) {
+        // 校验薪资核算角色
         assertSalaryManagerRole();
+        // 校验薪资批次存在
         SalaryBatchEntity batch = getBatchRequired(batchId);
+        // 校验薪资批次状态
         if (!SalaryBatchStatusEnum.PENDING_REVIEW.name().equals(batch.getBatchStatus())) {
             throw new GlobalException(ErrorCode.BUSINESS_ERROR, "只有待复核批次可以保存人工调整");
         }
@@ -289,6 +268,7 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
                     .build();
 
             salaryBatchAdjustmentMapper.insert(entity);
+            // 应用调整
             applyAdjustmentToItem(item, entity.getItemCode(), entity.getAdjustAmount());
         }
         // 重新计算员工薪资明细金额
@@ -311,8 +291,11 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public SalaryBatchVO recalculateBatch(Long batchId) {
+        // 校验薪资核算角色
         assertSalaryManagerRole();
+        // 校验薪资批次存在
         SalaryBatchEntity batch = getBatchRequired(batchId);
+        // 校验薪资批次状态
         if (!Set.of(SalaryBatchStatusEnum.DRAFT.name(), SalaryBatchStatusEnum.PENDING_REVIEW.name())
                 .contains(batch.getBatchStatus())) {
             throw new GlobalException(ErrorCode.BUSINESS_ERROR, "只有草稿或待复核批次可以重新计算");
@@ -349,6 +332,7 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public SalaryBatchVO calculateBatch(Long batchId) {
+        // 校验薪资核算角色
         SalaryBatchEntity batch = getBatchRequired(batchId);
         // 检查批次状态是否可核算
         if (!SalaryBatchStatusEnum.canCalculate(batch.getBatchStatus())) {
@@ -370,7 +354,9 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
                     .batchId(batchId)
                     .salaryMonth(batch.getSalaryMonth())
                     .build();
+            // 发送薪资批次核算消息,由消费者处理
             salaryBatchCalculateProducer.send(message);
+
             /*
             doCalculateBatch(batchId);
             evictBatchCache(batchId);
@@ -400,7 +386,9 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
     @Override
     public void handleBatchCalculateMessage(SalaryBatchCalculateMessage message) {
         try {
+            // 处理薪资批次核算消息
             doCalculateBatch(message.getBatchId());
+            // 刷新薪资批次缓存
             evictBatchCache(message.getBatchId());
         } finally {
             StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
@@ -441,6 +429,7 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
                 .batch(toBatchVO(batch))
                 .items(items.stream().map(item -> toBatchItemVO(item, employeeMap.get(item.getEmployeeId()))).toList())
                 .build();
+        // 若缓存不为空则写入缓存
         if (redisTemplate != null) {
             redisTemplate.opsForValue().set(cacheKey, JSONUtil.toJsonStr(vo), 5, TimeUnit.MINUTES);
         }
@@ -455,7 +444,9 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public SalaryBatchExportVO exportBatch(Long batchId) {
+        // 校验薪资核算角色
         assertSalaryManagerRole();
+        // 校验薪资批次存在
         SalaryBatchEntity batch = getBatchRequired(batchId);
         // 检查批次状态是否可导出
         if (!BATCH_EXPORT_ALLOWED_STATUS.contains(batch.getBatchStatus())) {
@@ -474,16 +465,19 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
         List<SalaryBatchItemVO> exportItems = items.stream()
                 .map(item -> toBatchItemVO(item, employeeMap.get(item.getEmployeeId())))
                 .toList();
+        // 构建文件名
         String fileName = buildSalaryExportFileName(batch);
+        // 构建文件路径
         Path filePath = buildSalaryExportPath(batch);
+        // 写入薪资批次数据到excel文件
         writeSalaryBatchWorkbook(filePath, exportItems);// 写入薪资批次数据到excel文件
         Long fileId = fileService.upload(
                 fileName,
                 filePath.toString(),
                 resolveFileSize(filePath),
-                SALARY_EXPORT_FILE_TYPE,
-                SALARY_EXPORT_MIME_TYPE,
-                SALARY_EXPORT_BUSINESS_TYPE,
+                SALARY_EXPORT_FILE_TYPE, // 文件类型
+                SALARY_EXPORT_MIME_TYPE, // 文件MIME类型
+                SALARY_EXPORT_BUSINESS_TYPE, // 文件业务类型
                 batchId
         );
         return SalaryBatchExportVO.builder()
@@ -503,10 +497,13 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public SalaryBatchVO submitBatch(Long batchId) {
+        //获取薪资批次
         SalaryBatchEntity batch = getBatchRequired(batchId);
+        //若批次状态不是待复核则抛出异常
         if (!SalaryBatchStatusEnum.PENDING_REVIEW.name().equals(batch.getBatchStatus())) {
             throw new GlobalException(ErrorCode.BUSINESS_ERROR, "只有待复核批次可以提交审批");
         }
+        //若存在阻断异常则抛出异常
         if (Optional.ofNullable(batch.getBlockCount()).orElse(0) > 0) {
             throw new GlobalException(ErrorCode.BUSINESS_ERROR, "存在阻断异常，不能提交审批");
         }
@@ -514,7 +511,7 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
         Long approvalInstanceId = approvalEngine.startApproval(
                 ApprovalTypeEnum.SALARY.getCode(),
                 batch.getId(),
-                JSONUtil.toJsonStr(batch),
+                JSONUtil.toJsonStr(batch),// 薪资批次信息
                 SecurityContextHolder.getUserId(),
                 null,
                 null
@@ -522,7 +519,9 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
         batch.setApprovalInstanceId(approvalInstanceId);
         batch.setBatchStatus(SalaryBatchStatusEnum.APPROVING.name());
         salaryBatchMapper.updateById(batch);
+        // 刷新薪资批次缓存
         evictBatchCache(batchId);
+
         return toBatchVO(batch);
     }
 
@@ -534,7 +533,9 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
      */
     @Transactional(rollbackFor = Exception.class)
     protected void doCalculateBatch(Long batchId) {
+        //获取薪资批次
         SalaryBatchEntity batch = getBatchRequired(batchId);
+
         batch.setBatchStatus(SalaryBatchStatusEnum.CALCULATING.name());// 设置批次状态为核算中
         salaryBatchMapper.updateById(batch);
         salaryBatchItemMapper.delete(Wrappers.lambdaQuery(SalaryBatchItemEntity.class)
@@ -542,6 +543,7 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
         List<SalaryEmployeeSnapshotEntity> employees = resolveBatchEmployees(batch);
         Map<Long, EmployeeSalaryProfileEntity> profileMap = listProfiles(employees.stream()
                 .map(SalaryEmployeeSnapshotEntity::getId).toList());
+        // 获取考勤数据
         Map<Long, AttendancePayrollSourceVO> attendanceMap = getAttendanceSummary(
                 batch.getSalaryMonth(), employees.stream().map(SalaryEmployeeSnapshotEntity::getId).toList());
         int yellow = 0;
@@ -549,6 +551,7 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
         int block = 0;
         BigDecimal totalGross = ZERO;
         BigDecimal totalNet = ZERO;
+        // 遍历员工并计算薪资项
         for (SalaryEmployeeSnapshotEntity employee : employees) {
             SalaryBatchItemEntity item = calculateEmployeeItem(batch, employee, profileMap.get(employee.getId()),
                     attendanceMap.get(employee.getId()));
@@ -595,32 +598,49 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
             item.setWarningReason("缺少员工薪资档案");
             return item;
         }
-        // 计算各项薪资
+        // 基本工资
         BigDecimal baseSalary = money(profile.getBaseSalary());
+        // 补贴
         BigDecimal allowance = money(profile.getAllowance());
+        // 绩效奖金
         BigDecimal performanceBonus = money(profile.getPerformanceBase());
+        // 加班费
         BigDecimal overtimePay = money(Optional.ofNullable(attendance)
                 .map(AttendancePayrollSourceVO::getOvertimeHours)
                 .orElse(BigDecimal.ZERO).multiply(new BigDecimal("50")));
+        // 迟到扣款
         BigDecimal lateDeduction = money(new BigDecimal(Optional.ofNullable(attendance)
                 .map(AttendancePayrollSourceVO::getLateCount).orElse(0)).multiply(new BigDecimal("20")));
+        // 请假扣款
         BigDecimal leaveDays = Optional.ofNullable(attendance).map(AttendancePayrollSourceVO::getLeaveDays).orElse(BigDecimal.ZERO);
+        // 请假扣款
         BigDecimal leaveDeduction = money(baseSalary.divide(new BigDecimal("21.75"), 2, RoundingMode.HALF_UP).multiply(leaveDays));
+        // 社保
         BigDecimal pensionInsurance = calculateInsuranceAmount(
                 profile.getPensionInsuranceBase(), profile.getPensionInsuranceRate(),
                 profile.getSocialInsuranceBase(), DEFAULT_PENSION_INSURANCE_RATE);
+        // 医疗保险
         BigDecimal medicalInsurance = calculateInsuranceAmount(
                 profile.getMedicalInsuranceBase(), profile.getMedicalInsuranceRate(),
                 profile.getSocialInsuranceBase(), DEFAULT_MEDICAL_INSURANCE_RATE);
+        // 失业保险
         BigDecimal unemploymentInsurance = calculateInsuranceAmount(
                 profile.getUnemploymentInsuranceBase(), profile.getUnemploymentInsuranceRate(),
                 profile.getSocialInsuranceBase(), DEFAULT_UNEMPLOYMENT_INSURANCE_RATE);
+        // 社保
         BigDecimal socialInsurance = pensionInsurance.add(medicalInsurance).add(unemploymentInsurance).setScale(2, RoundingMode.HALF_UP);
+        // 公积金
         BigDecimal housingFund = money(profile.getHousingFundBase()).multiply(new BigDecimal("0.07")).setScale(2, RoundingMode.HALF_UP);
+        // 计算薪资项
         BigDecimal gross = baseSalary.add(allowance).add(performanceBonus).add(overtimePay);
+        // 所得税
         BigDecimal incomeTax = calculateIncomeTax(gross.subtract(socialInsurance).subtract(housingFund));
+        // 扣款
         BigDecimal deduction = lateDeduction.add(leaveDeduction).add(socialInsurance).add(housingFund).add(incomeTax);
+        // 净工资
         BigDecimal net = gross.subtract(deduction).setScale(2, RoundingMode.HALF_UP);
+
+
         item.setBaseSalary(baseSalary);
         item.setAllowance(allowance);
         item.setPerformanceBonus(performanceBonus);
@@ -658,7 +678,9 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
             item.setWarningReason("本月请假天数超过 15 天");
             return;
         }
+        // 查找上月同员工的薪资
         BigDecimal previousNet = findPreviousNetSalary(employeeId, batch.getSalaryMonth());
+
         if (previousNet.compareTo(BigDecimal.ZERO) > 0) {
             BigDecimal rate = item.getNetSalary().subtract(previousNet).abs()
                     .divide(previousNet, 4, RoundingMode.HALF_UP);
@@ -679,6 +701,7 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
      * @return 上月同员工的薪资
      */
     private BigDecimal findPreviousNetSalary(Long employeeId, String salaryMonth) {
+        // 上月
         String previousMonth = YearMonth.parse(salaryMonth).minusMonths(1).toString();
         List<SalaryBatchEntity> previousBatches = salaryBatchMapper.selectList(Wrappers.lambdaQuery(SalaryBatchEntity.class)
                 .eq(SalaryBatchEntity::getSalaryMonth, previousMonth)
@@ -723,6 +746,7 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
      */
     private BigDecimal calculateIncomeTax(BigDecimal taxable) {
         BigDecimal threshold = new BigDecimal("5000");
+        // 如果税前收入小于等于5000，则税后收入为0
         if (taxable.compareTo(threshold) <= 0) {
             return ZERO;
         }
@@ -960,12 +984,15 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
      * 本方法使用的工具类: CollUtil(hutool),StrUtil(hutool),Collectors(JDK)
      */
     private String normalizeScopeValue(String scopeType, SalaryBatchCreateRequestDTO requestDTO) {
+        // 如果范围类型为 EMPLOYEE 且员工ID列表不为空，则返回员工ID列表
         if ("EMPLOYEE".equals(scopeType) && CollUtil.isNotEmpty(requestDTO.getEmployeeIds())) {
             return requestDTO.getEmployeeIds().stream().map(String::valueOf).collect(Collectors.joining(","));
         }
+        // 如果范围值不为空，则返回范围值
         if (StrUtil.isNotBlank(requestDTO.getScopeValue())) {
             return requestDTO.getScopeValue();
         }
+        // 如果范围类型为 ALL，则返回空范围值
         if ("ALL".equals(scopeType)) {
             return null;
         }
@@ -992,8 +1019,6 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
 
     /**
      * 校验当前用户是否具备薪资管理操作角色。
-     *
-     * @return 无返回值
      * 本方法使用的工具类: SecurityContextHolder(hrms-common),RoleService(hrms-system-auth),StrUtil(hutool)
      */
     private void assertSalaryManagerRole() {
@@ -1001,6 +1026,7 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
         if (userId == null) {
             throw new GlobalException(ErrorCode.FORBIDDEN, "无薪资管理权限");
         }
+        // 判断用户是否具备薪资管理角色
         boolean allowed = roleService.getRolesByUserId(userId).stream()
                 .map(RoleEntity::getRoleCode)
                 .filter(StrUtil::isNotBlank)
@@ -1104,6 +1130,7 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
      */
     private void applyAdjustmentToItem(SalaryBatchItemEntity item, String itemCode, BigDecimal adjustAmount) {
         BigDecimal amount = money(adjustAmount);
+        // 根据薪资项目编码进行相应的调整
         switch (itemCode) {
             case "BASE_SALARY" -> item.setBaseSalary(money(item.getBaseSalary()).add(amount));
             case "ALLOWANCE" -> item.setAllowance(money(item.getAllowance()).add(amount));
@@ -1204,23 +1231,32 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
         List<SalaryBatchAdjustmentEntity> adjustments = salaryBatchAdjustmentMapper.selectList(
                 Wrappers.lambdaQuery(SalaryBatchAdjustmentEntity.class)
                         .eq(SalaryBatchAdjustmentEntity::getBatchId, batchId));
+        // 如果没有人工调整，则刷新批次汇总数据并返回
         if (CollUtil.isEmpty(adjustments)) {
             refreshBatchSummary(batchId);
             return;
         }
+        // 按员工ID分组人工调整
         Map<Long, List<SalaryBatchAdjustmentEntity>> adjustmentMap = adjustments.stream()
                 .collect(Collectors.groupingBy(SalaryBatchAdjustmentEntity::getEmployeeId));
+        // 获取薪资批次所有明细
         List<SalaryBatchItemEntity> items = salaryBatchItemMapper.selectList(Wrappers.lambdaQuery(SalaryBatchItemEntity.class)
                 .eq(SalaryBatchItemEntity::getBatchId, batchId));
+        // 遍历每个薪资明细
         for (SalaryBatchItemEntity item : items) {
+            // 获取当前员工的所有人工调整
             List<SalaryBatchAdjustmentEntity> employeeAdjustments = adjustmentMap.get(item.getEmployeeId());
+            // 如果当前员工没有人工调整，则继续下一个明细
             if (CollUtil.isEmpty(employeeAdjustments)) {
                 continue;
             }
+            // 应用每个人工调整
             for (SalaryBatchAdjustmentEntity adjustment : employeeAdjustments) {
                 applyAdjustmentToItem(item, adjustment.getItemCode(), adjustment.getAdjustAmount());
             }
+            // 重新计算薪资明细金额
             recalculateItemAmount(item);
+            // 更新薪资明细
             salaryBatchItemMapper.updateById(item);
         }
         refreshBatchSummary(batchId);
@@ -1339,6 +1375,11 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
         return pension;
     }
 
+    /**
+     * 构建薪资导出文件名。
+     * @param batch 薪资批次
+     * @return 文件名
+     */
     private String buildSalaryExportFileName(SalaryBatchEntity batch) {
         return "薪资核算_" + batch.getSalaryMonth() + "_" + sanitizeFileName(batch.getBatchNo()) + ".xlsx";
     }
@@ -1354,6 +1395,11 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
         }
     }
 
+    /**
+     * 解析导出文件大小。
+     * @param path 文件路径
+     * @return 文件大小
+     */
     private long resolveFileSize(Path path) {
         try {
             return Files.size(path);
@@ -1362,6 +1408,12 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
         }
     }
 
+    /**
+     * 写入薪资批次工作簿。
+     * @param filePath 文件路径
+     * @param items 薪资明细列表
+     * 本方法使用的工具类: Workbook(XSSF), OutputStream(JDK)
+     */
     private void writeSalaryBatchWorkbook(Path filePath, List<SalaryBatchItemVO> items) {
         try (Workbook workbook = new XSSFWorkbook();
              OutputStream outputStream = Files.newOutputStream(filePath)) {
@@ -1379,6 +1431,10 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
         }
     }
 
+    /**
+     * 写入薪资批次表头。
+     * @param row 表头行
+     */
     private void writeSalaryBatchHeader(Row row) {
         String[] headers = {
                 "工号", "姓名", "部门", "基本工资", "补贴", "绩效", "加班",
@@ -1389,6 +1445,11 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
         }
     }
 
+    /**
+     * 写入薪资批次行数据。
+     * @param row 行数据
+     * @param item 薪资明细
+     */
     private void writeSalaryBatchRow(Row row, SalaryBatchItemVO item) {
         row.createCell(0).setCellValue(StrUtil.blankToDefault(item.getEmployeeNo(), ""));
         row.createCell(1).setCellValue(StrUtil.blankToDefault(item.getEmployeeName(), ""));
@@ -1404,10 +1465,20 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
         row.createCell(11).setCellValue(toExcelNumber(item.getNetSalary()));
     }
 
+    /**
+     * 将BigDecimal值转换为Excel可识别的数字。
+      * @param value 值
+      * @return Excel可识别的数字
+     */
     private double toExcelNumber(BigDecimal value) {
         return money(value).doubleValue();
     }
 
+    /**
+     * 清理文件名。
+     * @param value 值
+     * @return 清理后的文件名
+     */
     private String sanitizeFileName(String value) {
         if (StrUtil.isBlank(value)) {
             return "BATCH";

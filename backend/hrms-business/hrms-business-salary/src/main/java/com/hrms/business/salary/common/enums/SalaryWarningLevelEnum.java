@@ -1,4 +1,4 @@
-package com.hrms.business.salary.enums;
+package com.hrms.business.salary.common.enums;
 
 /**
  * 薪资核算预警级别。

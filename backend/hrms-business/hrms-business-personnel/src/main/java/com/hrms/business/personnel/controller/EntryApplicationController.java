@@ -6,6 +6,7 @@ import com.hrms.business.personnel.dto.EntryApplicationQueryDTO;
 import com.hrms.business.personnel.service.EntryApplicationService;
 import com.hrms.business.personnel.vo.EntryApplicationConfirmVO;
 import com.hrms.business.personnel.vo.EntryApplicationPageVO;
+import com.hrms.business.personnel.vo.EntryApplicationStatsVO;
 import com.hrms.business.personnel.vo.EntryApplicationSubmitVO;
 import com.hrms.common.web.PageResult;
 import com.hrms.common.web.Result;
@@ -45,6 +46,18 @@ public class EntryApplicationController {
     }
 
     /**
+     * 查询入职申请状态统计。
+     *
+     * @param queryDTO 入职申请查询参数
+     * @return 入职申请状态统计
+     */
+    @GetMapping("/stats")
+    @Operation(summary = "入职申请状态统计")
+    public Result<EntryApplicationStatsVO> statsEntryApplications(EntryApplicationQueryDTO queryDTO) {
+        return Result.success(entryApplicationService.statsEntryApplications(queryDTO));
+    }
+
+    /**
      * 查询入职申请详情。
      *
      * @param id 入职申请ID
@@ -57,7 +70,7 @@ public class EntryApplicationController {
     }
 
     /**
-     * 创建入职申请草稿。
+     * 创建入职申请。
      *
      * @param requestDTO 入职申请创建参数
      * @return 入职申请记录
@@ -70,7 +83,7 @@ public class EntryApplicationController {
     }
 
     /**
-     * 更新入职申请草稿。
+     * 更新入职申请。
      *
      * @param id 入职申请ID
      * @param requestDTO 入职申请更新参数
@@ -105,8 +118,7 @@ public class EntryApplicationController {
     @PostMapping("/{id}/confirm")
     @Operation(summary = "确认入职")
     public Result<EntryApplicationConfirmVO> confirmEntryApplication(@PathVariable Long id,
-                                                                    @Valid @RequestBody EntryApplicationConfirmRequestDTO requestDTO) {
+                                                                     @Valid @RequestBody EntryApplicationConfirmRequestDTO requestDTO) {
         return Result.success(entryApplicationService.confirmEntryApplication(id, requestDTO));
     }
-
 }

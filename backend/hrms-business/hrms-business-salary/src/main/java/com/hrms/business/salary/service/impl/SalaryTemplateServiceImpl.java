@@ -41,6 +41,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.hrms.business.salary.common.constant.SalaryTemplateConstant.*;
+
 /**
  * 薪资账套服务实现。
  */
@@ -48,16 +50,16 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class SalaryTemplateServiceImpl implements SalaryTemplateService {
 
-    private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-    private static final BigDecimal ZERO_RATE = BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
-    private static final BigDecimal DEFAULT_PENSION_INSURANCE_RATE = new BigDecimal("0.0800");
-    private static final BigDecimal DEFAULT_MEDICAL_INSURANCE_RATE = new BigDecimal("0.0200");
-    private static final BigDecimal DEFAULT_UNEMPLOYMENT_INSURANCE_RATE = new BigDecimal("0.0050");
 
+    // 薪资账套Mapper
     private final SalaryTemplateMapper salaryTemplateMapper;
+    // 薪资账套项Mapper
     private final SalaryTemplateItemMapper salaryTemplateItemMapper;
+    // 员工薪资配置Mapper
     private final EmployeeSalaryProfileMapper employeeSalaryProfileMapper;
+    // 员工薪资快照Mapper
     private final SalaryEmployeeSnapshotMapper employeeSnapshotMapper;
+    // Redis模板提供者
     private final ObjectProvider<StringRedisTemplate> redisTemplateProvider;
 
     /**
@@ -107,7 +109,9 @@ public class SalaryTemplateServiceImpl implements SalaryTemplateService {
         entity.setStatus(Optional.ofNullable(requestDTO.getStatus()).orElse(1));
         entity.setRemark(requestDTO.getRemark());
         salaryTemplateMapper.insert(entity);
+        //保存薪资模板项
         saveTemplateItems(entity.getId(), requestDTO.getItems());
+        // 清除缓存
         evictTemplateCache(entity.getId());
         return toTemplateVO(entity, listTemplateItems(List.of(entity.getId())));
     }
@@ -125,18 +129,25 @@ public class SalaryTemplateServiceImpl implements SalaryTemplateService {
     public SalaryTemplatePageVO updateTemplate(Long id, SalaryTemplateCreateOrUpdateRequestDTO requestDTO) {
         SalaryTemplateEntity entity = getTemplateRequired(id);
         entity.setTemplateName(requestDTO.getTemplateName());
+        // 只有当请求中包含模板代码时才更新
         if (StrUtil.isNotBlank(requestDTO.getTemplateCode())) {
             entity.setTemplateCode(requestDTO.getTemplateCode());
         }
+        // 只有当请求中包含范围类型时才更新
         entity.setScopeType(normalizeScopeType(requestDTO.getScopeType()));
+        // 只有当请求中包含范围值时才更新
         entity.setScopeValue(requestDTO.getScopeValue());
+        // 只有当请求中包含生效日期时才更新
         entity.setEffectiveDate(requestDTO.getEffectiveDate());
+        // 只有当请求中包含状态时才更新
         entity.setStatus(Optional.ofNullable(requestDTO.getStatus()).orElse(entity.getStatus()));
         entity.setRemark(requestDTO.getRemark());
         salaryTemplateMapper.updateById(entity);
         salaryTemplateItemMapper.delete(Wrappers.lambdaQuery(SalaryTemplateItemEntity.class)
                 .eq(SalaryTemplateItemEntity::getTemplateId, id));
+        // 保存薪资模板项
         saveTemplateItems(id, requestDTO.getItems());
+        // 清除缓存
         evictTemplateCache(id);
         return toTemplateVO(entity, listTemplateItems(List.of(id)));
     }
@@ -172,6 +183,7 @@ public class SalaryTemplateServiceImpl implements SalaryTemplateService {
     @Transactional(rollbackFor = Exception.class)
     public EmployeeSalaryProfileVO setEmployeeProfile(Long employeeId, EmployeeSalaryProfileRequestDTO requestDTO) {
         SalaryEmployeeSnapshotEntity employee = getEmployeeRequired(employeeId);
+        // 只有当请求中包含账套ID时才进行账套存在性检查
         if (requestDTO.getTemplateId() != null) {
             getTemplateRequired(requestDTO.getTemplateId());
         }
@@ -179,6 +191,7 @@ public class SalaryTemplateServiceImpl implements SalaryTemplateService {
                 .lambdaQuery(EmployeeSalaryProfileEntity.class)
                 .eq(EmployeeSalaryProfileEntity::getEmployeeId, employeeId));
         boolean create = profile == null;
+        // 如果是创建操作，则初始化薪资档案实体
         if (create) {
             profile = new EmployeeSalaryProfileEntity();
             profile.setEmployeeId(employeeId);
@@ -187,21 +200,29 @@ public class SalaryTemplateServiceImpl implements SalaryTemplateService {
         profile.setBaseSalary(money(requestDTO.getBaseSalary()));
         profile.setAllowance(money(requestDTO.getAllowance()));
         profile.setPerformanceBase(money(requestDTO.getPerformanceBase()));
+        // 解析社会保险基数，优先使用请求中的社会保险基数，如果为空则使用薪资档案中的社会保险基数
         BigDecimal pensionInsuranceBase = resolveInsuranceBase(
                 requestDTO.getPensionInsuranceBase(), requestDTO.getSocialInsuranceBase(), profile.getPensionInsuranceBase());
+        // 解析医疗保险基数，优先使用请求中的医疗保险基数，如果为空则使用薪资档案中的医疗保险基数
         BigDecimal medicalInsuranceBase = resolveInsuranceBase(
                 requestDTO.getMedicalInsuranceBase(), requestDTO.getSocialInsuranceBase(), profile.getMedicalInsuranceBase());
+        // 解析失业保险基数，优先使用请求中的失业保险基数，如果为空则使用薪资档案中的失业保险基数
         BigDecimal unemploymentInsuranceBase = resolveInsuranceBase(
                 requestDTO.getUnemploymentInsuranceBase(), requestDTO.getSocialInsuranceBase(), profile.getUnemploymentInsuranceBase());
+        // 解析社会保险基数，优先使用请求中的社会保险基数，如果为空则使用薪资档案中的社会保险基数
         profile.setPensionInsuranceBase(pensionInsuranceBase);
+        // 解析社会保险费率，优先使用请求中的社会保险费率，如果为空则使用薪资档案中的社会保险费率
         profile.setPensionInsuranceRate(resolveInsuranceRate(
                 requestDTO.getPensionInsuranceRate(), profile.getPensionInsuranceRate(), DEFAULT_PENSION_INSURANCE_RATE));
+        // 解析医疗保险费率，优先使用请求中的医疗保险费率，如果为空则使用薪资档案中的医疗保险费率
         profile.setMedicalInsuranceBase(medicalInsuranceBase);
+        // 解析失业保险费率，优先使用请求中的失业保险费率，如果为空则使用薪资档案中的失业保险费率
         profile.setMedicalInsuranceRate(resolveInsuranceRate(
                 requestDTO.getMedicalInsuranceRate(), profile.getMedicalInsuranceRate(), DEFAULT_MEDICAL_INSURANCE_RATE));
-        profile.setUnemploymentInsuranceBase(unemploymentInsuranceBase);
+        // 解析社会保险基数，优先使用请求中的社会保险基数，如果为空则使用薪资档案中的社会保险基数
         profile.setUnemploymentInsuranceRate(resolveInsuranceRate(
                 requestDTO.getUnemploymentInsuranceRate(), profile.getUnemploymentInsuranceRate(), DEFAULT_UNEMPLOYMENT_INSURANCE_RATE));
+        // 解析社会保险基数，优先使用请求中的社会保险基数，如果为空则使用薪资档案中的社会保险基数
         profile.setSocialInsuranceBase(resolveCompatibleSocialInsuranceBase(
                 requestDTO.getSocialInsuranceBase(), pensionInsuranceBase, medicalInsuranceBase, unemploymentInsuranceBase));
         profile.setHousingFundBase(money(requestDTO.getHousingFundBase()));
@@ -297,11 +318,13 @@ public class SalaryTemplateServiceImpl implements SalaryTemplateService {
                 .baseSalary(profile.getBaseSalary())
                 .allowance(profile.getAllowance())
                 .performanceBase(profile.getPerformanceBase())
+                // 解析社会保险基数，优先使用请求中的社会保险基数，如果为空则使用薪资档案中的社会保险基数
                 .socialInsuranceBase(resolveCompatibleSocialInsuranceBase(
                         profile.getSocialInsuranceBase(),
                         profile.getPensionInsuranceBase(),
                         profile.getMedicalInsuranceBase(),
                         profile.getUnemploymentInsuranceBase()))
+                // 解析社会保险基数，优先使用请求中的社会保险基数，如果为空则使用薪资档案中的社会保险基数
                 .pensionInsuranceBase(resolveInsuranceBase(
                         profile.getPensionInsuranceBase(), profile.getSocialInsuranceBase(), null))
                 .pensionInsuranceRate(resolveInsuranceRate(
@@ -397,6 +420,7 @@ public class SalaryTemplateServiceImpl implements SalaryTemplateService {
         }
         String scopeText = scope.trim();
         String normalized = normalizeTemplateScopeFilter(scopeText);
+        // 如果是范围类型，则按范围类型查询
         if (normalized != null) {
             wrapper.eq(SalaryTemplateEntity::getScopeType, normalized);
             return;
@@ -456,6 +480,11 @@ public class SalaryTemplateServiceImpl implements SalaryTemplateService {
         return Optional.ofNullable(value).orElse(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
     }
 
+    /**
+     * 格式化比例。
+      * @param value 值
+      * @return 格式化后比例
+     */
     private BigDecimal rate(BigDecimal value) {
         return Optional.ofNullable(value).orElse(BigDecimal.ZERO).setScale(4, RoundingMode.HALF_UP);
     }
@@ -542,6 +571,10 @@ public class SalaryTemplateServiceImpl implements SalaryTemplateService {
         return bankAccount.substring(0, 4) + " **** **** " + bankAccount.substring(bankAccount.length() - 4);
     }
 
+    /**
+     * 清除薪资模板缓存。
+     * @param templateId 模板ID
+     */
     private void evictTemplateCache(Long templateId) {
         StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
         if (redisTemplate != null) {

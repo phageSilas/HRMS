@@ -1,8 +1,9 @@
 /**
  * 转正管理页面。
- * 接入待转正列表和发起转正评估接口。
+ * 对接待转正列表和发起转正评估接口。
  */
 
+import { getDeptList } from '@/services/organization';
 import {
   applyRegularApplication,
   getRegularApplicationList,
@@ -23,17 +24,10 @@ import {
 } from '@ant-design/pro-components';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { Avatar, Button, Space, Tabs, Tag, Typography, message } from 'antd';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { formatProcessDateTime } from '../utils';
-import React, { useRef, useState } from 'react';
 
 const { Text } = Typography;
-
-const departmentOptions = [
-  { label: '人力资源部', value: 1 },
-  { label: '技术部', value: 2 },
-  { label: '产品部', value: 3 },
-  { label: '财务部', value: 4 },
-];
 
 const resultOptions = [
   { label: '转正', value: 'pass' },
@@ -71,20 +65,59 @@ const RegularPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'pending' | 'evaluated'>('pending');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [currentRow, setCurrentRow] = useState<RegularApplication>();
+  const [departmentOptions, setDepartmentOptions] = useState<
+    { label: string; value: number }[]
+  >([]);
+
+  useEffect(() => {
+    const loadDepartments = async () => {
+      try {
+        const departments = await getDeptList();
+        setDepartmentOptions(
+          (departments || []).map((item) => ({
+            label: item.deptName,
+            value: item.id,
+          })),
+        );
+      } catch (error) {
+        message.error('部门数据加载失败，请刷新后重试');
+      }
+    };
+    loadDepartments();
+  }, []);
+
+  const departmentFilterOption = useMemo(
+    () =>
+      (input: string, option?: { label?: string | number }) =>
+        String(option?.label || '')
+          .toLowerCase()
+          .includes(input.trim().toLowerCase()),
+    [],
+  );
 
   const columns: ProColumns<RegularApplication>[] = [
     {
       title: '关键词',
       dataIndex: 'keyword',
       hideInTable: true,
-      fieldProps: { placeholder: '员工姓名 / 工号' },
+      fieldProps: {
+        placeholder: '员工姓名 / 工号',
+        allowClear: true,
+      },
     },
     {
       title: '部门',
       dataIndex: 'departmentId',
       hideInTable: true,
       valueType: 'select',
-      fieldProps: { options: departmentOptions, allowClear: true },
+      fieldProps: {
+        options: departmentOptions,
+        allowClear: true,
+        showSearch: true,
+        filterOption: departmentFilterOption,
+        optionFilterProp: 'label',
+        placeholder: '请输入部门名称',
+      },
     },
     {
       title: '员工',

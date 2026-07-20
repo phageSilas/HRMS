@@ -497,6 +497,7 @@ const AttendanceRecordPage: React.FC = () => {
               loading={departmentLoading}
               placeholder="请选择部门"
               optionFilterProp="label"
+              className={styles.departmentSelect}
               options={departmentOptions}
             />
           </Form.Item>

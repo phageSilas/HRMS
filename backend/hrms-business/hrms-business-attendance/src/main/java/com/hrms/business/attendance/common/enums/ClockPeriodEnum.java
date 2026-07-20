@@ -1,4 +1,4 @@
-package com.hrms.business.attendance.enums;
+package com.hrms.business.attendance.common.enums;
 
 /**
  * 打卡时段枚举。

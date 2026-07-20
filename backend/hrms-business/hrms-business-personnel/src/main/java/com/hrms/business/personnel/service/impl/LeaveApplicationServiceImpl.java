@@ -16,15 +16,14 @@ import com.hrms.business.personnel.dto.LeaveApplicationCreateRequestDTO;
 import com.hrms.business.personnel.dto.LeaveApplicationQueryDTO;
 import com.hrms.business.personnel.entity.EmployeeSnapshotEntity;
 import com.hrms.business.personnel.entity.LeaveApplicationEntity;
-import com.hrms.business.personnel.enums.ApplicationStatusEnum;
-import com.hrms.business.personnel.enums.LeaveTypeEnum;
+import com.hrms.business.personnel.common.enums.ApplicationStatusEnum;
+import com.hrms.business.personnel.common.enums.LeaveTypeEnum;
 import com.hrms.business.personnel.mapper.EmployeeSnapshotMapper;
 import com.hrms.business.personnel.mapper.LeaveApplicationMapper;
 import com.hrms.business.personnel.service.LeaveApplicationService;
 import com.hrms.business.personnel.convert.PersonnelDisplayEnricher;
 import com.hrms.business.personnel.vo.LeaveApplicationCreateVO;
 import com.hrms.business.personnel.vo.LeaveApplicationPageVO;
-import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
 import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
@@ -42,6 +41,10 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static com.hrms.business.personnel.common.constant.LeaveApplicationConstant.*;
+import static com.hrms.business.personnel.common.enums.ServiceErrorCodeEnum.LEAVE_APPLICATION_DUPLICATE;
+import static com.hrms.common.exception.ErrorCode.EMPLOYEE_NOT_FOUND;
+
 /**
  * 离职申请服务实现
  */
@@ -49,21 +52,10 @@ import java.util.stream.Stream;
 @RequiredArgsConstructor
 public class LeaveApplicationServiceImpl implements LeaveApplicationService {
 
-    private static final ErrorCode EMPLOYEE_NOT_FOUND = new ErrorCode(40060, "员工不存在");
 
-    private static final ErrorCode LEAVE_APPLICATION_DUPLICATE = new ErrorCode(40081, "员工已有进行中的离职申请");
 
-    private static final Long IMPOSSIBLE_EMPLOYEE_ID = -1L;
-
-    private static final int DEFAULT_PAGE_NUM = 1;
-
-    private static final int DEFAULT_PAGE_SIZE = 20;
-
-    private static final int MAX_PAGE_SIZE = 200;
 
     private final LeaveApplicationMapper leaveApplicationMapper;
-
-    private final EmployeeSnapshotMapper employeeSnapshotMapper;
 
     private final EmployeeService employeeService;
 
@@ -252,7 +244,7 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
         // 跨模块调用已完成：当前调用 EmployeeService#listEmployees(employeeQueryDTO) 按部门和关键词查询员工列表。
         EmployeeQueryDTO employeeQueryDTO = new EmployeeQueryDTO();
         employeeQueryDTO.setKeyword(queryDTO.getKeyword());
-        employeeQueryDTO.setDeptIds(queryDTO.getDepartmentId() == null ? null : List.of(queryDTO.getDepartmentId()));
+        employeeQueryDTO.setDeptIds(resolveTargetDeptIds(queryDTO.getDepartmentId()));
         employeeQueryDTO.setPageNum(1);
         employeeQueryDTO.setPageSize(MAX_PAGE_SIZE);
         return employeeService.listEmployees(employeeQueryDTO).getRecords().stream()
@@ -279,10 +271,20 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
     /**
      * 批量查询员工快照映射。
      *
-     * @param employeeIds 员工ID列表
      * @return 员工快照映射
      * 本方法使用的工具类: CollUtil(hutool)
      */
+    private List<Long> resolveTargetDeptIds(Long departmentId) {
+        if (departmentId == null) {
+            return null;
+        }
+        List<Long> deptIds = deptService.getSubDeptIds(departmentId);
+        if (CollUtil.isEmpty(deptIds)) {
+            return List.of(departmentId);
+        }
+        return deptIds;
+    }
+
     private Map<Long, EmployeeSnapshotEntity> listEmployeeSnapshotMap(List<Long> employeeIds) {
         if (CollUtil.isEmpty(employeeIds)) {
             return Collections.emptyMap();

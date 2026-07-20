@@ -9,12 +9,15 @@ import {
   createEntryApplication,
   getEntryApplication,
   getEntryApplicationList,
+  getEntryApplicationStats,
   submitEntryApplication,
   updateEntryApplication,
 } from '@/services/process';
 import type {
   EntryApplication,
   EntryApplicationFormValues,
+  EntryApplicationQuery,
+  EntryApplicationStats,
 } from '@/services/process';
 import { getDeptList, getPostList } from '@/services/organization';
 import {
@@ -175,7 +178,14 @@ const EntryPage: React.FC = () => {
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [editingLoadingId, setEditingLoadingId] = useState<number>();
   const [activeStatus, setActiveStatus] = useState<string>('all');
-  const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
+  const [statusCounts, setStatusCounts] = useState<EntryApplicationStats>({
+    all: 0,
+    draft: 0,
+    approving: 0,
+    approved: 0,
+    rejected: 0,
+    entered: 0,
+  });
   const [realDepartmentOptions, setRealDepartmentOptions] = useState<
     { label: string; value: number }[]
   >([]);
@@ -189,28 +199,28 @@ const EntryPage: React.FC = () => {
     () => [
       {
         label: '草稿',
-        value: statusCounts[String(ApprovalStatus.DRAFT)] || 0,
+        value: statusCounts.draft || 0,
         color: '#6b7280',
         border: '#e5e7eb',
         background: '#ffffff',
       },
       {
         label: '审批中',
-        value: statusCounts[String(ApprovalStatus.APPROVING)] || 0,
+        value: statusCounts.approving || 0,
         color: '#b7791f',
         border: '#fde68a',
         background: '#fffbeb',
       },
       {
         label: '待入职',
-        value: statusCounts[String(ApprovalStatus.APPROVED)] || 0,
+        value: statusCounts.approved || 0,
         color: '#2563eb',
         border: '#bfdbfe',
         background: '#eff6ff',
       },
       {
         label: '已入职',
-        value: statusCounts[String(ApprovalStatus.ENTERED)] || 0,
+        value: statusCounts.entered || 0,
         color: '#16a34a',
         border: '#bbf7d0',
         background: '#f0fdf4',
@@ -219,11 +229,23 @@ const EntryPage: React.FC = () => {
     [statusCounts],
   );
 
+  const latestBaseQueryRef = useRef<
+    Omit<EntryApplicationQuery, 'pageNum' | 'pageSize' | 'approvalStatus'>
+  >({});
+
+  const loadStatusCounts = async (
+    query: Omit<EntryApplicationQuery, 'pageNum' | 'pageSize' | 'approvalStatus'>,
+  ) => {
+    const stats = await getEntryApplicationStats(query);
+    setStatusCounts(stats);
+  };
+
   const reloadTable = () => actionRef.current?.reload();
 
   const handleSubmitApproval = async (record: EntryApplication) => {
     await submitEntryApplication(record.id);
     message.success('已提交入职审批');
+    await loadStatusCounts(latestBaseQueryRef.current);
     reloadTable();
   };
 
@@ -251,6 +273,7 @@ const EntryPage: React.FC = () => {
       message.success(`已确认入职，工号：${result.employeeNo}`);
       setConfirmRecord(undefined);
       confirmForm.resetFields();
+      await loadStatusCounts(latestBaseQueryRef.current);
       reloadTable();
     } finally {
       setConfirmLoading(false);
@@ -295,6 +318,10 @@ const EntryPage: React.FC = () => {
     loadOrganizationOptions();
   }, []);
 
+  useEffect(() => {
+    loadStatusCounts({});
+  }, []);
+
   const columns: ProColumns<EntryApplication>[] = [
     {
       title: '关键词',
@@ -307,7 +334,16 @@ const EntryPage: React.FC = () => {
       dataIndex: 'departmentId',
       hideInTable: true,
       valueType: 'select',
-      fieldProps: { options: realDepartmentOptions, allowClear: true },
+      fieldProps: {
+        options: realDepartmentOptions,
+        allowClear: true,
+        showSearch: true,
+        optionFilterProp: 'label',
+        filterOption: (input: string, option?: { label?: string | number }) =>
+          String(option?.label || '')
+            .toLowerCase()
+            .includes(input.trim().toLowerCase()),
+      },
     },
     {
       title: '申请日期',
@@ -468,12 +504,24 @@ const EntryPage: React.FC = () => {
           activeKey={activeStatus}
           onChange={(key) => {
             setActiveStatus(key);
-            setTimeout(() => reloadTable(), 0);
+            setTimeout(() => actionRef.current?.reloadAndRest?.(), 0);
           }}
           items={statusTabs.map((item) => ({
             key: item.key,
             label: `${item.label} ${
-              item.key === 'all' ? statusCounts.all || 0 : statusCounts[item.key] || 0
+              item.key === 'all'
+                ? statusCounts.all || 0
+                : statusCounts[
+                    item.key === String(ApprovalStatus.DRAFT)
+                      ? 'draft'
+                      : item.key === String(ApprovalStatus.APPROVING)
+                        ? 'approving'
+                        : item.key === String(ApprovalStatus.APPROVED)
+                          ? 'approved'
+                          : item.key === String(ApprovalStatus.REJECTED)
+                            ? 'rejected'
+                            : 'entered'
+                  ] || 0
             }`,
           }))}
         />
@@ -484,25 +532,25 @@ const EntryPage: React.FC = () => {
           columns={columns}
           scroll={{ x: 1180 }}
           request={async (params) => {
-            const result = await getEntryApplicationList({
-              pageNum: params.current || 1,
-              pageSize: params.pageSize || 20,
+            const baseQuery = {
               keyword: params.keyword as string,
-              approvalStatus:
-                activeStatus === 'all' ? undefined : Number(activeStatus),
               departmentId: params.departmentId as number,
               dateStart: params.dateStart as string,
               dateEnd: params.dateEnd as string,
+            };
+            const baseQueryKey = JSON.stringify(baseQuery);
+            const previousBaseQueryKey = JSON.stringify(latestBaseQueryRef.current);
+            if (baseQueryKey !== previousBaseQueryKey) {
+              latestBaseQueryRef.current = baseQuery;
+              await loadStatusCounts(baseQuery);
+            }
+            const result = await getEntryApplicationList({
+              pageNum: params.current || 1,
+              pageSize: params.pageSize || 20,
+              ...baseQuery,
+              approvalStatus:
+                activeStatus === 'all' ? undefined : Number(activeStatus),
             });
-            const counts = (result.records || []).reduce<Record<string, number>>(
-              (map, item) => {
-                const key = String(item.approvalStatus);
-                map[key] = (map[key] || 0) + 1;
-                return map;
-              },
-              { all: result.total || 0 },
-            );
-            setStatusCounts(counts);
             return {
               data: result.records || [],
               total: result.total || 0,
@@ -510,7 +558,14 @@ const EntryPage: React.FC = () => {
             };
           }}
           pagination={{ defaultPageSize: 20, showSizeChanger: true }}
-          search={{ labelWidth: 88, span: 8 }}
+          search={{
+            labelWidth: 88,
+            span: 8,
+            onReset: async () => {
+              latestBaseQueryRef.current = {};
+              await loadStatusCounts({});
+            },
+          }}
           toolbar={{
             title: '入职申请列表',
             actions: [
@@ -559,6 +614,7 @@ const EntryPage: React.FC = () => {
             await createEntryApplication(payload);
             message.success('入职申请已保存为草稿');
           }
+            await loadStatusCounts(latestBaseQueryRef.current);
             setDrawerOpen(false);
             reloadTable();
             return true;
