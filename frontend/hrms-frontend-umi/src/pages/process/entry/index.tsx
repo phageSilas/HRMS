@@ -19,7 +19,8 @@ import type {
   EntryApplicationQuery,
   EntryApplicationStats,
 } from '@/services/process';
-import { getDeptList, getPostList } from '@/services/organization';
+import { getEmployeeList } from '@/services/employee';
+import { getDeptDetail, getDeptList, getPostList } from '@/services/organization';
 import {
   CheckCircleOutlined,
   EditOutlined,
@@ -67,29 +68,6 @@ const statusMeta: Record<number, { text: string; color: string }> = {
   [ApprovalStatus.REJECTED]: { text: '已拒绝', color: 'red' },
   [ApprovalStatus.ENTERED]: { text: '已入职', color: 'green' },
 };
-
-const departmentOptions = [
-  { label: '人力资源部', value: 1 },
-  { label: '技术部', value: 2 },
-  { label: '产品部', value: 3 },
-  { label: '财务部', value: 4 },
-  { label: '运营部', value: 5 },
-];
-
-const postOptions = [
-  { label: 'HR 专员', value: 101 },
-  { label: 'Java 开发工程师', value: 102 },
-  { label: '前端开发工程师', value: 103 },
-  { label: '产品经理', value: 104 },
-  { label: '薪资专员', value: 105 },
-  { label: '运营专员', value: 106 },
-];
-
-const leaderOptions = [
-  { label: '王敏', value: 1001 },
-  { label: '李强', value: 1002 },
-  { label: '赵琳', value: 1003 },
-];
 
 const hireTypeOptions = [
   { label: '全职', value: 1 },
@@ -170,6 +148,25 @@ function getInitial(name?: string) {
   return name?.slice(0, 1) || '人';
 }
 
+function buildLeaderRoleLabel(
+  employeeId: number,
+  leaderIds: Set<number>,
+  postName?: string,
+) {
+  const isLeader = leaderIds.has(employeeId);
+  const isHr = /hr|人力/i.test(postName || '');
+  if (isLeader && isHr) {
+    return 'Leader / HR';
+  }
+  if (isLeader) {
+    return 'Leader';
+  }
+  if (isHr) {
+    return 'HR';
+  }
+  return '';
+}
+
 const EntryPage: React.FC = () => {
   const actionRef = useRef<ActionType>();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -192,8 +189,13 @@ const EntryPage: React.FC = () => {
   const [realPostOptions, setRealPostOptions] = useState<
     { label: string; value: number }[]
   >([]);
+  const [realLeaderOptions, setRealLeaderOptions] = useState<
+    { label: string; value: number }[]
+  >([]);
+  const [leaderLoading, setLeaderLoading] = useState(false);
   const [confirmForm] = Form.useForm<{ actualHireDate: Dayjs }>();
   const [entryForm] = Form.useForm<EntryApplicationFormValues>();
+  const selectedDeptId = Form.useWatch('deptId', entryForm);
 
   const statisticCards = useMemo(
     () => [
@@ -317,6 +319,78 @@ const EntryPage: React.FC = () => {
     };
     loadOrganizationOptions();
   }, []);
+
+  useEffect(() => {
+    const loadLeaderOptions = async () => {
+      if (!drawerOpen || !selectedDeptId) {
+        setRealLeaderOptions([]);
+        setLeaderLoading(false);
+        if (!selectedDeptId) {
+          entryForm.setFieldsValue({ leaderId: undefined });
+        }
+        return;
+      }
+      setLeaderLoading(true);
+      try {
+        const currentDept = await getDeptDetail(selectedDeptId);
+        const parentDept =
+          currentDept.parentId && currentDept.parentId > 0
+            ? await getDeptDetail(currentDept.parentId)
+            : undefined;
+        const targetDeptIds = [
+          currentDept.id,
+          ...(parentDept?.id ? [parentDept.id] : []),
+        ];
+        const leaderIds = new Set<number>(
+          [currentDept.leaderEmployeeId, parentDept?.leaderEmployeeId].filter(
+            (item): item is number => typeof item === 'number' && item > 0,
+          ),
+        );
+        const employeePage = await getEmployeeList({
+          deptIds: targetDeptIds,
+          pageNum: 1,
+          pageSize: 200,
+        });
+        const options = (employeePage.records || [])
+          .filter((employee) => {
+            const isLeader = leaderIds.has(employee.id);
+            const isHr = /hr|人力/i.test(employee.postName || '');
+            return isLeader || isHr;
+          })
+          .map((employee) => {
+            const roleLabel = buildLeaderRoleLabel(
+              employee.id,
+              leaderIds,
+              employee.postName,
+            );
+            return {
+              label: roleLabel
+                ? `${employee.employeeName}（${employee.deptName} · ${roleLabel}）`
+                : `${employee.employeeName}（${employee.deptName}）`,
+              value: employee.id,
+            };
+          })
+          .filter(
+            (option, index, array) =>
+              array.findIndex((item) => item.value === option.value) === index,
+          );
+        setRealLeaderOptions(options);
+        const currentLeaderId = entryForm.getFieldValue('leaderId');
+        if (
+          currentLeaderId &&
+          !options.some((option) => option.value === currentLeaderId)
+        ) {
+          entryForm.setFieldsValue({ leaderId: undefined });
+        }
+      } catch (error) {
+        message.error('直接汇报人候选加载失败，请重新选择部门后重试');
+        setRealLeaderOptions([]);
+      } finally {
+        setLeaderLoading(false);
+      }
+    };
+    loadLeaderOptions();
+  }, [drawerOpen, selectedDeptId, entryForm]);
 
   useEffect(() => {
     loadStatusCounts({});
@@ -683,7 +757,16 @@ const EntryPage: React.FC = () => {
             name="leaderId"
             label="直接汇报人"
             width="md"
-            options={leaderOptions}
+            options={realLeaderOptions}
+            fieldProps={{
+              disabled: !selectedDeptId,
+              loading: leaderLoading,
+              placeholder: selectedDeptId
+                ? '请选择直接汇报人'
+                : '请先选择所属部门',
+              showSearch: true,
+              optionFilterProp: 'label',
+            }}
           />
         </ProFormGroup>
 
