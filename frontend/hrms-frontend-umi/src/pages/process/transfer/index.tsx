@@ -42,6 +42,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { formatProcessDateTime } from '../utils';
 
 const { Text } = Typography;
+const SYSTEM_ADMIN_POST_ID = 3001;
 
 type SelectOption = {
   label: string;
@@ -156,15 +157,21 @@ const TransferPage: React.FC = () => {
   useEffect(() => {
     const loadDepartments = async () => {
       try {
-        const departments = await getDeptList();
+        const [departments, postPage] = await Promise.all([
+          getDeptList(),
+          getPostList({ pageNum: 1, pageSize: 200 }),
+        ]);
         setDepartmentOptions(
           (departments || []).map((item) => ({
             label: item.deptName,
             value: item.id,
           })),
         );
+        setRealPostOptions(
+          (postPage.records || []).filter((item) => item.id !== SYSTEM_ADMIN_POST_ID),
+        );
       } catch (error) {
-        message.error('部门数据加载失败，请刷新后重试');
+        message.error('部门或岗位数据加载失败，请刷新后重试');
       }
     };
     loadDepartments();
@@ -256,14 +263,10 @@ const TransferPage: React.FC = () => {
 
   useEffect(() => {
     if (!modalOpen || !selectedToDeptId) {
-      setRealPostOptions([]);
       setRealLeaderOptions([]);
-      setPostLoading(false);
       setLeaderLoading(false);
       if (!selectedToDeptId) {
         form.setFieldsValue({
-          toPostId: undefined,
-          toJobLevel: undefined,
           toLeaderId: undefined,
         });
       }
@@ -273,27 +276,12 @@ const TransferPage: React.FC = () => {
     let cancelled = false;
 
     const loadDeptRelatedOptions = async () => {
-      setPostLoading(true);
       setLeaderLoading(true);
       try {
-        const [postPage, currentDept] = await Promise.all([
-          getPostList({ pageNum: 1, pageSize: 200, deptId: selectedToDeptId }),
-          getDeptDetail(selectedToDeptId),
-        ]);
+        const currentDept = await getDeptDetail(selectedToDeptId);
 
         if (cancelled) {
           return;
-        }
-
-        const nextPosts = postPage.records || [];
-        setRealPostOptions(nextPosts);
-
-        const currentPostId = form.getFieldValue('toPostId');
-        if (currentPostId && !nextPosts.some((item) => item.id === currentPostId)) {
-          form.setFieldsValue({
-            toPostId: undefined,
-            toJobLevel: undefined,
-          });
         }
 
         const parentDept =
@@ -359,13 +347,11 @@ const TransferPage: React.FC = () => {
         }
       } catch (error) {
         if (!cancelled) {
-          setRealPostOptions([]);
           setRealLeaderOptions([]);
-          message.error('新岗位或新汇报人候选加载失败，请重新选择新部门后重试');
+          message.error('新汇报人候选加载失败，请重新选择新部门后重试');
         }
       } finally {
         if (!cancelled) {
-          setPostLoading(false);
           setLeaderLoading(false);
         }
       }
