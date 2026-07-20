@@ -14,7 +14,7 @@
  * @module ApprovalDetail
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, history } from '@umijs/max';
 import { PageContainer } from '@ant-design/pro-components';
 import {
@@ -47,8 +47,9 @@ import {
   operateApproval,
 } from '@/services/approval';
 import type { ApprovalDetail, ApprovalNode } from '@/services/approval';
-import { getEmployeeList } from '@/services/employee';
-import type { EmployeeBrief } from '@/services/employee';
+import { BUSINESS_TYPE_COLOR_MAP } from '@/constants/enums';
+import { useEmployeeSearch } from '@/hooks/useEmployeeSearch';
+import { getErrorMessage } from '@/utils/error';
 
 // ============ 业务类型表单字段中文映射 ============
 
@@ -140,18 +141,6 @@ const STATUS_COLOR_MAP: Record<string, string> = {
   EXPIRED: 'warning',
 };
 
-/** 业务类型 → Tag 颜色映射 */
-const BUSINESS_TYPE_COLOR_MAP: Record<string, string> = {
-  ENTRY: 'green',
-  REGULAR: 'blue',
-  TRANSFER: 'purple',
-  LEAVE: 'red',
-  LEAVE_REQUEST: 'orange',
-  CORRECTION: 'cyan',
-  OVERTIME: 'geekblue',
-  SALARY: 'magenta',
-};
-
 /**
  * 根据业务类型和字段名获取中文标签
  *
@@ -205,10 +194,7 @@ const DetailPage: React.FC = () => {
   const [operateLoading, setOperateLoading] = useState<boolean>(false);
   const [operateForm] = Form.useForm();
   /** 转交目标员工选项列表 */
-  const [employeeOptions, setEmployeeOptions] = useState<EmployeeBrief[]>([]);
-  const [searching, setSearching] = useState<boolean>(false);
-  /** 搜索防抖 timer */
-  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { options: employeeOptions, searching, search: handleEmployeeSearch } = useEmployeeSearch();
 
   // ============ 数据加载 ============
 
@@ -225,8 +211,8 @@ const DetailPage: React.FC = () => {
     try {
       const data = await getApprovalDetail(Number(id));
       setDetail(data);
-    } catch (err: any) {
-      setLoadError(err?.message || '获取审批详情失败');
+    } catch (err: unknown) {
+      setLoadError(getErrorMessage(err, '获取审批详情失败'));
     } finally {
       setLoading(false);
     }
@@ -235,34 +221,6 @@ const DetailPage: React.FC = () => {
   useEffect(() => {
     fetchDetail();
   }, [fetchDetail]);
-
-  // ============ 员工搜索（转交目标选取）============
-
-  /**
-   * 搜索员工（防抖 300ms）
-   *
-   * 用于转交操作中选择目标审批人。关键词为空或太短时清空选项。
-   */
-  const handleEmployeeSearch = useCallback((keyword: string) => {
-    if (searchTimerRef.current) {
-      clearTimeout(searchTimerRef.current);
-    }
-    if (!keyword || keyword.length < 1) {
-      setEmployeeOptions([]);
-      return;
-    }
-    searchTimerRef.current = setTimeout(async () => {
-      setSearching(true);
-      try {
-        const result = await getEmployeeList({ keyword, pageNum: 1, pageSize: 20 });
-        setEmployeeOptions(result.records || []);
-      } catch {
-        setEmployeeOptions([]);
-      } finally {
-        setSearching(false);
-      }
-    }, 300);
-  }, []);
 
   // ============ 审批操作 ============
 
@@ -288,10 +246,10 @@ const DetailPage: React.FC = () => {
       setOperateModal({ visible: false, action: 'approve' });
       operateForm.resetFields();
       fetchDetail();
-    } catch (error: any) {
+    } catch (err: unknown) {
       // Ant Design 表单校验失败时 error 包含 errorFields，此时不额外提示
-      if (error?.errorFields) return;
-      message.error(error?.message || '操作失败');
+      if (err && typeof err === 'object' && 'errorFields' in err) return;
+      message.error(getErrorMessage(err, '操作失败'));
     } finally {
       setOperateLoading(false);
     }

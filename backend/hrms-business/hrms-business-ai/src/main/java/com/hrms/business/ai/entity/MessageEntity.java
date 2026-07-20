@@ -7,8 +7,13 @@ import lombok.EqualsAndHashCode;
 
 /**
  * AI 消息记录实体
+ * <p>
+ * 映射表 hr_ai_message，存储用户与 AI 助手的每一条消息。
+ * 用户消息（role=user）和 AI 回复（role=assistant）均存储在此表。
+ * 元数据字段存储路由建议、引用来源等额外信息。
+ * </p>
  *
- * @TableName hr_ai_message
+ * @since 2026-07-20
  */
 @Data
 @EqualsAndHashCode(callSuper = true)

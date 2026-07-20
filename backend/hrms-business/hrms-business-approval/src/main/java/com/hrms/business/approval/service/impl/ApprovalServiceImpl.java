@@ -50,37 +50,4 @@ public class ApprovalServiceImpl implements ApprovalService {
         return approvalEngine.startApproval(type, bizId, formData, userId, deptId, null);
     }
 
-    /**
-     * 审批通过
-     *
-     * @param taskId  审批任务 ID
-     * @param comment 审批意见
-     */
-    @Override
-    public void approve(Long taskId, String comment) {
-        approvalEngine.processAction(taskId, "approve", comment, null);
-    }
-
-    /**
-     * 审批驳回
-     *
-     * @param taskId  审批任务 ID
-     * @param comment 驳回原因
-     */
-    @Override
-    public void reject(Long taskId, String comment) {
-        approvalEngine.processAction(taskId, "reject", comment, null);
-    }
-
-    /**
-     * 转交审批任务
-     *
-     * @param taskId       审批任务 ID
-     * @param delegateToId 转交目标用户 ID
-     */
-    @Override
-    public void delegate(Long taskId, Long delegateToId) {
-        approvalEngine.processAction(taskId, "transfer", null, delegateToId);
-    }
-
 }

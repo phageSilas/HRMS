@@ -12,9 +12,10 @@ import {
 } from '@ant-design/icons';
 import { history } from '@umijs/max';
 import { Avatar, Card, Col, Row, Space, Spin, Tag, Typography } from 'antd';
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { getProfile } from '@/services/profile';
-import type { ProfileVO } from '@/services/profile';
+import { useAsyncData } from '@/hooks/useAsyncData';
+import styles from './style.less';
 
 const { Paragraph, Text, Title } = Typography;
 
@@ -75,32 +76,12 @@ const QUICK_ENTRIES: QuickEntry[] = [
 // ============ 页面组件 ============
 
 const ProfileIndexPage: React.FC = () => {
-  const [profile, setProfile] = useState<ProfileVO | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    getProfile()
-      .then((data) => {
-        if (!cancelled) {
-          setProfile(data);
-          setLoading(false);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err?.message || '获取个人信息失败');
-          setLoading(false);
-        }
-      });
-    return () => { cancelled = true; };
-  }, []);
+  const { data: profile, loading, error } = useAsyncData(() => getProfile());
 
   return (
-    <div style={{ padding: 24 }}>
+    <div className={styles.pageContainer}>
       {/* 个人信息摘要卡片 */}
-      <Card bordered={false} style={{ marginBottom: 20, borderRadius: 8 }}>
+      <Card bordered={false} className={styles.profileCard}>
         {loading ? (
           <Spin />
         ) : error || !profile ? (
@@ -116,7 +97,7 @@ const ProfileIndexPage: React.FC = () => {
             </Col>
             <Col flex="auto">
               <Space direction="vertical" size={4}>
-                <Title level={4} style={{ margin: 0 }}>
+                <Title level={4} className={styles.profileTitle}>
                   {profile.employeeName || '未知'}
                 </Title>
                 <Space split={<Text type="secondary">|</Text>}>
@@ -143,7 +124,7 @@ const ProfileIndexPage: React.FC = () => {
             <Card
               hoverable
               bordered={false}
-              style={{ borderRadius: 8, textAlign: 'center', height: 120 }}
+              className={styles.entryCard}
               bodyStyle={{
                 display: 'flex',
                 flexDirection: 'column',
@@ -154,18 +135,8 @@ const ProfileIndexPage: React.FC = () => {
               onClick={() => history.push(entry.path)}
             >
               <div
-                style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 12,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 24,
-                  color: entry.color,
-                  backgroundColor: entry.bgColor,
-                  marginBottom: 8,
-                }}
+                className={styles.entryIcon}
+                style={{ color: entry.color, backgroundColor: entry.bgColor }}
               >
                 {entry.icon}
               </div>
@@ -176,8 +147,8 @@ const ProfileIndexPage: React.FC = () => {
       </Row>
 
       {/* 底部说明 */}
-      <Card bordered={false} style={{ marginTop: 20, borderRadius: 8 }}>
-        <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+      <Card bordered={false} className={styles.footerCard}>
+        <Paragraph type="secondary" className={styles.footerText}>
           个人中心是您的一站式自助入口，可在此查看档案、考勤打卡、请假、薪资和修改密码。
         </Paragraph>
       </Card>

@@ -1,6 +1,5 @@
 package com.hrms.business.ai.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.hrms.business.ai.entity.ConversationEntity;
@@ -29,6 +28,8 @@ import java.util.stream.Collectors;
  * 会话列表按更新时间倒序排列，每条会话附带最后一条消息的摘要（前 50 字）。
  * 删除操作使用 MyBatis-Plus 逻辑删除（@TableLogic）。
  * </p>
+ *
+ * @since 2026-07-20
  */
 @Slf4j
 @Service
@@ -82,18 +83,6 @@ public class ConversationServiceImpl implements ConversationService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Long createConversation(Long userId, String title) {
-        ConversationEntity entity = new ConversationEntity();
-        entity.setUserId(userId);
-        entity.setTitle(title);
-        entity.setStatus(1); // 活跃
-        entity.setMessageCount(0);
-        conversationMapper.insert(entity);
-        return entity.getId();
-    }
-
-    @Override
-    @Transactional(rollbackFor = Exception.class)
     public void updateTitle(Long userId, Long conversationId, String title) {
         ConversationEntity conversation = getAndCheckOwnership(userId, conversationId);
         conversation.setTitle(title);
@@ -108,20 +97,16 @@ public class ConversationServiceImpl implements ConversationService {
         conversationMapper.deleteById(conversation.getId());
     }
 
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public void incrementMessageCount(Long conversationId) {
-        ConversationEntity entity = conversationMapper.selectById(conversationId);
-        if (entity != null) {
-            entity.setMessageCount(entity.getMessageCount() + 1);
-            conversationMapper.updateById(entity);
-        }
-    }
-
     // ========== 私有方法 ==========
 
     /**
      * 查询会话并校验所属用户
+     * <p>确保当前用户只能操作自己的会话，防止越权访问他人数据。</p>
+     *
+     * @param userId          当前用户 ID
+     * @param conversationId  会话 ID
+     * @return 会话实体
+     * @throws GlobalException 会话不存在或不属于该用户时抛出
      */
     private ConversationEntity getAndCheckOwnership(Long userId, Long conversationId) {
         ConversationEntity conversation = conversationMapper.selectById(conversationId);

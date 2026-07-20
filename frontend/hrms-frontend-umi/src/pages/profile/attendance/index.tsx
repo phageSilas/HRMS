@@ -5,7 +5,7 @@
 import { PageContainer } from '@ant-design/pro-components';
 import { Button, Card, Space, message } from 'antd';
 import dayjs from 'dayjs';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   clockIn,
   createLeave,
@@ -29,11 +29,12 @@ import MakeupRecordsTable from './components/MakeupRecordsTable';
 import OvertimeModal from './components/OvertimeModal';
 import OvertimeRecordsTable from './components/OvertimeRecordsTable';
 import LeaveModal from './components/LeaveModal';
+import styles from './style.less';
 
 const ProfileAttendancePage: React.FC = () => {
   const [currentMonth, setCurrentMonth] = useState(dayjs().format('YYYY-MM'));
   const [calendarError, setCalendarError] = useState<string | null>(null);
-  const clockInLoading = useRef(false);
+  const [clockInLoading, setClockInLoading] = useState(false);
 
   // —— 弹窗状态 ——
   const [detailDay, setDetailDay] = useState<AttendanceDayVO | null>(null);
@@ -61,11 +62,9 @@ const ProfileAttendancePage: React.FC = () => {
     try {
       setCalendarLoading(true);
       const cal = await getAttendanceCalendar(currentMonth);
-      console.log('[DEBUG fetch] calendar:', cal, 'days:', cal?.days?.length);
       setCalendarData(cal);
       setCalendarError(null);
     } catch (err: any) {
-      console.error('[DEBUG fetch] calendar error:', err?.message);
       setCalendarError(err?.message || '获取考勤日历失败');
     } finally {
       setCalendarLoading(false);
@@ -75,7 +74,6 @@ const ProfileAttendancePage: React.FC = () => {
     try {
       setMakeupLoading(true);
       const mk = await getMakeupRecords();
-      console.log('[DEBUG fetch] makeup:', mk, 'count:', mk?.length);
       setMakeupRecords(mk || []);
     } catch {
       setMakeupRecords([]);
@@ -87,7 +85,6 @@ const ProfileAttendancePage: React.FC = () => {
     try {
       setOvertimeLoading(true);
       const ot = await getOvertimeRecords();
-      console.log('[DEBUG fetch] overtime:', ot, 'count:', ot?.length);
       setOvertimeRecords(ot || []);
     } catch {
       setOvertimeRecords([]);
@@ -109,7 +106,6 @@ const ProfileAttendancePage: React.FC = () => {
 
   const calendarDays = useMemo<AttendanceDayVO[]>(() => {
     const days = calendarData?.days || [];
-    console.log('[DEBUG] calendarDays:', days.length, '条');
     return days;
   }, [calendarData]);
 
@@ -150,8 +146,8 @@ const ProfileAttendancePage: React.FC = () => {
   }, [checkTodayStatus]);
 
   const handleClockIn = async (type: number) => {
-    if (clockInLoading.current) return;
-    clockInLoading.current = true;
+    if (clockInLoading) return;
+    setClockInLoading(true);
     try {
       if (type === 1 && checkTodayStatus.clockIn) {
         message.info('今天已完成上班打卡');
@@ -167,7 +163,7 @@ const ProfileAttendancePage: React.FC = () => {
     } catch {
       // 错误由 request 拦截器统一处理
     } finally {
-      clockInLoading.current = false;
+      setClockInLoading(false);
     }
   };
 
@@ -230,7 +226,7 @@ const ProfileAttendancePage: React.FC = () => {
 
   return (
     <PageContainer>
-      <Card bordered={false} style={{ marginBottom: 16 }}>
+      <Card bordered={false} className={styles.cardMargin}>
         <AttendanceStatsBar
           currentMonth={currentMonth}
           onMonthChange={setCurrentMonth}
@@ -245,7 +241,7 @@ const ProfileAttendancePage: React.FC = () => {
 
       <Card
         bordered={false}
-        style={{ marginBottom: 16 }}
+        className={styles.cardMargin}
         title={<Space><span>{currentMonth} 考勤日历</span></Space>}
       >
         <AttendanceCalendar
@@ -271,7 +267,7 @@ const ProfileAttendancePage: React.FC = () => {
       <Card
         bordered={false}
         title="加班记录"
-        style={{ marginTop: 16 }}
+        className={styles.cardMarginTop}
         extra={<Button type="primary" onClick={() => setOvertimeOpen(true)}>申请加班</Button>}
       >
         <OvertimeRecordsTable records={overtimeRecords} loading={overtimeLoading} />
