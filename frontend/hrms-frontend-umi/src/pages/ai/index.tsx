@@ -33,7 +33,7 @@ import {
   SendOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { history, useRequest } from '@umijs/max';
+import { history } from '@umijs/max';
 import {
   Avatar,
   Button,
@@ -571,21 +571,20 @@ const AiChatPage: React.FC = () => {
   }, [conversations, currentId]);
 
   /** 加载消息记录 */
-  const { loading: msgLoading, run: loadMessages } = useRequest(
-    (id: number) => getMessages(id),
-    {
-      manual: true,
-      onSuccess: (data) => {
-        // useRequest 未正确推导 getMessages 的返回类型，此处使用类型断言
-        const detail = data as ConversationDetail;
-        setMessages(detail.messages || []);
-        setError(null);
-      },
-      onError: () => {
-        setError('加载消息失败');
-      },
-    },
-  );
+  const [msgLoading, setMsgLoading] = useState(false);
+  const loadMessages = useCallback(async (id: number) => {
+    setMsgLoading(true);
+    try {
+      const data = await getMessages(id);
+      const detail = data as ConversationDetail;
+      setMessages(detail.messages || []);
+      setError(null);
+    } catch {
+      setError('加载消息失败');
+    } finally {
+      setMsgLoading(false);
+    }
+  }, []);
 
   /**
    * currentId 变化时加载对应会话的消息
