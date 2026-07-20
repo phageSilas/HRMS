@@ -18,6 +18,14 @@ export default defineConfig({
     '/api/v1': {
       target: 'http://localhost:8080',
       changeOrigin: true,
+      // 确保 SSE 等流式响应不被 proxy 缓存
+      onProxyRes: (proxyRes) => {
+        // 如果后端返回 text/event-stream，确保代理不缓冲
+        if (proxyRes.headers['content-type']?.includes('text/event-stream')) {
+          proxyRes.headers['Cache-Control'] = 'no-cache';
+          proxyRes.headers['X-Accel-Buffering'] = 'no';
+        }
+      },
     },
     // Swagger UI 代理
     '/swagger-ui': {

@@ -181,6 +181,10 @@ export function sendChatMessage(
             try {
               const event: SseEvent = JSON.parse(jsonStr);
               handleSseEvent(event, callbacks, jsonStr);
+              // 在每次 data 事件后 yield 到 event loop（macrotask 边界），
+              // 让 React 18 有机会处理当前批次的 state 更新并重新渲染，
+              // 避免所有 setStreamingContent 被 React 18 自动批处理合并为一次渲染。
+              await new Promise<void>(resolve => setTimeout(resolve, 0));
             } catch (e) {
               console.warn('SSE 数据解析失败:', jsonStr);
             }

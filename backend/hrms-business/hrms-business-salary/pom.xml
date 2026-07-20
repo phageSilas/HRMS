@@ -123,6 +123,10 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>com.hrms</groupId>
+            <artifactId>hrms-system-file</artifactId>
+        </dependency>
     </dependencies>
 
 </project>
