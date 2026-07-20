@@ -33,7 +33,7 @@ public class LeaveApplicationController {
      *
      * @param queryDTO 离职申请查询参数
      * @return 离职申请分页结果
-     * 本方法使用的工具类: 无
+     *
      */
     @GetMapping
     @Operation(summary = "离职申请列表")
@@ -46,7 +46,7 @@ public class LeaveApplicationController {
      *
      * @param requestDTO 离职申请创建参数
      * @return 离职申请创建结果
-     * 本方法使用的工具类: 无
+     *
      */
     @PostMapping
     @Operation(summary = "创建离职申请")

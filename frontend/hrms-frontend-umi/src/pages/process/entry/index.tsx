@@ -7,6 +7,7 @@ import {
   ApprovalStatus,
   confirmEntryApplication,
   createEntryApplication,
+  getEntryApplication,
   getEntryApplicationList,
   submitEntryApplication,
   updateEntryApplication,
@@ -15,6 +16,7 @@ import type {
   EntryApplication,
   EntryApplicationFormValues,
 } from '@/services/process';
+import { getDeptList, getPostList } from '@/services/organization';
 import {
   CheckCircleOutlined,
   EditOutlined,
@@ -50,8 +52,8 @@ import {
   Typography,
   message,
 } from 'antd';
-import type { Dayjs } from 'dayjs';
-import React, { useMemo, useRef, useState } from 'react';
+import dayjs, { type Dayjs } from 'dayjs';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 const { Text } = Typography;
 
@@ -101,20 +103,63 @@ const statusTabs = [
   { key: String(ApprovalStatus.ENTERED), label: '已入职' },
 ];
 
-function formatDateValue(value?: string | Dayjs): string | undefined {
+function parseFormDateValue(
+  value?: string | number[] | Dayjs,
+): Dayjs | undefined {
   if (!value) {
     return undefined;
   }
-  if (typeof value === 'string') {
+  if (dayjs.isDayjs(value)) {
     return value;
   }
-  return value.format('YYYY-MM-DD');
+  if (Array.isArray(value)) {
+    const [year, month, day] = value;
+    if (!year || !month || !day) {
+      return undefined;
+    }
+    const parsedDate = dayjs(new Date(year, month - 1, day));
+    return parsedDate.isValid() ? parsedDate : undefined;
+  }
+  const parsedDate = dayjs(value);
+  return parsedDate.isValid() ? parsedDate : undefined;
+}
+
+function formatDateValue(value?: string | number[] | Dayjs): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  if (dayjs.isDayjs(value)) {
+    return value.format('YYYY-MM-DD');
+  }
+  if (Array.isArray(value)) {
+    return parseFormDateValue(value)?.format('YYYY-MM-DD');
+  }
+  const parsedDate = dayjs(value);
+  return parsedDate.isValid() ? parsedDate.format('YYYY-MM-DD') : value;
 }
 
 function buildFormValues(values: EntryApplicationFormValues) {
   return {
     ...values,
     expectedHireDate: formatDateValue(values.expectedHireDate) || '',
+  };
+}
+
+function buildEntryFormInitialValues(record?: EntryApplication): Partial<EntryApplicationFormValues> {
+  return {
+    candidateName: record?.candidateName,
+    gender: record?.gender,
+    phone: record?.phone,
+    email: record?.email,
+    idCardNo: record?.idCardNo,
+    deptId: record?.deptId,
+    postId: record?.postId,
+    hireType: record?.hireType || 1,
+    probationMonth: record?.probationMonth ?? 3,
+    probationSalaryRatio: record?.probationSalaryRatio ?? 80,
+    expectedHireDate: parseFormDateValue(record?.expectedHireDate),
+    leaderId: record?.leaderId,
+    remark: record?.remark,
   };
 }
 
@@ -128,9 +173,17 @@ const EntryPage: React.FC = () => {
   const [editingRecord, setEditingRecord] = useState<EntryApplication>();
   const [confirmRecord, setConfirmRecord] = useState<EntryApplication>();
   const [confirmLoading, setConfirmLoading] = useState(false);
+  const [editingLoadingId, setEditingLoadingId] = useState<number>();
   const [activeStatus, setActiveStatus] = useState<string>('all');
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
+  const [realDepartmentOptions, setRealDepartmentOptions] = useState<
+    { label: string; value: number }[]
+  >([]);
+  const [realPostOptions, setRealPostOptions] = useState<
+    { label: string; value: number }[]
+  >([]);
   const [confirmForm] = Form.useForm<{ actualHireDate: Dayjs }>();
+  const [entryForm] = Form.useForm<EntryApplicationFormValues>();
 
   const statisticCards = useMemo(
     () => [
@@ -174,6 +227,17 @@ const EntryPage: React.FC = () => {
     reloadTable();
   };
 
+  const handleEditRecord = async (recordId: number) => {
+    setEditingLoadingId(recordId);
+    try {
+      const detail = await getEntryApplication(recordId);
+      setEditingRecord(detail);
+      setDrawerOpen(true);
+    } finally {
+      setEditingLoadingId(undefined);
+    }
+  };
+
   const handleConfirmEntry = async () => {
     if (!confirmRecord) {
       return;
@@ -193,6 +257,44 @@ const EntryPage: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    if (!drawerOpen) {
+      return;
+    }
+    if (editingRecord) {
+      entryForm.setFieldsValue(buildEntryFormInitialValues(editingRecord));
+      return;
+    }
+    entryForm.resetFields();
+    entryForm.setFieldsValue(buildEntryFormInitialValues());
+  }, [drawerOpen, editingRecord, entryForm]);
+
+  useEffect(() => {
+    const loadOrganizationOptions = async () => {
+      try {
+        const [departments, posts] = await Promise.all([
+          getDeptList(),
+          getPostList({ pageNum: 1, pageSize: 200 }),
+        ]);
+        setRealDepartmentOptions(
+          (departments || []).map((item) => ({
+            label: item.deptName,
+            value: item.id,
+          })),
+        );
+        setRealPostOptions(
+          (posts.records || []).map((item) => ({
+            label: item.postName,
+            value: item.id,
+          })),
+        );
+      } catch (error) {
+        message.error('部门或职位数据加载失败，请刷新后重试');
+      }
+    };
+    loadOrganizationOptions();
+  }, []);
+
   const columns: ProColumns<EntryApplication>[] = [
     {
       title: '关键词',
@@ -205,7 +307,7 @@ const EntryPage: React.FC = () => {
       dataIndex: 'departmentId',
       hideInTable: true,
       valueType: 'select',
-      fieldProps: { options: departmentOptions, allowClear: true },
+      fieldProps: { options: realDepartmentOptions, allowClear: true },
     },
     {
       title: '申请日期',
@@ -297,10 +399,8 @@ const EntryPage: React.FC = () => {
             <Button
               size="small"
               icon={<EditOutlined />}
-              onClick={() => {
-                setEditingRecord(record);
-                setDrawerOpen(true);
-              }}
+              loading={editingLoadingId === record.id}
+              onClick={() => handleEditRecord(record.id)}
             >
               编辑
             </Button>
@@ -420,6 +520,7 @@ const EntryPage: React.FC = () => {
                 icon={<PlusOutlined />}
                 onClick={() => {
                   setEditingRecord(undefined);
+                  entryForm.resetFields();
                   setDrawerOpen(true);
                 }}
               >
@@ -431,6 +532,7 @@ const EntryPage: React.FC = () => {
       </Card>
 
       <DrawerForm<EntryApplicationFormValues>
+        form={entryForm}
         title={editingRecord ? '编辑入职申请' : '新建入职申请'}
         width={760}
         open={drawerOpen}
@@ -438,27 +540,18 @@ const EntryPage: React.FC = () => {
           setDrawerOpen(open);
           if (!open) {
             setEditingRecord(undefined);
+            entryForm.resetFields();
           }
         }}
         drawerProps={{ destroyOnClose: true }}
-        initialValues={{
-          candidateName: editingRecord?.candidateName,
-          gender: editingRecord?.gender,
-          phone: editingRecord?.phone,
-          email: editingRecord?.email,
-          idCardNo: editingRecord?.idCardNo,
-          deptId: editingRecord?.deptId,
-          postId: editingRecord?.postId,
-          hireType: editingRecord?.hireType || 1,
-          probationMonth: editingRecord?.probationMonth ?? 3,
-          probationSalaryRatio: editingRecord?.probationSalaryRatio ?? 80,
-          expectedHireDate: editingRecord?.expectedHireDate,
-          leaderId: editingRecord?.leaderId,
-          remark: editingRecord?.remark,
-        }}
+        initialValues={buildEntryFormInitialValues(editingRecord)}
         submitter={{ searchConfig: { submitText: '保存草稿' } }}
+        onFinishFailed={() => {
+          message.warning('请先补全必填项后再保存');
+        }}
         onFinish={async (values) => {
-          const payload = buildFormValues(values);
+          try {
+            const payload = buildFormValues(values);
           if (editingRecord) {
             await updateEntryApplication(editingRecord.id, payload);
             message.success('入职申请已更新');
@@ -466,9 +559,17 @@ const EntryPage: React.FC = () => {
             await createEntryApplication(payload);
             message.success('入职申请已保存为草稿');
           }
-          setDrawerOpen(false);
-          reloadTable();
-          return true;
+            setDrawerOpen(false);
+            reloadTable();
+            return true;
+          } catch (error) {
+            if (error instanceof Error && error.message) {
+              message.error(error.message);
+            } else {
+              message.error('保存失败，请检查表单后重试');
+            }
+            return false;
+          }
         }}
       >
         <ProFormGroup title="候选人基本信息">
@@ -512,14 +613,14 @@ const EntryPage: React.FC = () => {
             name="deptId"
             label="所属部门"
             width="md"
-            options={departmentOptions}
+            options={realDepartmentOptions}
             rules={[{ required: true, message: '请选择所属部门' }]}
           />
           <ProFormSelect
             name="postId"
             label="职位"
             width="md"
-            options={postOptions}
+            options={realPostOptions}
             rules={[{ required: true, message: '请选择职位' }]}
           />
           <ProFormSelect

@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 
 /**
  * 入职申请分页 VO
@@ -50,6 +51,12 @@ public class EntryApplicationPageVO {
     private String email;
 
     /**
+     * 身份证号
+     */
+    @Schema(description = "身份证号")
+    private String idCardNo;
+
+    /**
      * 部门ID
      */
     @Schema(description = "部门ID")
@@ -74,10 +81,34 @@ public class EntryApplicationPageVO {
     private String postName;
 
     /**
+     * 录用类型
+     */
+    @Schema(description = "录用类型")
+    private Integer hireType;
+
+    /**
+     * 试用期（月）
+     */
+    @Schema(description = "试用期（月）")
+    private Integer probationMonth;
+
+    /**
+     * 试用期薪资比例
+     */
+    @Schema(description = "试用期薪资比例")
+    private BigDecimal probationSalaryRatio;
+
+    /**
      * 预计入职日期
      */
     @Schema(description = "预计入职日期")
     private LocalDate expectedHireDate;
+
+    /**
+     * 直接汇报人ID
+     */
+    @Schema(description = "直接汇报人ID")
+    private Long leaderId;
 
     /**
      * 审批状态

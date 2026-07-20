@@ -73,6 +73,8 @@ public class SalaryTemplateServiceImpl implements SalaryTemplateService {
                 .like(StrUtil.isNotBlank(queryDTO.getTemplateName()), SalaryTemplateEntity::getTemplateName,
                         queryDTO.getTemplateName())
                 .eq(queryDTO.getStatus() != null, SalaryTemplateEntity::getStatus, queryDTO.getStatus());
+
+        // 添加账套范围条件
         appendTemplateScopeCondition(wrapper, queryDTO.getScope());
         wrapper.orderByDesc(SalaryTemplateEntity::getCreateTime);
         Page<SalaryTemplateEntity> page = salaryTemplateMapper.selectPage(

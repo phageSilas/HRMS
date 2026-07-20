@@ -37,6 +37,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -81,12 +82,15 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
     public PageResult<LeaveApplicationPageVO> pageLeaveApplications(LeaveApplicationQueryDTO queryDTO) {
         int pageNum = normalizePageNum(queryDTO.getPageNum());
         int pageSize = normalizePageSize(queryDTO.getPageSize());
+        // 构建人员显示 enricher
         PersonnelDisplayEnricher displayEnricher = new PersonnelDisplayEnricher(deptService, postService);
         Page<LeaveApplicationEntity> page = leaveApplicationMapper.selectPage(
                 Page.of(pageNum, pageSize),
                 buildLeaveApplicationWrapper(queryDTO)
         );
+        // 构建员工快照映射
         Map<Long, EmployeeSnapshotEntity> employeeSnapshotMap = listEmployeeSnapshotMap(collectEmployeeIds(page.getRecords()));
+        // 构建离职申请分页列表
         List<LeaveApplicationPageVO> records = page.getRecords().stream()
                 .map(entity -> displayEnricher.enrichLeaveApplication(
                         LeaveApplicationConvert.toPageVO(
@@ -108,8 +112,11 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public LeaveApplicationCreateVO createLeaveApplication(LeaveApplicationCreateRequestDTO requestDTO) {
+        // 获取员工快照
         EmployeeSnapshotEntity employeeSnapshot = getRequiredEmployeeSnapshot(requestDTO.getEmployeeId());
+        // 获取工作交接人快照
         getRequiredEmployeeSnapshot(requestDTO.getHandoverEmployeeId());
+        // 确保员工没有进行中的离职申请
         assertNoProcessingLeaveApplication(requestDTO.getEmployeeId());
 
         LeaveApplicationEntity entity = new LeaveApplicationEntity();
@@ -124,7 +131,7 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
         entity.setApprovalStatus(ApplicationStatusEnum.APPROVING.getCode());
         leaveApplicationMapper.insert(entity);
 
-        // TODO 跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起离职审批。
+        //  跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起离职审批。
         Long approvalInstanceId = approvalEngine.startApproval(
                 ApprovalTypeEnum.LEAVE.getCode(),
                 entity.getId(),
@@ -160,7 +167,7 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
      * 本方法使用的工具类: 无
      */
     private EmployeeSnapshotEntity getRequiredEmployeeSnapshot(Long employeeId) {
-        // TODO 跨模块调用已完成：当前调用 EmployeeService#getEmployeeBrief(employeeId) 获取员工简要信息。
+        //  跨模块调用已完成：当前调用 EmployeeService#getEmployeeBrief(employeeId) 获取员工简要信息。
         EmployeeEntity employee = employeeService.getEmployeeBrief(employeeId);
         if (employee == null) {
             throw new GlobalException(EMPLOYEE_NOT_FOUND);
@@ -200,6 +207,8 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
     private void assertNoProcessingLeaveApplication(Long employeeId) {
         Long count = leaveApplicationMapper.selectCount(new LambdaQueryWrapper<LeaveApplicationEntity>()
                 .eq(LeaveApplicationEntity::getEmployeeId, employeeId)
+
+                //AND approval_status IN (?, ?),ApprovalStatus会被自动转换为ApprovalStatusEnum
                 .in(LeaveApplicationEntity::getApprovalStatus,
                         ApplicationStatusEnum.DRAFT.getCode(), ApplicationStatusEnum.APPROVING.getCode()));
         if (count != null && count > 0) {
@@ -216,12 +225,15 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
      */
     private LambdaQueryWrapper<LeaveApplicationEntity> buildLeaveApplicationWrapper(LeaveApplicationQueryDTO queryDTO) {
         LambdaQueryWrapper<LeaveApplicationEntity> wrapper = new LambdaQueryWrapper<>();
+        // 如果离职类型不为空白，则添加查询条件,StrUtil.isNotBlank() - 检查字符串是否非空且非空白
         if (StrUtil.isNotBlank(queryDTO.getLeaveType())) {
             wrapper.eq(LeaveApplicationEntity::getLeaveType, LeaveTypeEnum.fromValue(queryDTO.getLeaveType()).getCode());
         }
+
         wrapper.eq(queryDTO.getApprovalStatus() != null, LeaveApplicationEntity::getApprovalStatus, queryDTO.getApprovalStatus());
         if (queryDTO.getDepartmentId() != null || StrUtil.isNotBlank(queryDTO.getKeyword())) {
             List<Long> employeeIds = listEmployeeIdsByQuery(queryDTO);
+            // 如果部门ID不为空或关键词不为空，则添加查询条件,CollUtil.isNotEmpty() - 检查集合是否非空且有元素
             wrapper.in(CollUtil.isNotEmpty(employeeIds), LeaveApplicationEntity::getEmployeeId, employeeIds);
             wrapper.eq(CollUtil.isEmpty(employeeIds), LeaveApplicationEntity::getEmployeeId, IMPOSSIBLE_EMPLOYEE_ID);
         }
@@ -237,7 +249,7 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
      * 本方法使用的工具类: StrUtil(hutool)
      */
     private List<Long> listEmployeeIdsByQuery(LeaveApplicationQueryDTO queryDTO) {
-        // TODO 跨模块调用已完成：当前调用 EmployeeService#listEmployees(employeeQueryDTO) 按部门和关键词查询员工列表。
+        // 跨模块调用已完成：当前调用 EmployeeService#listEmployees(employeeQueryDTO) 按部门和关键词查询员工列表。
         EmployeeQueryDTO employeeQueryDTO = new EmployeeQueryDTO();
         employeeQueryDTO.setKeyword(queryDTO.getKeyword());
         employeeQueryDTO.setDeptIds(queryDTO.getDepartmentId() == null ? null : List.of(queryDTO.getDepartmentId()));
@@ -245,7 +257,7 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
         employeeQueryDTO.setPageSize(MAX_PAGE_SIZE);
         return employeeService.listEmployees(employeeQueryDTO).getRecords().stream()
                 .map(EmployeeListVO::getId)
-                .filter(id -> id != null)
+                .filter(Objects::nonNull) // 过滤掉空值
                 .toList();
     }
 
@@ -258,8 +270,8 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
      */
     private List<Long> collectEmployeeIds(List<LeaveApplicationEntity> records) {
         return records.stream()
-                .flatMap(entity -> Stream.of(entity.getEmployeeId(), entity.getHandoverEmployeeId()))
-                .filter(id -> id != null)
+                .flatMap(entity -> Stream.of(entity.getEmployeeId(), entity.getHandoverEmployeeId())) // 获取员工ID和交接人ID
+                .filter(Objects::nonNull)
                 .distinct()
                 .toList();
     }
@@ -275,10 +287,10 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
         if (CollUtil.isEmpty(employeeIds)) {
             return Collections.emptyMap();
         }
-        // TODO 跨模块调用已完成：当前员工模块暂无批量快照接口，暂用 EmployeeService#getEmployeeBrief(employeeId) 循环补全。
+        //  跨模块调用已完成：调用当前员工模块批量快照接口，用 EmployeeService#getEmployeeBrief(employeeId) 补全。
         return employeeIds.stream()
                 .map(employeeService::getEmployeeBrief)
-                .filter(employee -> employee != null)
+                .filter(Objects::nonNull)
                 .map(this::toEmployeeSnapshot)
                 .collect(Collectors.toMap(EmployeeSnapshotEntity::getId, Function.identity(), (left, right) -> left));
     }

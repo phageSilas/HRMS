@@ -51,6 +51,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.math.BigDecimal;
@@ -62,16 +63,18 @@ import java.math.BigDecimal;
 @Service
 @RequiredArgsConstructor
 public class PaySlipServiceImpl implements PaySlipService {
-
+    // 工资条管理 可见状态: 薪资批次状态
     private static final Set<String> PAYSLIP_VISIBLE_STATUS = Set.of(
             SalaryBatchStatusEnum.APPROVING.name(),
             SalaryBatchStatusEnum.APPROVED.name(),
             SalaryBatchStatusEnum.RELEASED.name(),
             SalaryBatchStatusEnum.ARCHIVED.name()
     );
+    // 工资条管理 可见状态:职位
     private static final Set<String> SALARY_MANAGER_ROLE_CODES = Set.of(
             "FINANCE", "HR", "HR_TEST", "ADMIN", "ROLE_ADMIN"
     );
+    // 工资条管理 可见状态:查看状态
     private static final Set<String> PAYSLIP_MANAGE_VIEW_STATUS = Set.of(
             "VIEWED", "UNVIEWED", "UNPUBLISHED"
     );
@@ -130,14 +133,19 @@ public class PaySlipServiceImpl implements PaySlipService {
     @Override
     public PageResult<SalaryPayslipListVO> pagePayslips(SalaryPayslipPageQueryDTO queryDTO) {
         Long employeeId = getCurrentEmployeeId();
+        // Optional.ofNullable:如果传入的值不为null，ofNullable 会创建一个包含该值的 Optional 对象；如果传入的值为null，则创建一个空的 Optional 对象。
+        // 获取查询参数的页码和页大小，默认值分别为1和10
         int pageNum = Optional.ofNullable(queryDTO.getPageNum()).orElse(1);
         int pageSize = Optional.ofNullable(queryDTO.getPageSize()).orElse(10);
+        // 分页查询当前员工的工资条列表
         Page<SalaryPayslipListVO> page = salaryBatchItemMapper.selectEmployeePayslipPage(
                 Page.of(pageNum, pageSize), employeeId, queryDTO, PAYSLIP_VISIBLE_STATUS);
+        // 判断Redis模板是否可用，如果可用则设置验证状态
         StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+        // 遍历分页结果，设置验证状态，如果Redis缓存可用则从Redis中获取验证状态，不再进行二次验证，否则设置为false
         if (redisTemplate != null) {
-            page.getRecords().forEach(record -> record.setVerified(Boolean.TRUE.equals(redisTemplate.hasKey(
-                    SalaryCacheKeys.payslipVerify(employeeId, record.getSalaryMonth())))));
+            page.getRecords().forEach(record -> record.setVerified(redisTemplate.hasKey(
+                    SalaryCacheKeys.payslipVerify(employeeId, record.getSalaryMonth()))));
         } else {
             page.getRecords().forEach(record -> record.setVerified(false));
         }
@@ -146,22 +154,27 @@ public class PaySlipServiceImpl implements PaySlipService {
 
     @Override
     public SalaryPayslipVerifyVO verifyPayslip(SalaryPayslipVerifyRequestDTO requestDTO) {
+        // 获取当前用户ID和员工ID，判断用户是否可用
         Long userId = SecurityContextHolder.getUserId();
         Long employeeId = getCurrentEmployeeId();
         SalarySysUserEntity user = salarySysUserMapper.selectById(userId);
         if (user == null || Objects.equals(user.getIsDeleted(), 1) || Objects.equals(user.getStatus(), 0)) {
             throw new GlobalException(ErrorCode.UNAUTHORIZED, "当前用户不可用");
         }
+        // 验证登录密码
         boolean passwordOk = StrUtil.isNotBlank(requestDTO.getPassword())
                 && getPasswordEncoder().matches(requestDTO.getPassword(), user.getPassword());
         if (!passwordOk) {
             throw new GlobalException(ErrorCode.FORBIDDEN, "登录密码验证失败");
         }
+        // 生成验证令牌
         String token = IdUtil.fastSimpleUUID();
+        //ObjectProvider：适用于Redis是可选依赖的场景，如：缓存功能（没有Redis就直接访问数据库）
         StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+        // 判断Redis缓存是否可用，如果可用则保存验证令牌
         if (redisTemplate != null) {
             redisTemplate.opsForValue().set(SalaryCacheKeys.payslipVerify(employeeId, requestDTO.getMonth()),
-                    token, 30, java.util.concurrent.TimeUnit.MINUTES);
+                    token, 30, TimeUnit.MINUTES);
         }
         return SalaryPayslipVerifyVO.builder()
                 .success(true)
@@ -179,17 +192,20 @@ public class PaySlipServiceImpl implements PaySlipService {
      */
     @Override
     public SalaryPayslipVerifyVO verifyManagePayslip(SalaryManagePayslipVerifyRequestDTO requestDTO) {
+        // 判断当前用户是否具有工资条管理权限
         assertSalaryManagerRole();
         Long userId = SecurityContextHolder.getUserId();
         SalarySysUserEntity user = salarySysUserMapper.selectById(userId);
         if (user == null || Objects.equals(user.getIsDeleted(), 1) || Objects.equals(user.getStatus(), 0)) {
             throw new GlobalException(ErrorCode.UNAUTHORIZED, "当前用户不可用");
         }
+        // 验证登录密码
         boolean passwordOk = StrUtil.isNotBlank(requestDTO.getPassword())
                 && getPasswordEncoder().matches(requestDTO.getPassword(), user.getPassword());
         if (!passwordOk) {
             throw new GlobalException(ErrorCode.FORBIDDEN, "登录密码验证失败");
         }
+        // 生成验证令牌并保存到Redis缓存中，设置有效期为30分钟
         String token = IdUtil.fastSimpleUUID();
         StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
         if (redisTemplate != null) {
@@ -242,13 +258,15 @@ public class PaySlipServiceImpl implements PaySlipService {
         if (item == null || !Objects.equals(item.getEmployeeId(), employeeId)) {
             throw new GlobalException(ErrorCode.NOT_FOUND, "工资条不存在");
         }
+        // 获取工资批次
         SalaryBatchEntity batch = getBatchRequired(item.getBatchId());
         if (!PAYSLIP_VISIBLE_STATUS.contains(batch.getBatchStatus())) {
             throw new GlobalException(ErrorCode.FORBIDDEN, "工资条暂不可查看");
         }
+        // 判断Redis缓存是否可用，如果可用则判断验证令牌是否存在
         StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
-        if (redisTemplate != null && !Boolean.TRUE.equals(redisTemplate.hasKey(
-                SalaryCacheKeys.payslipVerify(employeeId, batch.getSalaryMonth())))) {
+        if (redisTemplate != null && !redisTemplate.hasKey(
+                SalaryCacheKeys.payslipVerify(employeeId, batch.getSalaryMonth()))) {
             throw new GlobalException(ErrorCode.FORBIDDEN, "请先完成工资条二次验证");
         }
         SalaryEmployeeSnapshotEntity employee = employeeSnapshotMapper.selectById(employeeId);
@@ -274,6 +292,7 @@ public class PaySlipServiceImpl implements PaySlipService {
      */
     @Override
     public SalaryPayslipDetailVO getManagePayslipDetail(Long payslipId) {
+        // 判断当前用户是否具有工资条管理权限
         assertSalaryManagerRole();
         if (!hasManagePayslipVerified()) {
             throw new GlobalException(ErrorCode.FORBIDDEN, "请先完成管理端工资条二次验证");
@@ -290,14 +309,19 @@ public class PaySlipServiceImpl implements PaySlipService {
                 .build();
     }
 
+    /**
+     * 查询当前员工近 6 个月薪资趋势。
+     * @return 薪资趋势
+     */
     @Override
     public List<SalaryTrendVO> getTrend() {
         Long employeeId = getCurrentEmployeeId();
         String startMonth = YearMonth.now().minusMonths(5).toString();
         List<SalaryBatchEntity> batches = salaryBatchMapper.selectList(Wrappers.lambdaQuery(SalaryBatchEntity.class)
-                .ge(SalaryBatchEntity::getSalaryMonth, startMonth)
-                .in(SalaryBatchEntity::getBatchStatus, PAYSLIP_VISIBLE_STATUS)
-                .orderByAsc(SalaryBatchEntity::getSalaryMonth));
+                .ge(SalaryBatchEntity::getSalaryMonth, startMonth)// 大于等于
+                .in(SalaryBatchEntity::getBatchStatus, PAYSLIP_VISIBLE_STATUS)// 在...内
+                .orderByAsc(SalaryBatchEntity::getSalaryMonth));// 按工资月份升序排序
+        // 判断是否存在可查看的薪资批次,若不存在则返回空列表
         if (CollUtil.isEmpty(batches)) {
             return List.of();
         }
@@ -398,15 +422,13 @@ public class PaySlipServiceImpl implements PaySlipService {
                 .deductionTotal(item.getDeductionTotal())
                 .netSalary(item.getNetSalary())
                 .batchStatus(batch.getBatchStatus())
-                .verified(redisTemplate != null && Boolean.TRUE.equals(redisTemplate.hasKey(
-                        SalaryCacheKeys.payslipVerify(item.getEmployeeId(), batch.getSalaryMonth()))))
+                .verified(redisTemplate != null && redisTemplate.hasKey(
+                        SalaryCacheKeys.payslipVerify(item.getEmployeeId(), batch.getSalaryMonth())))
                 .build();
     }
 
     /**
      * 校验当前用户是否具备薪资管理操作角色。
-     *
-     * @return 无返回值
      * 本方法使用的工具类: SecurityContextHolder(hrms-common),RoleService(hrms-system-auth),StrUtil(hutool)
      */
     private void assertSalaryManagerRole() {
@@ -415,10 +437,10 @@ public class PaySlipServiceImpl implements PaySlipService {
             throw new GlobalException(ErrorCode.FORBIDDEN, "无薪资管理权限");
         }
         boolean allowed = roleService.getRolesByUserId(userId).stream()
-                .map(RoleEntity::getRoleCode)
-                .filter(StrUtil::isNotBlank)
-                .map(roleCode -> roleCode.trim().toUpperCase())
-                .anyMatch(SALARY_MANAGER_ROLE_CODES::contains);
+                .map(RoleEntity::getRoleCode)// 获取角色代码
+                .filter(StrUtil::isNotBlank)// 过滤掉空字符串
+                .map(roleCode -> roleCode.trim().toUpperCase())// 去除空格并转换为大写
+                .anyMatch(SALARY_MANAGER_ROLE_CODES::contains);// 匹配任意一个角色代码
         if (!allowed) {
             throw new GlobalException(ErrorCode.FORBIDDEN, "无薪资管理权限");
         }
@@ -450,8 +472,8 @@ public class PaySlipServiceImpl implements PaySlipService {
      */
     private boolean hasManagePayslipVerified() {
         StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
-        return redisTemplate != null && Boolean.TRUE.equals(redisTemplate.hasKey(
-                SalaryCacheKeys.managePayslipVerify(SecurityContextHolder.getUserId())));
+        return redisTemplate != null && redisTemplate.hasKey(
+                SalaryCacheKeys.managePayslipVerify(SecurityContextHolder.getUserId()));
     }
 
     /**
@@ -507,6 +529,12 @@ public class PaySlipServiceImpl implements PaySlipService {
         salaryPayslipViewRecordMapper.updateById(record);
     }
 
+    /**
+     * 获取密码编码器。
+     *
+     * @return 密码编码器
+     * 本方法使用的工具类: Optional(java.util),BCryptPasswordEncoder(spring-security-crypto)
+     */
     private PasswordEncoder getPasswordEncoder() {
         return Optional.ofNullable(passwordEncoderProvider.getIfAvailable()).orElseGet(BCryptPasswordEncoder::new);
     }

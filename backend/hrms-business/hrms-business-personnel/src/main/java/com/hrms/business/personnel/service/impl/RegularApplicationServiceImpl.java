@@ -98,7 +98,9 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
     @Transactional(rollbackFor = Exception.class)
     public RegularApplicationApplyVO applyRegular(Long employeeId, RegularApplicationApplyRequestDTO requestDTO) {
         EmployeeSnapshotEntity employeeSnapshot = getRequiredEmployeeSnapshot(employeeId);
+        // 将从前端传来的 requestDTO.getResult() 字符串值转换为对应的枚举对象。fromValue 方法会遍历所有枚举常量，找到与传入值匹配的枚举项。
         RegularEvaluateResultEnum evaluateResult = RegularEvaluateResultEnum.fromValue(requestDTO.getResult());
+        // 校验延长试用时是否填写了延长月数
         if (evaluateResult == RegularEvaluateResultEnum.EXTEND && requestDTO.getExtendMonth() == null) {
             throw new GlobalException(REGULAR_EXTEND_MONTH_REQUIRED);
         }
@@ -117,7 +119,7 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
         entity.setApprovalStatus(ApplicationStatusEnum.APPROVING.getCode());
         regularApplicationMapper.insert(entity);
 
-        // TODO 跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起转正审批。
+        //  跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起转正审批。
         Long approvalInstanceId = approvalEngine.startApproval(
                 ApprovalTypeEnum.REGULAR.getCode(),
                 entity.getId(),
@@ -154,7 +156,7 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
      * 本方法使用的工具类: 无
      */
     private EmployeeSnapshotEntity getRequiredEmployeeSnapshot(Long employeeId) {
-        // TODO 跨模块调用已完成：当前调用 EmployeeService#getEmployeeBrief(employeeId) 获取员工简要信息。
+        // 跨模块调用已完成：当前调用 EmployeeService#getEmployeeBrief(employeeId) 获取员工简要信息。
         EmployeeEntity employee = employeeService.getEmployeeBrief(employeeId);
         if (employee == null) {
             throw new GlobalException(EMPLOYEE_NOT_FOUND);
@@ -195,7 +197,7 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
         Long count = regularApplicationMapper.selectCount(new LambdaQueryWrapper<RegularApplicationEntity>()
                 .eq(RegularApplicationEntity::getEmployeeId, employeeId)
                 .in(RegularApplicationEntity::getApprovalStatus,
-                        ApplicationStatusEnum.DRAFT.getCode(), ApplicationStatusEnum.APPROVING.getCode()));
+                        ApplicationStatusEnum.DRAFT.getCode(), ApplicationStatusEnum.APPROVING.getCode()));//替换状态为草稿或审批中
         if (count != null && count > 0) {
             throw new GlobalException(REGULAR_APPLICATION_DUPLICATE);
         }
@@ -220,6 +222,7 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
                 page.getRecords().stream().map(EmployeeSnapshotEntity::getId).toList()
         );
         List<RegularApplicationPageVO> records = page.getRecords().stream()
+                // map 方法: 将流中的每个元素（在这里是 EmployeeSnapshotEntity 对象）转换为另一种形式（RegularApplicationPageVO 对象）。
                 .map(employee -> RegularApplicationConvert.toPendingVO(
                         employee,
                         processingApplicationMap.get(employee.getId())))
@@ -280,10 +283,11 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
      * 本方法使用的工具类: CollUtil(hutool)
      */
     private Map<Long, EmployeeSnapshotEntity> listEmployeeSnapshotMap(List<Long> employeeIds) {
+        // 如果员工ID列表为空，则返回空映射
         if (CollUtil.isEmpty(employeeIds)) {
             return Collections.emptyMap();
         }
-        // TODO 跨模块调用已完成：当前员工模块暂无批量快照接口，暂用 EmployeeService#getEmployeeBrief(employeeId) 循环补全。
+        //  跨模块调用已完成：当前员工模块暂无批量快照接口，暂用 EmployeeService#getEmployeeBrief(employeeId) 循环补全。
         return employeeIds.stream()
                 .map(employeeService::getEmployeeBrief)
                 .filter(employee -> employee != null)
