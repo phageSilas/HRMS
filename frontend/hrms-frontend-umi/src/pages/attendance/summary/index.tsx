@@ -598,6 +598,7 @@ const AttendanceSummaryPage: React.FC = () => {
                 placeholder="请选择部门"
                 value={isHr && filter.deptId == null ? ALL_DEPT_VALUE : filter.deptId}
                 options={departmentOptions}
+                style={{ width: '100%' }}
                 onChange={(value) => {
                   setFilter((previous) => ({
                     ...previous,
