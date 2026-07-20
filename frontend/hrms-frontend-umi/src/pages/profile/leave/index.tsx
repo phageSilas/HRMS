@@ -19,11 +19,9 @@ import {
   Typography,
 } from 'antd';
 import dayjs from 'dayjs';
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { cancelLeave, createLeave, getLeaveBalance, getLeaveList } from '@/services/profile';
 import type { LeaveBalanceVO, LeaveRequestDTO, LeaveVO } from '@/services/profile';
-import { useAsyncData } from '@/hooks/useAsyncData';
-import styles from './style.less';
 import LeaveModal from '@/pages/profile/attendance/components/LeaveModal';
 
 const { Text, Title, Paragraph } = Typography;
@@ -94,27 +92,28 @@ const BalanceCard: React.FC<{
 
   return (
     <Col xs={24} sm={8}>
-      <Card bordered={false} className={styles.balanceCard} style={{ background: config.bgColor }}>
+      <Card bordered={false} style={{ borderRadius: 12, background: config.bgColor, height: '100%' }}>
         {loading ? (
-          <div className={styles.balanceLoading}>
+          <div style={{ textAlign: 'center', padding: '20px 0' }}>
             <Spin />
           </div>
         ) : (
-          <div className={styles.balanceContent}>
-            <Text type="secondary" className={styles.textSmall}>
+          <div style={{ textAlign: 'center' }}>
+            <Text type="secondary" style={{ fontSize: 13 }}>
               {config.title}
             </Text>
-            <div className={styles.balanceNumber} style={{ color: config.strokeColor }}>
+            <div style={{ fontSize: 36, fontWeight: 700, color: config.strokeColor, lineHeight: 1.3 }}>
               {remaining}
-              <span className={styles.balanceUnit}> 天</span>
+              <span style={{ fontSize: 14, color: '#999', fontWeight: 400 }}> 天</span>
             </div>
             <Progress
               percent={percent}
               strokeColor={config.strokeColor}
               showInfo={false}
+              style={{ margin: '8px 0' }}
               size="small"
             />
-            <Text type="secondary" className={styles.balanceMeta}>
+            <Text type="secondary" style={{ fontSize: 12 }}>
               已用 {used} 天 / 共 {total} 天
             </Text>
           </div>
@@ -142,13 +141,13 @@ const LeaveRecordCard: React.FC<{
   return (
     <Card
       bordered={false}
-      className={styles.recordCard}
+      style={{ borderRadius: 8, marginBottom: 12 }}
       styles={{ body: { padding: '16px 20px' } }}
     >
       <Row align="middle" wrap gutter={[16, 8]}>
         {/* 左侧信息 */}
         <Col flex="auto">
-          <Space direction="vertical" size={6} className={styles.recordSpace}>
+          <Space direction="vertical" size={6} style={{ width: '100%' }}>
             {/* 标签行 */}
             <Space>
               <Tag color={leaveTypeColor}>{record.leaveTypeDesc}</Tag>
@@ -164,7 +163,7 @@ const LeaveRecordCard: React.FC<{
             {/* 理由行 */}
             {record.leaveReason && (
               <Paragraph
-                className={styles.paragraphStyle}
+                style={{ margin: 0, color: '#333' }}
                 ellipsis={{ rows: 1, expandable: true, symbol: '展开' }}
               >
                 {record.leaveReason}
@@ -215,30 +214,38 @@ const LeaveRecordCard: React.FC<{
 const ProfileLeavePage: React.FC = () => {
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
 
-  // ============ 数据加载 ============
+  // ============ 数据加载：使用 useState + useEffect 替代 useRequest ============
 
-  const {
-    data: balance,
-    loading: balanceLoading,
-    refresh: loadData,
-  } = useAsyncData<LeaveBalanceVO>(() => getLeaveBalance());
-  const {
-    data: leaveList,
-    loading: listLoading,
-    refresh: loadLeaveList,
-  } = useAsyncData<LeaveVO[]>(() => getLeaveList());
+  const [balance, setBalance] = useState<LeaveBalanceVO>();
+  const [leaveList, setLeaveList] = useState<LeaveVO[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const loading = balanceLoading || listLoading;
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [balanceRes, leaveRes] = await Promise.all([
+        getLeaveBalance(),
+        getLeaveList(),
+      ]);
+      console.log('[我的请假] balance raw:', balanceRes);
+      console.log('[我的请假] leaveList raw:', leaveRes);
+      setBalance(balanceRes);
+      setLeaveList(leaveRes || []);
+    } catch (err) {
+      console.error('[我的请假] 加载失败:', err);
+      message.error('数据加载失败');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  /** 统一刷新所有数据 */
-  const reloadAll = () => {
+  useEffect(() => {
     loadData();
-    loadLeaveList();
-  };
+  }, [loadData]);
 
   // 过滤：不展示草稿(0)和已撤回(4)
   const displayLeaves = useMemo(() => {
-    return (leaveList ?? []).filter((l) => l.approvalStatus !== 0 && l.approvalStatus !== 4);
+    return leaveList.filter((l) => l.approvalStatus !== 0 && l.approvalStatus !== 4);
   }, [leaveList]);
 
   // ============ 提交请假 ============
@@ -258,7 +265,7 @@ const ProfileLeavePage: React.FC = () => {
     await createLeave(payload);
     message.success('请假申请已提交');
     setSubmitModalOpen(false);
-    reloadAll();
+    loadData();
   };
 
   // ============ 取消请假 ============
@@ -267,7 +274,7 @@ const ProfileLeavePage: React.FC = () => {
     try {
       await cancelLeave(id);
       message.success('请假已取消');
-      reloadAll();
+      loadData();
     } catch {
       // 静默处理
     }
@@ -278,9 +285,9 @@ const ProfileLeavePage: React.FC = () => {
   return (
     <PageContainer>
       {/* 顶部标题与操作 */}
-      <Row justify="space-between" align="middle" className={styles.pageHeader}>
+      <Row justify="space-between" align="middle" style={{ marginBottom: 20 }}>
         <Col>
-          <Title level={4} className={styles.pageTitle}>
+          <Title level={4} style={{ margin: 0 }}>
             我的请假
           </Title>
           <Text type="secondary">管理请假申请与审批进度</Text>
@@ -293,27 +300,27 @@ const ProfileLeavePage: React.FC = () => {
       </Row>
 
       {/* 假期余额概览（3 卡片） */}
-      <Row gutter={[16, 16]}>
+      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         {BALANCE_CARD_CONFIG.map((cfg) => (
-          <BalanceCard key={cfg.key} config={cfg} balance={(balance ?? {}) as Record<string, number | undefined>} loading={loading} />
+          <BalanceCard key={cfg.key} config={cfg} balance={balance ?? {}} loading={loading} />
         ))}
       </Row>
 
       {/* 申请记录列表 */}
-      <div className={styles.recordsHeader}>
-        <Title level={5} className={styles.sectionTitle}>
+      <div style={{ marginBottom: 12 }}>
+        <Title level={5} style={{ margin: 0 }}>
           申请记录
         </Title>
       </div>
 
       {loading ? (
-        <div className={styles.listLoading}>
+        <div style={{ textAlign: 'center', padding: 40 }}>
           <Spin />
         </div>
       ) : displayLeaves.length === 0 ? (
-        <Card bordered={false} className={styles.emptyCard}>
-          <div className={styles.emptyContent}>
-            <div className={styles.emptyIcon}>📋</div>
+        <Card bordered={false} style={{ borderRadius: 8 }}>
+          <div style={{ textAlign: 'center', padding: '40px 0', color: '#999' }}>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>📋</div>
             <Text type="secondary">暂无请假记录</Text>
           </div>
         </Card>

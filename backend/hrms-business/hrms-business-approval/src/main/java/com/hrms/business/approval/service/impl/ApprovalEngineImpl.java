@@ -159,10 +159,17 @@ public class ApprovalEngineImpl implements ApprovalEngine {
 
         // 3. 根据操作类型处理后续流转
         switch (action) {
-            case "approve" -> handleApprove(task);
-            case "reject" -> handleReject(task);
-            case "transfer" -> handleTransfer(task, targetUserId);
-            default -> throw new GlobalException(ErrorCode.PARAM_VALIDATION_FAILED, "不支持的操作类型：" + action);
+            case "approve":
+                handleApprove(task);
+                break;
+            case "reject":
+                handleReject(task);
+                break;
+            case "transfer":
+                handleTransfer(task, targetUserId);
+                break;
+            default:
+                throw new GlobalException(ErrorCode.PARAM_VALIDATION_FAILED, "不支持的操作类型：" + action);
         }
 
         // 4. 重新查询最新状态，构建操作结果

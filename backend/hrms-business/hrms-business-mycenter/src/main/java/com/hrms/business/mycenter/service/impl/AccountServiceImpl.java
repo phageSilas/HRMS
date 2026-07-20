@@ -137,7 +137,9 @@ public class AccountServiceImpl implements AccountService {
             throw new GlobalException(ErrorCode.PARAM_VALIDATION_FAILED, "未绑定手机号，无需解绑");
         }
 
+        // TODO: 校验短信验证码（短信服务未对接）
         // 当前简化：直接清空手机号
+
         user.setPhone(null);
         userMapper.updateById(user);
         log.info("用户 {} 解绑手机号成功", userId);

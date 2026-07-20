@@ -7,12 +7,8 @@ import lombok.EqualsAndHashCode;
 
 /**
  * AI 对话记录实体
- * <p>
- * 映射表 hr_ai_conversation，存储用户与 AI 助手的每一次对话会话。
- * 包含会话标题、状态、消息总数等基本信息。
- * </p>
  *
- * @since 2026-07-20
+ * @TableName hr_ai_conversation
  */
 @Data
 @EqualsAndHashCode(callSuper = true)

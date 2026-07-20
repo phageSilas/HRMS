@@ -1,6 +1,7 @@
 package com.hrms.business.ai.service.impl;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hrms.business.ai.config.AiConfig;
 import com.hrms.business.ai.dto.ChatRequestDTO;
@@ -36,8 +37,6 @@ import java.util.concurrent.atomic.AtomicReference;
  * <p>
  * 通过百炼 App Completion API，一个请求完成「检索知识库 → 构建 Prompt → LLM 生成」全过程。
  * 未配置应用 ID 时自动回退到基础 LLM 对话。
- *
- * @since 2026-07-20
  */
 @Slf4j
 @Service
@@ -170,12 +169,7 @@ public class AiChatServiceImpl implements AiChatService {
      * <p>
      * 未配置 appId 时自动回退到直接 LLM 对话（无知识库）。
      *
-     * @param emitter          SSE 发射器，用于向客户端推送流式响应
-     * @param history          历史消息列表（用于构建对话上下文，最近 20 条）
-     * @param userContent      当前用户消息
-     * @param isNewConversation 是否为新会话（新会话需要输出标题标记）
-     * @return 完整 AI 回答文本（包含标记的特殊内容块）
-     * @throws IOException 调用百炼 API 失败时抛出
+     * @return 完整 AI 回答文本
      */
     private String callDashScopeApp(SseEmitter emitter, List<MessageEntity> history,
                                      String userContent, boolean isNewConversation) throws IOException {
@@ -383,17 +377,7 @@ public class AiChatServiceImpl implements AiChatService {
 
     /**
      * 回退：直接调用 DashScope LLM（OpenAI 兼容模式，无知识库）
-     * <p>
-     * 当未配置百炼应用 appId 时使用。不经过知识库检索，
-     * 仅基于模型自身能力生成回答。
-     * </p>
-     *
-     * @param emitter          SSE 发射器，用于向客户端推送流式响应
-     * @param history          历史消息列表（最近 10 轮对话）
-     * @param userContent      当前用户消息
-     * @param isNewConversation 是否为新会话
-     * @return 完整 AI 回答文本
-     * @throws IOException 调用 LLM API 失败时抛出
+     * 当未配置百炼应用 appId 时使用。
      */
     private String callDirectLLM(SseEmitter emitter, List<MessageEntity> history,
                                   String userContent, boolean isNewConversation) throws IOException {
@@ -623,7 +607,6 @@ public class AiChatServiceImpl implements AiChatService {
 
     /**
      * 校验会话归属权
-     * <p>确保当前用户只能访问自己的会话，防止越权。</p>
      *
      * @param userId         用户 ID
      * @param conversationId 会话 ID
@@ -652,10 +635,6 @@ public class AiChatServiceImpl implements AiChatService {
 
     /**
      * 保存 AI 回复（自动去除 SUGGESTIONS 标记，将路由建议存入 metadata）
-     *
-     * @param conversationId 会话 ID
-     * @param fullResponse   百炼返回的完整响应文本（含标记内容）
-     * @param suggestions    路由建议列表，存入消息的 metadata 字段
      */
     public void saveAiResponse(Long conversationId, String fullResponse,
                                List<Map<String, String>> suggestions) {

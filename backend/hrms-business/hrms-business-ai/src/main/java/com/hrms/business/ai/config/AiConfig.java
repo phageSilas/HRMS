@@ -15,8 +15,6 @@ import org.springframework.stereotype.Component;
  * <p>
  * 使用百炼 App Completion API，在百炼控制台创建「应用」并关联知识库后，
  * 通过应用 ID 调用一个接口即可完成检索 + 生成。
- *
- * @since 2026-07-20
  */
 @Data
 @Component

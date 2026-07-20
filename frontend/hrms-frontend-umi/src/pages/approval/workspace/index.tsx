@@ -52,9 +52,33 @@ import {
   getOverdueCount,
   operateApproval,
 } from '@/services/approval';
-import { BUSINESS_TYPE_COLOR_MAP, BUSINESS_TYPE_OPTIONS } from '@/constants/enums';
-import { getErrorMessage } from '@/utils/error';
-import styles from './style.less';
+
+// ============ 业务类型标签颜色映射 ============
+
+/** 业务类型编码 → Tag 颜色映射 */
+const BUSINESS_TYPE_COLOR_MAP: Record<string, string> = {
+  ENTRY: 'green',        // 入职审批
+  REGULAR: 'blue',       // 转正审批
+  TRANSFER: 'purple',    // 调岗审批
+  LEAVE: 'red',          // 离职审批
+  LEAVE_REQUEST: 'orange', // 请假审批
+  CORRECTION: 'cyan',    // 补卡审批
+  OVERTIME: 'geekblue',  // 加班审批
+  SALARY: 'magenta',     // 薪资审批
+};
+
+/** 业务类型筛选选项 */
+const BUSINESS_TYPE_OPTIONS = [
+  { label: '全部类型', value: '' },
+  { label: '入职申请', value: 'ENTRY' },
+  { label: '转正申请', value: 'REGULAR' },
+  { label: '调岗申请', value: 'TRANSFER' },
+  { label: '离职审批', value: 'LEAVE' },
+  { label: '请假审批', value: 'LEAVE_REQUEST' },
+  { label: '补卡审批', value: 'CORRECTION' },
+  { label: '加班审批', value: 'OVERTIME' },
+  { label: '薪资批次审批', value: 'SALARY' },
+];
 
 // ============ 页面组件 ============
 
@@ -149,8 +173,8 @@ const WorkspacePage: React.FC = () => {
         const result = await getTasks(query);
         setTaskList(result.records ?? []);
         setTotal(result.total ?? 0);
-      } catch (err: unknown) {
-        setListError(getErrorMessage(err, '加载失败'));
+      } catch (err: any) {
+        setListError(err?.message || '加载失败');
         setTaskList([]);
       } finally {
         setListLoading(false);
@@ -226,9 +250,9 @@ const WorkspacePage: React.FC = () => {
       closeOperateModal();
       fetchStats();
       fetchTaskList({ page: currentPage, size: pageSize, kw: keyword, biz: businessType, filter: filterType });
-    } catch (err: unknown) {
-      if (err && typeof err === 'object' && 'errorFields' in err) return;
-      message.error(getErrorMessage(err, '操作失败'));
+    } catch (error: any) {
+      if (error?.errorFields) return;
+      message.error(error?.message || '操作失败');
     } finally {
       setOperateLoading(false);
     }
@@ -299,16 +323,19 @@ const WorkspacePage: React.FC = () => {
           <Col span={8} key={card.key}>
             <Card
               hoverable
-              className={styles.statCard}
               style={{
                 background: card.bgGradient,
+                borderRadius: 12,
                 border: isActive ? `2px solid ${card.activeBorder}` : 'none',
                 boxShadow: isActive
                   ? `0 4px 12px ${card.activeBorder}33`
                   : '0 2px 8px rgba(0,0,0,0.06)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
               }}
               bodyStyle={{ padding: '20px 24px' }}
               onClick={() => {
+                // 再次点击已选中卡片 → 回到"待审批"视图
                 if (filterType === card.key) {
                   setFilterType('pending');
                 } else {
@@ -319,23 +346,34 @@ const WorkspacePage: React.FC = () => {
               }}
             >
               <Spin spinning={statsLoading} size="small">
-                <div className={styles.statCardContent}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                   <div
-                    className={styles.statIconWrap}
-                    style={{ background: card.iconBg }}
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 12,
+                      background: card.iconBg,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
                   >
                     {React.cloneElement(card.icon as React.ReactElement, {
-                      className: styles.statIcon,
+                      style: { fontSize: 24, color: '#fff' },
                     })}
                   </div>
                   <div>
                     <div
-                      className={styles.statCount}
-                      style={{ color: card.color }}
+                      style={{
+                        fontSize: 32,
+                        fontWeight: 700,
+                        color: card.color,
+                        lineHeight: 1.2,
+                      }}
                     >
                       {card.count}
                     </div>
-                    <div className={styles.statLabel}>{card.label}</div>
+                    <div style={{ fontSize: 14, color: '#8c8c8c' }}>{card.label}</div>
                   </div>
                 </div>
               </Spin>
@@ -349,14 +387,23 @@ const WorkspacePage: React.FC = () => {
   // ============ 渲染搜索筛选区 ============
 
   const renderSearchBar = () => (
-    <div className={styles.searchBar}>
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 20,
+        flexWrap: 'wrap',
+        gap: 12,
+      }}
+    >
       <Input
         placeholder="搜索申请人或单号..."
         prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
         value={keyword}
         onChange={(e) => setKeyword(e.target.value)}
         onPressEnter={handleSearch}
-        className={styles.searchInput}
+        style={{ width: 320, borderRadius: 8 }}
         allowClear
       />
       <Space size={12}>
@@ -366,10 +413,10 @@ const WorkspacePage: React.FC = () => {
           style={{ width: 140, borderRadius: 8 }}
           options={BUSINESS_TYPE_OPTIONS}
         />
-        <Button type="primary" onClick={handleSearch} className={styles.searchBtn}>
+        <Button type="primary" onClick={handleSearch} style={{ borderRadius: 8 }}>
           查询
         </Button>
-        <Button onClick={handleReset} className={styles.searchBtn}>
+        <Button onClick={handleReset} style={{ borderRadius: 8 }}>
           重置
         </Button>
       </Space>
@@ -380,7 +427,7 @@ const WorkspacePage: React.FC = () => {
 
   const renderBusinessTypeTag = (type: string, name: string) => {
     const color = BUSINESS_TYPE_COLOR_MAP[type] || 'default';
-    return <Tag color={color} className={styles.bizTag}>{name || type}</Tag>;
+    return <Tag color={color} style={{ borderRadius: 4 }}>{name || type}</Tag>;
   };
 
   // ============ 渲染任务卡片 ============
@@ -391,33 +438,38 @@ const WorkspacePage: React.FC = () => {
     return (
       <Card
         key={task.id}
-        className={styles.taskCard}
+        style={{
+          marginBottom: 16,
+          borderRadius: 12,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+          border: '1px solid #f0f0f0',
+        }}
         bodyStyle={{ padding: '20px 24px' }}
         hoverable
       >
-        <div className={styles.taskRow}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
           {/* 左侧：头像 + 姓名 + 标签 */}
-          <div className={styles.applicantArea}>
-            <div className={styles.applicantRow}>
+          <div style={{ minWidth: 180, flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
               <Avatar
                 size={40}
                 icon={<UserOutlined />}
                 src={task.applicantAvatar}
-                className={styles.applicantAvatar}
                 style={{
                   backgroundColor: task.applicantAvatar ? undefined : '#1890ff',
+                  flexShrink: 0,
                 }}
               >
                 {task.applicantName?.[0]}
               </Avatar>
               <div>
-                <div className={styles.applicantName}>
+                <div style={{ fontSize: 15, fontWeight: 600, color: '#262626' }}>
                   {task.applicantName}
                 </div>
                 {task.applicantDeptName && (
                   <Tag
                     color="green"
-                    className={styles.applicantDeptTag}
+                    style={{ borderRadius: 4, fontSize: 12, marginTop: 2 }}
                   >
                     {task.applicantDeptName}
                   </Tag>
@@ -428,30 +480,30 @@ const WorkspacePage: React.FC = () => {
           </div>
 
           {/* 中间：时间信息 + 当前审批节点 */}
-          <div className={styles.timeArea}>
-            <div className={styles.timeInfo}>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ fontSize: 13, color: '#8c8c8c', lineHeight: 2 }}>
               <div>
                 申请：{task.createdAt}
               </div>
-              <div className={styles.timeRow}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span>截止：{task.deadline || '-'}</span>
                 {isOverdue && (
-                  <Tag color="red" className={styles.overdueTag}>
+                  <Tag color="red" style={{ borderRadius: 4, fontSize: 11 }}>
                     已逾期
                   </Tag>
                 )}
               </div>
-              <div className={styles.nodeName}>
+              <div style={{ color: '#bfbfbf' }}>
                 当前节点：{task.nodeName}
               </div>
             </div>
           </div>
 
           {/* 右侧：操作按钮 */}
-          <div className={styles.actionArea}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, justifyContent: 'center', minWidth: 100 }}>
             <Button
               type="default"
-              className={styles.actionBtn}
+              style={{ borderRadius: 8, borderColor: '#d9d9d9' }}
               onClick={() => history.push(`/approval/detail/${task.id}`)}
             >
               查看详情
@@ -459,7 +511,12 @@ const WorkspacePage: React.FC = () => {
             {isOverdue ? (
               <Button
                 disabled
-                className={styles.overdueBtn}
+                style={{
+                  borderRadius: 8,
+                  color: '#ff4d4f',
+                  borderColor: '#ff4d4f',
+                  cursor: 'not-allowed',
+                }}
               >
                 已逾期，无法操作
               </Button>
@@ -467,14 +524,18 @@ const WorkspacePage: React.FC = () => {
               <>
                 <Button
                   type="primary"
-                  className={styles.approveBtn}
+                  style={{
+                    borderRadius: 8,
+                    background: '#52c41a',
+                    borderColor: '#52c41a',
+                  }}
                   onClick={() => showOperateModal('approve', task)}
                 >
                   通过
                 </Button>
                 <Button
                   danger
-                  className={styles.rejectBtn}
+                  style={{ borderRadius: 8 }}
                   onClick={() => showOperateModal('reject', task)}
                 >
                   拒绝
@@ -493,7 +554,7 @@ const WorkspacePage: React.FC = () => {
     // 首次加载态
     if (listLoading && taskList.length === 0) {
       return (
-        <div className={styles.listLoading}>
+        <div style={{ textAlign: 'center', padding: '80px 0' }}>
           <Spin size="large" />
         </div>
       );
@@ -502,13 +563,13 @@ const WorkspacePage: React.FC = () => {
     // 错误态：展示错误信息和重新加载按钮
     if (listError) {
       return (
-        <Card className={styles.errorCard}>
-          <div className={styles.errorIcon}>😵</div>
-          <div className={styles.errorText}>{listError}</div>
+        <Card style={{ borderRadius: 12, textAlign: 'center', padding: '40px 0' }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>😵</div>
+          <div style={{ fontSize: 16, color: '#999', marginBottom: 16 }}>{listError}</div>
           <Button
             icon={<ReloadOutlined />}
             onClick={() => fetchTaskList({ page: currentPage, size: pageSize, kw: keyword, biz: businessType, filter: filterType })}
-            className={styles.reloadBtn}
+            style={{ borderRadius: 8 }}
           >
             重新加载
           </Button>
@@ -519,7 +580,7 @@ const WorkspacePage: React.FC = () => {
     // 空态：根据当前筛选类型展示不同的空状态提示
     if (taskList.length === 0) {
       return (
-        <Card className={styles.emptyCard}>
+        <Card style={{ borderRadius: 12 }}>
           <Empty
             description={emptyMessage}
             image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -532,7 +593,7 @@ const WorkspacePage: React.FC = () => {
     return (
       <>
         {taskList.map(renderTaskCard)}
-        <div className={styles.pagination}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
           <Pagination
             current={currentPage}
             pageSize={pageSize}
@@ -550,11 +611,11 @@ const WorkspacePage: React.FC = () => {
 
   return (
     <PageContainer>
-      <div className={styles.pageHeader}>
-        <h2 className={styles.pageTitle}>
+      <div style={{ marginBottom: 24 }}>
+        <h2 style={{ margin: 0, fontSize: 22, fontWeight: 600, color: '#262626' }}>
           审批工作台
         </h2>
-        <p className={styles.pageSubtitle}>
+        <p style={{ margin: '4px 0 0', color: '#8c8c8c', fontSize: 14 }}>
           管理和处理所有待审批事项
         </p>
       </div>

@@ -3,7 +3,6 @@
  */
 import { DatePicker, Form, Input, InputNumber, Modal } from 'antd';
 import React from 'react';
-import componentStyles from './style.less';
 
 interface Props {
   open: boolean;
@@ -43,14 +42,14 @@ const OvertimeModal: React.FC<Props> = ({ open, onClose, onSubmit }) => {
           label="加班日期"
           rules={[{ required: true, message: '请选择加班日期' }]}
         >
-          <DatePicker showTime className={componentStyles.modalDatePicker} />
+          <DatePicker showTime style={{ width: '100%' }} />
         </Form.Item>
         <Form.Item
           name="duration"
           label="加班时长(小时)"
           rules={[{ required: true, message: '请输入加班时长' }]}
         >
-          <InputNumber min={0.5} max={24} step={0.5} className={componentStyles.modalDatePicker} placeholder="请输入加班时长" />
+          <InputNumber min={0.5} max={24} step={0.5} style={{ width: '100%' }} placeholder="请输入加班时长" />
         </Form.Item>
         <Form.Item
           name="reason"

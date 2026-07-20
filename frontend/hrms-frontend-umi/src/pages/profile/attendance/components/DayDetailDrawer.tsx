@@ -7,7 +7,6 @@ import dayjs from 'dayjs';
 import React from 'react';
 import { STATUS_COLOR_MAP } from '../constants';
 import type { AttendanceDayVO } from '@/services/profile';
-import componentStyles from './style.less';
 
 const { Text } = Typography;
 
@@ -41,24 +40,24 @@ const DayDetailDrawer: React.FC<Props> = ({ open, day, onClose, onOpenMakeup }) 
       destroyOnClose
     >
       {/* 考勤状态 */}
-      <div className={componentStyles.drawerSection}>
+      <div style={{ marginBottom: 24 }}>
         <Tag color={STATUS_COLOR_MAP[day.status] || 'default'} style={{ fontSize: 14, padding: '4px 12px' }}>
           {day.statusDesc}
         </Tag>
       </div>
 
       {/* 打卡时间 */}
-      <Descriptions column={1} bordered size="small" className={componentStyles.drawerDescriptions}>
+      <Descriptions column={1} bordered size="small" style={{ marginBottom: 24 }}>
         <Descriptions.Item label="上班打卡">
           {day.clockInTime ? (
-            <Text className={componentStyles.drawerClockIn}>{day.clockInTime}</Text>
+            <Text style={{ color: '#52c41a' }}>{day.clockInTime}</Text>
           ) : (
             <Text type="secondary">未打卡</Text>
           )}
         </Descriptions.Item>
         <Descriptions.Item label="下班打卡">
           {day.clockOutTime ? (
-            <Text className={componentStyles.drawerClockOut}>{day.clockOutTime}</Text>
+            <Text style={{ color: '#1677ff' }}>{day.clockOutTime}</Text>
           ) : (
             <Text type="secondary">未打卡</Text>
           )}
@@ -80,7 +79,7 @@ const DayDetailDrawer: React.FC<Props> = ({ open, day, onClose, onOpenMakeup }) 
       </Descriptions>
 
       {/* 快捷操作 */}
-      <Space direction="vertical" className={componentStyles.drawerActions}>
+      <Space direction="vertical" style={{ width: '100%' }}>
         {isMissed && (
           <Button
             type="primary"

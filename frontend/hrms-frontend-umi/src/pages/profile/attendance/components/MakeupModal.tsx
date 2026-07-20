@@ -4,7 +4,6 @@
 import { DatePicker, Form, Input, Modal, Select } from 'antd';
 import dayjs from 'dayjs';
 import React from 'react';
-import componentStyles from './style.less';
 
 interface Props {
   open: boolean;
@@ -52,7 +51,7 @@ const MakeupModal: React.FC<Props> = ({ open, onClose, onSubmit, initialDate }) 
           label="补卡日期"
           rules={[{ required: true, message: '请选择补卡日期' }]}
         >
-          <DatePicker className={componentStyles.modalDatePicker} />
+          <DatePicker style={{ width: '100%' }} />
         </Form.Item>
         <Form.Item
           name="correctionType"

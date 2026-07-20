@@ -24,11 +24,9 @@ import {
   Typography,
   Spin,
 } from 'antd';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { changePassword, bindPhone, getLoginLogs, unbindPhone } from '@/services/profile';
 import type { LoginLogVO, PasswordChangeRequest, PhoneBindRequest } from '@/services/profile';
-import { useAsyncData } from '@/hooks/useAsyncData';
-import styles from './style.less';
 
 const { Text, Title } = Typography;
 
@@ -54,15 +52,42 @@ const ProfileSecurityPage: React.FC = () => {
   const [passwordForm] = Form.useForm();
   const [phoneForm] = Form.useForm();
 
-  // 登录日志
-  const {
-    data: loginLogsData,
-    loading: logLoading,
-    error: logError,
-    refresh: fetchLoginLogs,
-  } = useAsyncData<LoginLogVO[]>(() => getLoginLogs());
+  // 登录日志（使用 useState + useEffect + 直接调 API，隔离 useRequest 问题）
+  const [loginLogs, setLoginLogs] = useState<LoginLogVO[]>([]);
+  const [logLoading, setLogLoading] = useState(true);
+  const [logError, setLogError] = useState<string | null>(null);
 
-  const loginLogs = loginLogsData ?? [];
+  const fetchLoginLogs = async () => {
+    console.log('[DEBUG] fetchLoginLogs 被调用');
+    setLogLoading(true);
+    setLogError(null);
+    try {
+      const result = await getLoginLogs();
+      console.log('[DEBUG] API 返回结果:', result);
+      console.log('[DEBUG] 数据类型:', typeof result, '，是否数组:', Array.isArray(result), '，长度:', (result as any)?.length);
+      if (Array.isArray(result)) {
+        console.log('[DEBUG] 第一条数据:', result[0]);
+        setLoginLogs(result as LoginLogVO[]);
+      } else {
+        console.warn('[DEBUG] 返回数据不是数组:', result);
+        setLoginLogs([]);
+      }
+    } catch (err: any) {
+      console.error('[DEBUG] 请求失败:', err);
+      console.error('[DEBUG] 错误消息:', err?.message);
+      console.error('[DEBUG] 错误堆栈:', err?.stack);
+      setLogError(err?.message || '请求失败');
+      setLoginLogs([]);
+    } finally {
+      setLogLoading(false);
+      console.log('[DEBUG] fetchLoginLogs 完成，loginLogs 状态:', loginLogs.length, '条');
+    }
+  };
+
+  useEffect(() => {
+    console.log('[DEBUG] useEffect 触发，开始 fetchLoginLogs');
+    fetchLoginLogs();
+  }, []);
 
   // ============ 修改密码 ============
 
@@ -169,11 +194,11 @@ const ProfileSecurityPage: React.FC = () => {
   return (
     <PageContainer>
       {/* 安全设置列表 */}
-      <Card bordered={false} className={styles.securityCard}>
+      <Card bordered={false} style={{ marginBottom: 16 }}>
         <Descriptions column={1} labelStyle={{ width: 120 }}>
           <Descriptions.Item label="登录密码">
             <Space>
-              <KeyOutlined className={styles.iconBlue} />
+              <KeyOutlined style={{ color: '#1677ff' }} />
               <Text>已设置</Text>
               <Button type="link" onClick={() => setPasswordModalOpen(true)}>
                 修改密码
@@ -182,7 +207,7 @@ const ProfileSecurityPage: React.FC = () => {
           </Descriptions.Item>
           <Descriptions.Item label="绑定手机">
             <Space>
-              <PhoneOutlined className={styles.iconGreen} />
+              <PhoneOutlined style={{ color: '#52c41a' }} />
               <Text>已绑定</Text>
               <Button type="link" onClick={() => setPhoneModalOpen(true)}>
                 更换手机
@@ -194,7 +219,7 @@ const ProfileSecurityPage: React.FC = () => {
           </Descriptions.Item>
           <Descriptions.Item label="账号安全">
             <Space>
-              <SafetyCertificateOutlined className={styles.iconOrange} />
+              <SafetyCertificateOutlined style={{ color: '#faad14' }} />
               <Text type="secondary">建议定期修改密码以保障账号安全</Text>
             </Space>
           </Descriptions.Item>
@@ -204,7 +229,7 @@ const ProfileSecurityPage: React.FC = () => {
       {/* 登录日志 */}
       <Card bordered={false} title={`登录日志${loginLogs.length > 0 ? `（${loginLogs.length}条）` : ''}`}>
         {logError && (
-          <div className={styles.logError}>
+          <div style={{ color: '#ff4d4f', marginBottom: 12, padding: 8, background: '#fff2f0', borderRadius: 4 }}>
             请求出错：{logError}
           </div>
         )}
@@ -214,7 +239,7 @@ const ProfileSecurityPage: React.FC = () => {
           <Table
             dataSource={loginLogs}
             columns={logColumns}
-            rowKey={(_, index) => index ?? 0}
+            rowKey={(_, index) => index}
             pagination={{ pageSize: 10, showTotal: (t) => `共 ${t} 条` }}
             locale={{ emptyText: '暂无登录日志' }}
           />

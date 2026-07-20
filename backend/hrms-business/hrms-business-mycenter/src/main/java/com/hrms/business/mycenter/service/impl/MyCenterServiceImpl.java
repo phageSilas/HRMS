@@ -2,6 +2,7 @@ package com.hrms.business.mycenter.service.impl;
 
 import com.hrms.business.approval.dto.PendingTaskQuery;
 import com.hrms.business.approval.service.ApprovalTaskService;
+import com.hrms.business.mycenter.dto.ProfileUpdateRequest;
 import com.hrms.business.mycenter.dto.ProfileVO;
 import com.hrms.business.mycenter.service.MyCenterService;
 import com.hrms.business.mycenter.service.ProfileService;
@@ -33,6 +34,17 @@ public class MyCenterServiceImpl implements MyCenterService {
     @Override
     public ProfileVO getProfile(Long userId) {
         return profileService.getProfile(userId);
+    }
+
+    /**
+     * 更新个人档案信息
+     *
+     * @param userId  用户 ID
+     * @param profile 档案更新请求
+     */
+    @Override
+    public void updateProfile(Long userId, ProfileUpdateRequest profile) {
+        profileService.updateProfile(userId, profile);
     }
 
     /**

@@ -4,7 +4,6 @@
 import { DatePicker, Form, Input, Modal, Select } from 'antd';
 import React from 'react';
 import { LEAVE_TYPE_OPTIONS } from '../constants';
-import componentStyles from './style.less';
 
 interface Props {
   open: boolean;
@@ -58,7 +57,7 @@ const LeaveModal: React.FC<Props> = ({ open, onClose, onSubmit }) => {
           label="请假时间"
           rules={[{ required: true, message: '请选择请假时间范围' }]}
         >
-          <DatePicker.RangePicker showTime className={componentStyles.modalDatePicker} format="YYYY-MM-DD HH:mm" />
+          <DatePicker.RangePicker showTime style={{ width: '100%' }} format="YYYY-MM-DD HH:mm" />
         </Form.Item>
         <Form.Item
           name="leaveReason"

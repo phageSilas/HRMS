@@ -14,7 +14,7 @@
  * @module ApprovalDelegation
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Card,
   Form,
@@ -43,8 +43,8 @@ import {
   createDelegation,
   cancelDelegation,
 } from '@/services/approval';
-import { useEmployeeSearch } from '@/hooks/useEmployeeSearch';
-import { getErrorMessage } from '@/utils/error';
+import { getEmployeeList } from '@/services/employee';
+import type { EmployeeBrief } from '@/services/employee';
 
 const { Text } = Typography;
 
@@ -64,8 +64,9 @@ const DelegationPage: React.FC = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState<boolean>(true);
   const [submitting, setSubmitting] = useState<boolean>(false);
+  const [employeeOptions, setEmployeeOptions] = useState<EmployeeBrief[]>([]);
+  const [searching, setSearching] = useState<boolean>(false);
   const [delegations, setDelegations] = useState<Delegation[]>([]);
-  const { options: employeeOptions, searching, search: handleEmployeeSearch } = useEmployeeSearch();
 
   // ============ 数据加载 ============
 
@@ -89,6 +90,36 @@ const DelegationPage: React.FC = () => {
   useEffect(() => {
     fetchDelegations();
   }, [fetchDelegations]);
+
+  // ============ 员工搜索（被委托人选取）============
+
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /**
+   * 搜索员工（300ms 防抖）
+   *
+   * 用于选择被委托人时搜索，关键词为空或太短时清空选项。
+   */
+  const handleEmployeeSearch = useCallback((keyword: string) => {
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current);
+    }
+    if (!keyword || keyword.length < 1) {
+      setEmployeeOptions([]);
+      return;
+    }
+    searchTimerRef.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const result = await getEmployeeList({ keyword, pageNum: 1, pageSize: 20 });
+        setEmployeeOptions(result.records || []);
+      } catch {
+        setEmployeeOptions([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+  }, []);
 
   // ============ 事件处理 ============
 
@@ -137,10 +168,10 @@ const DelegationPage: React.FC = () => {
       message.success('委托创建成功');
       form.resetFields();
       fetchDelegations();
-    } catch (err: unknown) {
+    } catch (error: any) {
       // 表单校验不通过时不处理
-      if (err && typeof err === 'object' && 'errorFields' in err) return;
-      message.error(getErrorMessage(err, '创建委托失败'));
+      if (error?.errorFields) return;
+      message.error(error?.message || '创建委托失败');
     } finally {
       setSubmitting(false);
     }

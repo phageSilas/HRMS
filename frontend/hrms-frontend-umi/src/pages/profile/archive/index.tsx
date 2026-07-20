@@ -31,12 +31,9 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { getProfile, updateProfile } from '@/services/profile';
 import type { ProfileVO, ProfileUpdateRequest } from '@/services/profile';
-import { useAsyncData } from '@/hooks/useAsyncData';
-import { getErrorMessage } from '@/utils/error';
-import styles from './style.less';
 
 const { Text, Title } = Typography;
 const { TextArea } = Input;
@@ -52,15 +49,29 @@ const maskPhone = (phone?: string): string => {
 // ============ 页面组件 ============
 
 const ProfileArchivePage: React.FC = () => {
-  const {
-    data: profile,
-    loading,
-    error: fetchError,
-    refresh: fetchProfile,
-  } = useAsyncData<ProfileVO>(() => getProfile());
+  const [profile, setProfile] = useState<ProfileVO | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form] = Form.useForm();
+
+  const fetchProfile = useCallback(async () => {
+    setLoading(true);
+    setFetchError(null);
+    try {
+      const data = await getProfile();
+      setProfile(data);
+    } catch (err: any) {
+      setFetchError(err?.message || '获取档案信息失败');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchProfile();
+  }, [fetchProfile]);
 
   // ============ 编辑态操作 ============
 
@@ -97,9 +108,9 @@ const ProfileArchivePage: React.FC = () => {
       message.success('联系信息已更新');
       setEditing(false);
       fetchProfile();
-    } catch (err: unknown) {
-      if (err && typeof err === 'object' && 'errorFields' in err) return; // 表单校验失败
-      message.error(getErrorMessage(err, '保存失败'));
+    } catch (error: any) {
+      if (error?.errorFields) return; // 表单校验失败
+      message.error(error?.message || '保存失败');
     } finally {
       setSaving(false);
     }
@@ -109,7 +120,7 @@ const ProfileArchivePage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className={styles.centerBlock}>
+      <div style={{ textAlign: 'center', padding: '80px 0' }}>
         <Spin size="large" />
       </div>
     );
@@ -117,11 +128,11 @@ const ProfileArchivePage: React.FC = () => {
 
   if (!profile) {
     return (
-      <div className={styles.centerBlock}>
+      <div style={{ textAlign: 'center', padding: '80px 0' }}>
         <Text type="warning">
           获取档案信息失败
           {fetchError && (
-            <div className={styles.errorDetail}>
+            <div style={{ marginTop: 8, fontSize: 13, color: '#999' }}>
               错误详情：{fetchError}
             </div>
           )}
@@ -135,21 +146,21 @@ const ProfileArchivePage: React.FC = () => {
   const renderHeaderCard = () => (
     <Card
       bordered={false}
-      className={styles.headerCard}
+      style={{ marginBottom: 20, borderRadius: 8 }}
     >
       <Row align="middle" gutter={20}>
         <Col>
           <Avatar
             size={72}
             icon={<UserOutlined />}
-            className={styles.avatarBlue}
+            style={{ backgroundColor: '#1677ff' }}
           />
         </Col>
         <Col flex="auto">
-          <Title level={4} className={styles.headerTitle}>
+          <Title level={4} style={{ margin: 0, marginBottom: 6 }}>
             {profile.employeeName || '未知'}
           </Title>
-          <Text type="secondary" className={styles.headerSubtitle}>
+          <Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 13 }}>
             {profile.employeeNo || '-'}
           </Text>
           <Space>
@@ -176,28 +187,38 @@ const ProfileArchivePage: React.FC = () => {
       <Card
         title={
           <Space>
-            <InfoCircleOutlined className={styles.cardIcon} />
+            <InfoCircleOutlined style={{ color: '#1677ff' }} />
             <span>基本信息</span>
           </Space>
         }
         bordered={false}
-        className={styles.infoCard}
+        style={{ borderRadius: 8, height: '100%' }}
       >
         {fields.map((f) => (
-          <Row key={f.label} className={styles.fieldRow} align="middle">
+          <Row key={f.label} style={{ marginBottom: 16 }} align="middle">
             <Col span={8}>
-              <Text type="secondary" className={styles.fieldLabel}>
+              <Text type="secondary" style={{ fontSize: 13 }}>
                 {f.label}
               </Text>
             </Col>
             <Col span={16}>
-              <Text className={styles.fieldValue}>{f.value || '-'}</Text>
+              <Text style={{ fontSize: 14 }}>{f.value || '-'}</Text>
             </Col>
           </Row>
         ))}
 
         {/* 提示联系 HR */}
-        <div className={styles.hrHint}>
+        <div
+          style={{
+            marginTop: 20,
+            padding: '10px 14px',
+            backgroundColor: '#fff7e6',
+            borderRadius: 6,
+            border: '1px solid #ffd591',
+            fontSize: 13,
+            color: '#d46b08',
+          }}
+        >
           <InfoCircleOutlined style={{ marginRight: 6 }} />
           如需修改请联系 HR
         </div>
@@ -225,7 +246,7 @@ const ProfileArchivePage: React.FC = () => {
       <Card
         title={
           <Space>
-            <ContactsOutlined className={styles.cardIcon} />
+            <ContactsOutlined style={{ color: '#1677ff' }} />
             <span>联系信息</span>
           </Space>
         }
@@ -261,7 +282,7 @@ const ProfileArchivePage: React.FC = () => {
           )
         }
         bordered={false}
-        className={styles.infoCard}
+        style={{ borderRadius: 8, height: '100%' }}
       >
         {editing ? (
           // ====== 编辑态：表单控件 ======
@@ -289,18 +310,18 @@ const ProfileArchivePage: React.FC = () => {
         ) : (
           // ====== 查看态：纯文本展示 ======
           fields.map((f) => (
-            <Row key={f.key} className={styles.fieldRow} align="middle">
+            <Row key={f.key} style={{ marginBottom: 16 }} align="middle">
               <Col span={8}>
                 <Space size={6}>
                   <Text style={{ color: '#999', fontSize: 13 }}>{f.icon}</Text>
-                  <Text type="secondary" className={styles.fieldLabel}>
+                  <Text type="secondary" style={{ fontSize: 13 }}>
                     {f.label}
                   </Text>
                 </Space>
               </Col>
               <Col span={16}>
-                <Text className={styles.fieldValue}>
-                  {String(profile[f.key as keyof ProfileVO] ?? '') || '-'}
+                <Text style={{ fontSize: 14 }}>
+                  {profile[f.key as keyof ProfileVO] || '-'}
                 </Text>
               </Col>
             </Row>
@@ -313,7 +334,7 @@ const ProfileArchivePage: React.FC = () => {
   // ============ 主渲染 ============
 
   return (
-    <div className={styles.pageContainer}>
+    <div style={{ padding: 0 }}>
       {renderHeaderCard()}
       <Row gutter={20}>
         <Col xs={24} lg={12}>

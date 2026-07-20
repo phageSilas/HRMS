@@ -10,7 +10,6 @@ import dayjs from 'dayjs';
 import React, { useMemo } from 'react';
 import { STATUS_BG_MAP, STATUS_COLOR_MAP, LEGEND_ITEMS, WEEKDAY_HEADERS } from '../constants';
 import type { AttendanceDayVO } from '@/services/profile';
-import componentStyles from './style.less';
 
 const { Text } = Typography;
 
@@ -63,17 +62,19 @@ const AttendanceCalendar: React.FC<Props> = ({
   // 无数据时生成虚拟日期（确保日历始终显示完整的月视图）
   const displayDays = useMemo<AttendanceDayVO[]>(() => {
     if (days.length > 0) {
+      console.log('[DEBUG Calendar] displayDays(API):', days.length, '条, 首条状态:', days[0]?.status, '首条日期:', days[0]?.date);
       return days;
     }
+    console.log('[DEBUG Calendar] displayDays(虚拟): 使用generateMonthDays');
     return generateMonthDays(currentMonth);
   }, [days, currentMonth]);
 
   // ============ Loading ============
   if (loading) {
     return (
-      <div className={componentStyles.calendarLoading}>
+      <div style={{ textAlign: 'center', padding: '40px 0' }}>
         <Spin />
-        <div className={componentStyles.calendarLoadingText}>加载考勤日历数据...</div>
+        <div style={{ marginTop: 12, color: '#999' }}>加载考勤日历数据...</div>
       </div>
     );
   }
@@ -81,16 +82,16 @@ const AttendanceCalendar: React.FC<Props> = ({
   // ============ Error ============
   if (error) {
     return (
-      <div className={componentStyles.calendarError}>
+      <div style={{ textAlign: 'center', padding: '40px 0' }}>
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
           description={
             <Space direction="vertical" size={8}>
               <Text type="warning">
-                <ExclamationCircleOutlined className={componentStyles.calendarErrorIcon} />
+                <ExclamationCircleOutlined style={{ marginRight: 6 }} />
                 获取考勤日历数据失败
               </Text>
-              <Text type="secondary" className={componentStyles.calendarErrorText}>{error}</Text>
+              <Text type="secondary" style={{ fontSize: 13 }}>{error}</Text>
               <Button size="small" onClick={onRefresh}>重新加载</Button>
             </Space>
           }
@@ -103,10 +104,10 @@ const AttendanceCalendar: React.FC<Props> = ({
   return (
     <>
       {/* 星期头 */}
-      <Row gutter={[4, 4]} className={componentStyles.calendarGrid}>
+      <Row gutter={[4, 4]} style={{ marginBottom: 8 }}>
         {WEEKDAY_HEADERS.map((d, idx) => (
-          <Col span={3} key={d} className={componentStyles.weekdayCell}>
-            <Text strong type="secondary" className={idx >= 5 ? componentStyles.weekdayWeekend : componentStyles.weekdayLabel}>
+          <Col span={3} key={d} style={{ textAlign: 'center' }}>
+            <Text strong type="secondary" style={{ color: idx >= 5 ? '#ff4d4f' : undefined }}>
               {d}
             </Text>
           </Col>
@@ -141,6 +142,9 @@ const AttendanceCalendar: React.FC<Props> = ({
               <Tooltip title={tooltipContent}>
                 <div
                   style={{
+                    padding: '6px 4px',
+                    borderRadius: 6,
+                    textAlign: 'center',
                     backgroundColor: isToday
                       ? '#e6f4ff'
                       : hasData
@@ -151,13 +155,12 @@ const AttendanceCalendar: React.FC<Props> = ({
                       : hasData
                         ? `1px solid ${STATUS_COLOR_MAP[day.status] || '#f0f0f0'}`
                         : '1px solid #f0f0f0',
+                    minHeight: 60,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    position: 'relative',
                     opacity: isWeekend ? 0.6 : 1,
                   }}
-                  className={
-                    isWeekend
-                      ? componentStyles.dayCell + ' ' + componentStyles.dayCellEmpty
-                      : componentStyles.dayCell + (isToday ? ' ' + componentStyles.dayCellToday : '')
-                  }
                   onClick={() => onDayClick(day)}
                   onMouseEnter={(e) => {
                     if (!isWeekend) {
@@ -182,18 +185,18 @@ const AttendanceCalendar: React.FC<Props> = ({
                   {hasData ? (
                     <Tag
                       color={STATUS_COLOR_MAP[day.status] || 'default'}
-                      className={componentStyles.dayStatusTag}
+                      style={{ fontSize: 11, padding: '0 4px', lineHeight: '18px' }}
                     >
                       {day.statusDesc}
                     </Tag>
                   ) : !isWeekend ? (
-                    <div className={componentStyles.dayStatusText}>--</div>
+                    <div style={{ fontSize: 11, color: '#ccc', marginTop: 2 }}>--</div>
                   ) : null}
                   {day.clockInTime && (
-                    <div className={componentStyles.dayClockIn}>↑{day.clockInTime}</div>
+                    <div style={{ fontSize: 11, color: '#52c41a' }}>↑{day.clockInTime}</div>
                   )}
                   {day.clockOutTime && (
-                    <div className={componentStyles.dayClockOut}>↓{day.clockOutTime}</div>
+                    <div style={{ fontSize: 11, color: '#1677ff' }}>↓{day.clockOutTime}</div>
                   )}
                 </div>
               </Tooltip>
@@ -203,17 +206,19 @@ const AttendanceCalendar: React.FC<Props> = ({
       </Row>
 
       {/* 图例 */}
-      <div className={componentStyles.legendBar}>
+      <div style={{ marginTop: 16, display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
         {LEGEND_ITEMS.map((item) => (
-          <div key={item.label} className={componentStyles.legendItem}>
+          <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <div
-              className={componentStyles.legendDot}
               style={{
+                width: 14,
+                height: 14,
+                borderRadius: 3,
                 backgroundColor: item.isBorder ? 'transparent' : item.color,
                 border: item.isBorder ? `2px solid ${item.color}` : 'none',
               }}
             />
-            <Text type="secondary" className={componentStyles.legendLabel}>{item.label}</Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>{item.label}</Text>
           </div>
         ))}
       </div>

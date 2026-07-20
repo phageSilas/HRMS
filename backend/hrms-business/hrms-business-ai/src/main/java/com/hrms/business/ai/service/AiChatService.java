@@ -7,8 +7,6 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
  * AI 对话服务接口
  * <p>
  * 负责处理用户消息、调用 DashScope 百炼流式生成、集成百炼知识库检索。
- *
- * @since 2026-07-20
  */
 public interface AiChatService {
 
