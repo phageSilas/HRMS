@@ -492,6 +492,13 @@ const AiChatPage: React.FC = () => {
   const pendingHomePromptConsumedRef = useRef(false);
   /** 是否正在创建新会话（用于抑制自动选中第一条的逻辑） */
   const creatingNewConversationRef = useRef(false);
+  /**
+   * 流式内容 rAF 节流标记
+   * 防止 React 18 自动批处理合并连续的 setStreamingContent 调用，
+   * 确保每次 requestAnimationFrame 周期内只触发一次渲染，
+   * 实现 AI 回复文本逐帧更新而非一次性全部出现
+   */
+  const streamingUpdatePendingRef = useRef(false);
 
   // ---- 会话列表数据管理（手动管理，不用 useRequest 避免不可控） ----
 
@@ -710,9 +717,17 @@ const AiChatPage: React.FC = () => {
             }
           },
           onContent: (text) => {
-            // 累加增量内容到 streamingRef 和 state
+            // 累加增量内容到 streamingRef
             streamingRef.current += text;
-            setStreamingContent(streamingRef.current);
+            // 使用 requestAnimationFrame 节流，避免 React 18 自动批处理
+            // 导致连续多次 setStreamingContent 合并为一次渲染
+            if (!streamingUpdatePendingRef.current) {
+              streamingUpdatePendingRef.current = true;
+              requestAnimationFrame(() => {
+                streamingUpdatePendingRef.current = false;
+                setStreamingContent(streamingRef.current);
+              });
+            }
           },
           onEnd: (reason, rawData) => {
             abortRef.current = null;

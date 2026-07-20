@@ -2,7 +2,13 @@ package com.hrms.business.ai.config;
 
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
+
+import java.util.concurrent.Executor;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * AI 智能助手模块配置
@@ -56,5 +62,27 @@ public class AiConfig {
      * 超时时间（毫秒）
      */
     private long timeout = 60000;
+
+    /**
+     * AI 对话专用线程池
+     * <p>
+     * 用于 AI 对话流式处理的异步任务，替代默认的 ForkJoinPool.commonPool()。
+     * 核心线程数 = 2，最大线程数 = 4，避免大量对话请求耗尽 Tomcat 线程。
+     * 空闲存活 60 秒，使用有界队列防止无限积压。
+     * </p>
+     *
+     * @return AI 对话 Executor
+     */
+    @Bean("aiChatExecutor")
+    public Executor aiChatExecutor() {
+        return new ThreadPoolExecutor(
+                2,                          // 核心线程数
+                4,                          // 最大线程数
+                60L,                        // 空闲线程存活时间
+                TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(100),  // 有界队列，最多积压 100 个任务
+                new ThreadPoolExecutor.CallerRunsPolicy()  // 队列满时由调用线程执行
+        );
+    }
 
 }

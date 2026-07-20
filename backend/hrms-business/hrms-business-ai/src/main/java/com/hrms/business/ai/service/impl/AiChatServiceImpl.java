@@ -12,7 +12,6 @@ import com.hrms.business.ai.mapper.ConversationMapper;
 import com.hrms.business.ai.mapper.AiMessageMapper;
 import com.hrms.business.ai.service.AiChatService;
 import com.hrms.common.exception.GlobalException;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.*;
 import okhttp3.sse.EventSource;
@@ -23,8 +22,11 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+
+import org.springframework.beans.factory.annotation.Qualifier;
 
 /**
  * AI 对话服务实现
@@ -40,13 +42,23 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class AiChatServiceImpl implements AiChatService {
 
     private final AiConfig aiConfig;
     private final ConversationMapper conversationMapper;
     private final AiMessageMapper messageMapper;
     private final ObjectMapper objectMapper;
+    private final Executor aiChatExecutor;
+
+    public AiChatServiceImpl(AiConfig aiConfig, ConversationMapper conversationMapper,
+                             AiMessageMapper messageMapper, ObjectMapper objectMapper,
+                             @Qualifier("aiChatExecutor") Executor aiChatExecutor) {
+        this.aiConfig = aiConfig;
+        this.conversationMapper = conversationMapper;
+        this.messageMapper = messageMapper;
+        this.objectMapper = objectMapper;
+        this.aiChatExecutor = aiChatExecutor;
+    }
 
     @Override
     public SseEmitter chatStream(Long userId, ChatRequestDTO request) {
@@ -73,21 +85,18 @@ public class AiChatServiceImpl implements AiChatService {
         emitter.onCompletion(() -> log.debug("SSE 连接完成, conversationId={}", cId));
         emitter.onTimeout(() -> {
             log.warn("SSE 连接超时, conversationId={}", cId);
-            emitter.complete();
+            // 注意：不要在此处调用 emitter.complete()，Spring 在超时后
+            // 会自动完成 emitter，重复调用会抛出 IllegalStateException
         });
         emitter.onError(t -> log.error("SSE 连接异常, conversationId={}", cId, t));
 
-        // ========== 4. 发送 start 事件 ==========
-        try {
-            String startData = objectMapper.writeValueAsString(
-                    Map.of("type", "start", "conversationId", conversationId));
-            emitter.send(SseEmitter.event().name("message").data(startData));
-        } catch (IOException e) {
-            log.error("发送 start 事件失败", e);
-            return emitter;
-        }
-
-        // ========== 5. 异步调用百炼 API ==========
+        // ========== 4. 异步调用百炼 API ==========
+        // 使用专用线程池处理 AI 对话流，避免 ForkJoinPool.commonPool() 的守护线程问题
+        //
+        // 注意：start 事件的发送也在异步任务中执行，确保：
+        // 1. emitter 先返回给 Spring MVC，Spring 正确设置 Content-Type: text/event-stream
+        // 2. Spring 进入异步模式（request.startAsync()）
+        // 3. 异步任务再发送数据，避免在同步模式下提前提交 response
         Long finalConversationId = conversationId;
         CompletableFuture.runAsync(() -> {
             String fullResponse = null;
@@ -95,6 +104,12 @@ public class AiChatServiceImpl implements AiChatService {
             String aiTitle = null;
 
             try {
+                // 发送 start 事件（确保在异步线程中执行，此时 Spring MVC 已完成异步模式初始化）
+                // 同步线程中 emitter.send() 会提前提交 response，导致后续异步写入失败。
+                String startData = objectMapper.writeValueAsString(
+                        Map.of("type", "start", "conversationId", finalConversationId));
+                emitter.send(SseEmitter.event().name("message").data(startData));
+
                 // 查询历史消息
                 List<MessageEntity> history = messageMapper.selectList(
                         com.baomidou.mybatisplus.core.toolkit.Wrappers.<MessageEntity>lambdaQuery()
@@ -162,7 +177,7 @@ public class AiChatServiceImpl implements AiChatService {
                     }
                 }
             }
-        });
+        }, aiChatExecutor);
 
         return emitter;
     }
@@ -247,14 +262,23 @@ public class AiChatServiceImpl implements AiChatService {
                 .header("X-DashScope-SSE", "enable")
                 .build();
 
-        StringBuilder fullContent = new StringBuilder();
-        boolean[] markerReached = {false};
-        Object lock = new Object();
+        // ===== 使用 BlockingQueue 解耦 OkHttp 回调与 SseEmitter 写入 =====
+        // OkHttp EventSource 回调线程将原始内容块放入队列，
+        // 当前线程（async 线程）从队列中取出，统一处理标记检测和 SseEmitter 转发，
+        // 避免跨线程写入 Servlet 输出流带来的潜在缓冲问题
+        BlockingQueue<String> chunkQueue = new LinkedBlockingQueue<>();
+        AtomicBoolean streamFinished = new AtomicBoolean(false);
         AtomicReference<String> apiError = new AtomicReference<>(null);
 
-        // ===== SSE 流式接收 =====
         EventSource.Factory factory = EventSources.createFactory(httpClient);
         factory.newEventSource(request, new EventSourceListener() {
+
+            /**
+             * 收到百炼 SSE 事件回调（OkHttp 回调线程）
+             * <p>
+             * 仅做两件事：解析响应体提取 text，放入队列。不做标记检测和 emitter.send()。
+             * </p>
+             */
             @Override
             public void onEvent(EventSource eventSource, String id, String type, String data) {
                 // App API 的事件类型为 "result"
@@ -269,81 +293,8 @@ public class AiChatServiceImpl implements AiChatService {
                     String text = (String) output.get("text");
                     if (text == null || text.isEmpty()) return;
 
-                    fullContent.append(text);
-                    log.debug("[SSE_CHUNK] text=[{}]", text);
-
-                    // 已经到达标记位置，不再推送
-                    if (markerReached[0]) {
-                        log.debug("[SSE_MARKER] 已到达标记，跳过推送 text=[{}]", text);
-                        return;
-                    }
-
-                    // 检测当前完整内容中是否包含 SUGGESTIONS 或 TITLE 标记
-                    String currentFull = fullContent.toString();
-                    String foundMarker = null;
-                    String[] markers = {"---SUGGESTIONS---", "---TITLE---", "--TITLE---"};
-                    for (String m : markers) {
-                        if (currentFull.indexOf(m) >= 0) {
-                            foundMarker = m;
-                            break;
-                        }
-                    }
-                    if (foundMarker != null) {
-                        markerReached[0] = true;
-                        log.debug("[SSE_MARKER] 找到标记 [{}] 在位置 {}, fullContent=[{}]",
-                                foundMarker, currentFull.indexOf(foundMarker),
-                                currentFull.length() > 200 ? currentFull.substring(currentFull.length() - 200) : currentFull);
-                        // 只推送标记前的内容
-                        int markerIdx = currentFull.indexOf(foundMarker);
-                        int prevLen = fullContent.length() - text.length();
-                        if (markerIdx > prevLen) {
-                            String safePart = text.substring(0, markerIdx - prevLen);
-                            if (!safePart.isEmpty()) {
-                                log.debug("[SSE_MARKER] 推送标记前内容 [{}]", safePart);
-                                try {
-                                    emitter.send(SseEmitter.event().name("message")
-                                            .data(objectMapper.writeValueAsString(
-                                                    Map.of("type", "content", "text", safePart))));
-                                } catch (IOException e) {
-                                    eventSource.cancel();
-                                }
-                            }
-                        } else {
-                            log.debug("[SSE_MARKER] 标记在当前 chunk 之前就已存在");
-                        }
-                        return;
-                    }
-
-                    // 检查标记被跨 chunk 分割的情况：
-                    // 计算所有 mark 中与当前内容的尾部匹配的最大重叠长度，全部截掉
-                    String pushText = text;
-                    int maxOverlapLen = 0;
-                    for (String m : markers) {
-                        int limit = Math.min(m.length(), currentFull.length());
-                        for (int i = 1; i <= limit; i++) {
-                            String suffix = currentFull.substring(currentFull.length() - i);
-                            if (m.startsWith(suffix)) {
-                                maxOverlapLen = Math.max(maxOverlapLen, i);
-                            }
-                        }
-                    }
-                    if (maxOverlapLen > 0) {
-                        pushText = text.substring(0, Math.max(0, text.length() - maxOverlapLen));
-                        log.debug("[SSE_CROSS] 尾部与标记重叠 {} 字符, text=[{}], pushText=[{}], currentFull尾=[{}]",
-                                maxOverlapLen, text, pushText,
-                                currentFull.substring(Math.max(0, currentFull.length() - 20)));
-                    }
-
-                    // 转发到前端 SSE
-                    if (!pushText.isEmpty()) {
-                        try {
-                            emitter.send(SseEmitter.event().name("message")
-                                    .data(objectMapper.writeValueAsString(
-                                            Map.of("type", "content", "text", pushText))));
-                        } catch (IOException e) {
-                            eventSource.cancel();
-                        }
-                    }
+                    // 只放入队列，由主 polling 线程处理转发
+                    chunkQueue.offer(text);
 
                 } catch (JsonProcessingException e) {
                     log.warn("解析 App API SSE 数据失败: {}", data, e);
@@ -364,26 +315,131 @@ public class AiChatServiceImpl implements AiChatService {
                     apiError.set(t.getMessage());
                 }
                 log.error("App API SSE 连接失败, 异常详情: ", t);
-                synchronized (lock) {
-                    lock.notifyAll();
-                }
+                streamFinished.set(true);
             }
 
             @Override
             public void onClosed(EventSource eventSource) {
-                synchronized (lock) {
-                    lock.notifyAll();
-                }
+                streamFinished.set(true);
             }
         });
 
-        // 等待流式完成或失败
-        try {
-            synchronized (lock) {
-                lock.wait(aiConfig.getTimeout());
+        // ===== 主线程轮询：从队列读取内容块，标记检测，SseEmitter 转发 =====
+        StringBuilder fullContent = new StringBuilder();
+        long deadline = System.currentTimeMillis() + aiConfig.getTimeout();
+        boolean markerReached = false;
+        int lastForwardedLength = 0;           // fullContent 中已转发到前端的字符长度
+        String[] markers = {"---SUGGESTIONS---", "---TITLE---", "--TITLE---"};
+
+        while (System.currentTimeMillis() < deadline && !streamFinished.get()) {
+            String chunk;
+            try {
+                // 每次轮询最多等待 200ms，之后检查 streamFinished 状态
+                chunk = chunkQueue.poll(200, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
             }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+            if (chunk == null) {
+                continue;           // 队列超时，非结束信号，继续轮询
+            }
+
+            fullContent.append(chunk);
+            log.debug("[SSE_CHUNK] text=[{}]", chunk);
+
+            // 已检测到标记 → 只积累不转发
+            if (markerReached) {
+                log.debug("[SSE_MARKER] 已到达标记，跳过推送 text=[{}]", chunk);
+                continue;
+            }
+
+            String currentFull = fullContent.toString();
+
+            // 检测当前完整内容中是否包含 SUGGESTIONS 或 TITLE 标记
+            String foundMarker = null;
+            int earliestMarker = -1;
+            for (String m : markers) {
+                int idx = currentFull.indexOf(m);
+                if (idx >= 0 && (earliestMarker < 0 || idx < earliestMarker)) {
+                    earliestMarker = idx;
+                    foundMarker = m;
+                }
+            }
+
+            if (foundMarker != null) {
+                // 标记出现，只转发标记前的内容
+                markerReached = true;
+                log.debug("[SSE_MARKER] 找到标记 [{}] 在位置 {}, currentFull尾=[{}]",
+                        foundMarker, earliestMarker,
+                        currentFull.length() > 200 ? currentFull.substring(Math.max(0, currentFull.length() - 200)) : currentFull);
+
+                // 计算本次 chunk 中需要转发到前端的部分（标记前的内容）
+                int chunkStartInFull = currentFull.length() - chunk.length();
+                if (earliestMarker > chunkStartInFull) {
+                    // 标记在当前 chunk 中，截取 chunk 内标记前的内容
+                    String forwardPart = chunk.substring(0, earliestMarker - chunkStartInFull);
+                    if (!forwardPart.isEmpty()) {
+                        log.debug("[SSE_MARKER] 转发标记前内容 [{}]",
+                                forwardPart.length() > 100 ? forwardPart.substring(0, 100) + "..." : forwardPart);
+                        try {
+                            emitter.send(SseEmitter.event().name("message")
+                                    .data(objectMapper.writeValueAsString(
+                                            Map.of("type", "content", "text", forwardPart))));
+                        } catch (IOException e) {
+                            log.warn("SseEmitter 发送失败，客户端可能已断开", e);
+                            break;
+                        }
+                    }
+                } else {
+                    log.debug("[SSE_MARKER] 标记在之前的 chunk 中就已存在，当前 chunk 全部跳过");
+                }
+                lastForwardedLength = currentFull.length();
+            } else {
+                // 无标记，检查当前累计内容尾部是否与标记前缀重叠（跨 chunk 标记）
+                int trimLen = 0;
+                for (String m : markers) {
+                    int limit = Math.min(m.length(), currentFull.length());
+                    for (int i = 1; i <= limit; i++) {
+                        String suffix = currentFull.substring(currentFull.length() - i);
+                        if (m.startsWith(suffix)) {
+                            trimLen = Math.max(trimLen, i);
+                        }
+                    }
+                }
+
+                // 提取"尚未转发"的内容（从 lastForwardedLength 到末尾）
+                String newContent = currentFull.substring(lastForwardedLength);
+
+                if (trimLen > 0) {
+                    // 尾部与标记前缀重叠 → 去掉重叠部分再转发
+                    String forwardText = newContent.substring(0, Math.max(0, newContent.length() - trimLen));
+                    log.debug("[SSE_CROSS] 尾部与标记重叠 {} 字符, chunk=[{}], forwardText=[{}]",
+                            trimLen, chunk, forwardText);
+                    if (!forwardText.isEmpty()) {
+                        try {
+                            emitter.send(SseEmitter.event().name("message")
+                                    .data(objectMapper.writeValueAsString(
+                                            Map.of("type", "content", "text", forwardText))));
+                        } catch (IOException e) {
+                            log.warn("SseEmitter 发送失败，客户端可能已断开", e);
+                            break;
+                        }
+                    }
+                } else {
+                    // 正常转发新增的完整内容
+                    if (!newContent.isEmpty()) {
+                        try {
+                            emitter.send(SseEmitter.event().name("message")
+                                    .data(objectMapper.writeValueAsString(
+                                            Map.of("type", "content", "text", newContent))));
+                        } catch (IOException e) {
+                            log.warn("SseEmitter 发送失败，客户端可能已断开", e);
+                            break;
+                        }
+                    }
+                }
+                lastForwardedLength = currentFull.length();
+            }
         }
 
         // 如果 API 调用失败，抛出异常让上层 catch 块向前端发送错误事件
@@ -453,7 +509,7 @@ public class AiChatServiceImpl implements AiChatService {
                 .build();
 
         StringBuilder fullContent = new StringBuilder();
-        Object lock = new Object();
+        CountDownLatch latch = new CountDownLatch(1);
 
         EventSource.Factory factory = EventSources.createFactory(httpClient);
         factory.newEventSource(request, new EventSourceListener() {
@@ -497,18 +553,20 @@ public class AiChatServiceImpl implements AiChatService {
                     }
                 }
                 log.error("LLM SSE 连接失败, 异常详情: ", t);
-                synchronized (lock) { lock.notifyAll(); }
+                latch.countDown();
             }
 
             @Override
             public void onClosed(EventSource eventSource) {
-                synchronized (lock) { lock.notifyAll(); }
+                latch.countDown();
             }
         });
 
         try {
-            synchronized (lock) {
-                lock.wait(aiConfig.getTimeout());
+            // 使用 CountDownLatch.await 替代 Object.wait，避免 notify 在 wait 之前发出导致的信号丢失
+            boolean completed = latch.await(aiConfig.getTimeout(), TimeUnit.MILLISECONDS);
+            if (!completed) {
+                log.warn("LLM 流式响应超时 ({}ms)，已收到 {} 字符", aiConfig.getTimeout(), fullContent.length());
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
