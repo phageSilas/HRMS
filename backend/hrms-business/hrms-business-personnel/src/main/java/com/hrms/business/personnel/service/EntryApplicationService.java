@@ -22,6 +22,14 @@ public interface EntryApplicationService {
     PageResult<EntryApplicationPageVO> pageEntryApplications(EntryApplicationQueryDTO queryDTO);
 
     /**
+     * 获取入职申请详情。
+     *
+     * @param id 入职申请ID
+     * @return 入职申请详情
+     */
+    EntryApplicationPageVO getEntryApplication(Long id);
+
+    /**
      * 创建入职申请草稿。
      *
      * @param requestDTO 入职申请创建参数
@@ -35,7 +43,7 @@ public interface EntryApplicationService {
      * @param id 入职申请ID
      * @param requestDTO 入职申请更新参数
      */
-    void updateEntryApplication(Long id, EntryApplicationCreateOrUpdateRequestDTO requestDTO);
+    EntryApplicationPageVO updateEntryApplication(Long id, EntryApplicationCreateOrUpdateRequestDTO requestDTO);
 
     /**
      * 提交入职申请审批。

@@ -45,6 +45,18 @@ public class EntryApplicationController {
     }
 
     /**
+     * 查询入职申请详情。
+     *
+     * @param id 入职申请ID
+     * @return 入职申请详情
+     */
+    @GetMapping("/{id}")
+    @Operation(summary = "入职申请详情")
+    public Result<EntryApplicationPageVO> getEntryApplication(@PathVariable Long id) {
+        return Result.success(entryApplicationService.getEntryApplication(id));
+    }
+
+    /**
      * 创建入职申请草稿。
      *
      * @param requestDTO 入职申请创建参数
@@ -66,10 +78,9 @@ public class EntryApplicationController {
      */
     @PutMapping("/{id}")
     @Operation(summary = "更新入职申请")
-    public Result<Void> updateEntryApplication(@PathVariable Long id,
-                                               @Valid @RequestBody EntryApplicationCreateOrUpdateRequestDTO requestDTO) {
-        entryApplicationService.updateEntryApplication(id, requestDTO);
-        return Result.success();
+    public Result<EntryApplicationPageVO> updateEntryApplication(@PathVariable Long id,
+                                                                 @Valid @RequestBody EntryApplicationCreateOrUpdateRequestDTO requestDTO) {
+        return Result.success(entryApplicationService.updateEntryApplication(id, requestDTO));
     }
 
     /**

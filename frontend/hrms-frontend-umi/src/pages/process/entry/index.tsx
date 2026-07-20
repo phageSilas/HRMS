@@ -7,6 +7,7 @@ import {
   ApprovalStatus,
   confirmEntryApplication,
   createEntryApplication,
+  getEntryApplication,
   getEntryApplicationList,
   submitEntryApplication,
   updateEntryApplication,
@@ -153,6 +154,7 @@ const EntryPage: React.FC = () => {
   const [editingRecord, setEditingRecord] = useState<EntryApplication>();
   const [confirmRecord, setConfirmRecord] = useState<EntryApplication>();
   const [confirmLoading, setConfirmLoading] = useState(false);
+  const [editingLoadingId, setEditingLoadingId] = useState<number>();
   const [activeStatus, setActiveStatus] = useState<string>('all');
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
   const [confirmForm] = Form.useForm<{ actualHireDate: Dayjs }>();
@@ -198,6 +200,17 @@ const EntryPage: React.FC = () => {
     await submitEntryApplication(record.id);
     message.success('已提交入职审批');
     reloadTable();
+  };
+
+  const handleEditRecord = async (recordId: number) => {
+    setEditingLoadingId(recordId);
+    try {
+      const detail = await getEntryApplication(recordId);
+      setEditingRecord(detail);
+      setDrawerOpen(true);
+    } finally {
+      setEditingLoadingId(undefined);
+    }
   };
 
   const handleConfirmEntry = async () => {
@@ -323,10 +336,8 @@ const EntryPage: React.FC = () => {
             <Button
               size="small"
               icon={<EditOutlined />}
-              onClick={() => {
-                setEditingRecord(record);
-                setDrawerOpen(true);
-              }}
+              loading={editingLoadingId === record.id}
+              onClick={() => handleEditRecord(record.id)}
             >
               编辑
             </Button>

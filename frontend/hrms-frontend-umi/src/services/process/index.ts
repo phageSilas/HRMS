@@ -196,6 +196,12 @@ export async function getEntryApplicationList(
   return request.get('/api/v1/entry-applications', { params });
 }
 
+export async function getEntryApplication(
+  id: number,
+): Promise<EntryApplication> {
+  return request.get(`/api/v1/entry-applications/${id}`);
+}
+
 export async function createEntryApplication(
   data: EntryApplicationFormValues,
 ): Promise<EntryApplication> {
@@ -205,7 +211,7 @@ export async function createEntryApplication(
 export async function updateEntryApplication(
   id: number,
   data: EntryApplicationFormValues,
-): Promise<void> {
+): Promise<EntryApplication> {
   return request.put(`/api/v1/entry-applications/${id}`, data);
 }
 
