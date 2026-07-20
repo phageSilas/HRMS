@@ -17,6 +17,12 @@ import java.util.Arrays;
 
 /**
  * 个人档案服务实现
+ * <p>
+ * 提供员工档案信息的查询和更新。
+ * 查询时支持两种关联方式：hr_employee.user_id（反向关联）和 sys_user.employee_id（正向关联），
+ * 优先以反向关联方式查询以保障数据可靠性。
+ * 更新时仅允许修改联系信息等可编辑字段，核心字段需通过 HR 流程变更。
+ * </p>
  */
 @Slf4j
 @Service
@@ -26,6 +32,17 @@ public class ProfileServiceImpl implements ProfileService {
     private final ProfileMapper profileMapper;
     private final UserMapper userMapper;
 
+    /**
+     * 获取员工档案信息
+     * <p>
+     * 优先通过 hr_employee.user_id 反向关联查询；若查询不到，降级为通过 sys_user.employee_id
+     * 正向关联查询。查询完成后填充性别描述、在职状态描述和字段权限配置。
+     * </p>
+     *
+     * @param userId 用户 ID
+     * @return 员工档案 VO
+     * @throws GlobalException 员工信息不存在时抛出
+     */
     @Override
     public ProfileVO getProfile(Long userId) {
         // 方式一：通过 hr_employee.user_id 查询（反向关联，最可靠）
@@ -74,6 +91,17 @@ public class ProfileServiceImpl implements ProfileService {
         return profile;
     }
 
+    /**
+     * 更新员工档案信息
+     * <p>
+     * 通过 userId 找到 employeeId 后执行更新，仅允许更新邮箱、电话、地址、紧急联系人等字段。
+     * 使用声明式事务确保数据一致性。
+     * </p>
+     *
+     * @param userId  用户 ID
+     * @param request 档案更新请求
+     * @throws GlobalException 用户不存在或员工信息不存在时抛出
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateProfile(Long userId, ProfileUpdateRequest request) {

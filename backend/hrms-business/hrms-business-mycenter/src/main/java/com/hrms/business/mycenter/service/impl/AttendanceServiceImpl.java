@@ -37,6 +37,11 @@ import java.util.stream.IntStream;
 
 /**
  * 个人考勤服务实现
+ * <p>
+ * 提供考勤日历、上下班打卡、补卡申请、加班申请、考勤统计等核心功能。
+ * 请假、补卡、加班等流程通过 {@link com.hrms.business.approval.service.ApprovalService} 发起审批。
+ * 考勤状态判定优先级：请假 > 旷工 > 缺卡 > 迟到 > 早退 > 正常。
+ * </p>
  */
 @Slf4j
 @Service("myCenterAttendanceServiceImpl")
@@ -49,6 +54,18 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final MyCenterLeaveRequestMapper leaveRequestMapper;
     private final ApprovalService approvalService;
 
+    /**
+     * 获取考勤日历
+     * <p>
+     * 按月查询考勤记录和请假记录，逐日构建日历数据。
+     * 每日状态判定优先级：休息日 > 请假 > 打卡记录 > 缺卡。
+     * 请假优先于打卡记录，即使当天有打卡也显示为请假。
+     * </p>
+     *
+     * @param employeeId 员工 ID
+     * @param yearMonth  年月（格式：yyyy-MM）
+     * @return 考勤日历 VO
+     */
     @Override
     public AttendanceCalendarVO getCalendar(Long employeeId, String yearMonth) {
         YearMonth ym = YearMonth.parse(yearMonth, DateTimeFormatter.ofPattern("yyyy-MM"));
@@ -159,6 +176,18 @@ public class AttendanceServiceImpl implements AttendanceService {
         };
     }
 
+    /**
+     * 上下班打卡
+     * <p>
+     * type=1 为上班打卡，type=2 为下班打卡。
+     * 上班打卡时创建新的考勤记录，下班打卡时更新已有记录。
+     * 同一天不可重复打卡同一类型。
+     * </p>
+     *
+     * @param employeeId 员工 ID
+     * @param type       打卡类型（1=上班，2=下班）
+     * @throws GlobalException 未找到考勤组、重复打卡或先打下班卡时抛出
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void clockIn(Long employeeId, Integer type) {
@@ -209,6 +238,17 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
     }
 
+    /**
+     * 提交补卡申请
+     * <p>
+     * 创建补卡记录后通过 {@link ApprovalService#startApproval} 发起 CORRECTION 类型审批。
+     * 同一天同一类型不可重复提交补卡申请。
+     * </p>
+     *
+     * @param employeeId 员工 ID
+     * @param request    补卡申请请求
+     * @throws GlobalException 重复申请或发起审批失败时抛出
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void createMakeup(Long employeeId, MakeupRequest request) {
@@ -284,6 +324,12 @@ public class AttendanceServiceImpl implements AttendanceService {
                     .replace("\t", "\\t");
     }
 
+    /**
+     * 查询补卡记录列表
+     *
+     * @param employeeId 员工 ID
+     * @return 补卡记录列表
+     */
     @Override
     public List<MakeupRecordVO> listMakeupRecords(Long employeeId) {
         List<AttendanceCorrectionEntity> list = correctionMapper.selectList(
@@ -307,6 +353,17 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     // ==================== 加班申请 ====================
 
+    /**
+     * 提交加班申请
+     * <p>
+     * 创建加班记录后通过 {@link ApprovalService#startApproval} 发起 OVERTIME 类型审批。
+     * 发起成功后回填审批实例 ID 并更新状态为"审批中"。
+     * </p>
+     *
+     * @param employeeId 员工 ID
+     * @param request    加班申请请求
+     * @throws GlobalException 发起审批失败时抛出
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void createOvertime(Long employeeId, OvertimeRequest request) {
@@ -351,6 +408,12 @@ public class AttendanceServiceImpl implements AttendanceService {
         return json.toString();
     }
 
+    /**
+     * 查询加班记录列表
+     *
+     * @param employeeId 员工 ID
+     * @return 加班记录列表（含状态描述）
+     */
     @Override
     public List<OvertimeRecordVO> listOvertimeRecords(Long employeeId) {
         List<AttendanceOvertimeEntity> list = overtimeMapper.selectList(
@@ -383,6 +446,16 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     // ==================== 考勤统计 ====================
 
+    /**
+     * 获取考勤统计
+     * <p>
+     * 统计指定月份应出勤天数（周一到周五）、实际出勤天数、迟到、早退、缺卡、请假次数。
+     * </p>
+     *
+     * @param employeeId 员工 ID
+     * @param yearMonth  年月（格式：yyyy-MM）
+     * @return 考勤统计 VO
+     */
     @Override
     public AttendanceStatisticsVO getStatistics(Long employeeId, String yearMonth) {
         YearMonth ym = YearMonth.parse(yearMonth, DateTimeFormatter.ofPattern("yyyy-MM"));

@@ -24,6 +24,11 @@ import java.util.stream.Collectors;
 
 /**
  * 会话管理服务实现
+ * <p>
+ * 提供 AI 对话会话的 CRUD 操作实现。
+ * 会话列表按更新时间倒序排列，每条会话附带最后一条消息的摘要（前 50 字）。
+ * 删除操作使用 MyBatis-Plus 逻辑删除（@TableLogic）。
+ * </p>
  */
 @Slf4j
 @Service
@@ -127,7 +132,13 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     /**
-     * ConversationEntity → ConversationVO
+     * 会话实体转 VO
+     * <p>
+     * 转换时查询该会话的最后一条消息作为摘要（超过 50 字时截断并追加"..."）。
+     * </p>
+     *
+     * @param entity 会话实体
+     * @return 会话 VO
      */
     private ConversationVO toConversationVO(ConversationEntity entity) {
         ConversationVO vo = new ConversationVO();
@@ -156,7 +167,10 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     /**
-     * MessageEntity → MessageVO
+     * 消息实体转 VO
+     *
+     * @param entity 消息实体
+     * @return 消息 VO
      */
     private MessageVO toMessageVO(MessageEntity entity) {
         MessageVO vo = new MessageVO();

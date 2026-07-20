@@ -6,6 +6,10 @@ import com.hrms.common.web.PageResult;
 
 /**
  * 会话管理服务接口
+ * <p>
+ * 提供 AI 对话会话的 CRUD 操作，包括：列表分页查询、详情查询（含消息列表）、
+ * 创建、更新标题、逻辑删除、消息计数递增。
+ * </p>
  */
 public interface ConversationService {
 

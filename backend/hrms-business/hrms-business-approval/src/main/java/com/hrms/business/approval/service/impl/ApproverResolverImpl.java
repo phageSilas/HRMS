@@ -40,6 +40,19 @@ public class ApproverResolverImpl implements ApproverResolver {
     private final RoleMapper roleMapper;
     private final UserRoleMapper userRoleMapper;
 
+    /**
+     * 解析审批人
+     * <p>
+     * 根据审批人类型从组织架构或角色中查找对应的用户 ID。
+     * 支持类型：DEPT_HEAD（部门负责人）、SUPERIOR_DEPT_HEAD（直接上级）、
+     * HR_HEAD（HR 负责人）、FINANCE_HEAD（财务负责人）、BOSS（老板）。
+     * </p>
+     *
+     * @param approverType    审批人类型编码
+     * @param applicantDeptId 申请人部门 ID（DEPT_HEAD 类型时需要）
+     * @param bizId           业务主键 ID（SUPERIOR_DEPT_HEAD 类型时需要）
+     * @return 审批人用户 ID，无法解析时返回 null
+     */
     @Override
     public Long resolveApprover(String approverType, Long applicantDeptId, Long bizId) {
         Long userId = switch (approverType) {
@@ -124,6 +137,12 @@ public class ApproverResolverImpl implements ApproverResolver {
 
     /**
      * 根据用户 ID 查找其直接上级的用户 ID
+     * <p>
+     * 链路：userId → hr_employee.leader_id（员工 ID）→ 上级的 hr_employee.user_id
+     * </p>
+     *
+     * @param userId 当前用户 ID
+     * @return 直接上级的用户 ID，未配置时返回 null
      */
     private Long findLeaderByUserId(Long userId) {
         // 1. 根据 userId 查员工记录，获取 leaderId（员工ID）
@@ -173,6 +192,16 @@ public class ApproverResolverImpl implements ApproverResolver {
         return userRole.getUserId();
     }
 
+    /**
+     * 检查审批人是否存在生效的委托关系
+     * <p>
+     * 查询委托表中当前时间在有效期内的生效委托记录，
+     * 若存在则返回被委托人 ID，后续由被委托人代为审批。
+     * </p>
+     *
+     * @param approverUserId 原审批人用户 ID
+     * @return 被委托人用户 ID，无委托时返回 null
+     */
     @Override
     public Long checkDelegation(Long approverUserId) {
         if (approverUserId == null) {

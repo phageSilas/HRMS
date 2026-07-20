@@ -44,6 +44,22 @@ public class ApprovalEngineImpl implements ApprovalEngine {
     private final ApproverResolver approverResolver;
     private final ApplicationEventPublisher eventPublisher;
 
+    /**
+     * 发起审批流程
+     * <p>
+     * 流程：加载审批模板 → 生成审批单号 → 创建审批实例 → 创建第一个待办任务。
+     * 使用 Spring 声明式事务，任何异常触发回滚。
+     * </p>
+     *
+     * @param approvalType       审批业务类型（如 ENTRY、LEAVE 等）
+     * @param bizId              业务主键 ID
+     * @param formData           表单数据 JSON 快照
+     * @param applicantUserId    申请人用户 ID
+     * @param applicantDeptId    申请人部门 ID
+     * @param applicantEmployeeId 申请人员工 ID（可选）
+     * @return 审批实例 ID
+     * @throws GlobalException 模板为空或无可用审批人时抛出
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long startApproval(String approvalType, Long bizId, String formData,
@@ -86,6 +102,21 @@ public class ApprovalEngineImpl implements ApprovalEngine {
         return instance.getId();
     }
 
+    /**
+     * 处理审批操作
+     * <p>
+     * 支持 approve（通过）、reject（驳回）、transfer（转交）三种操作。
+     * 使用乐观锁（UPDATE ... WHERE task_status = 0）保证并发安全，
+     * 更新行数为 0 时表示任务已被他人处理。
+     * </p>
+     *
+     * @param taskId      审批任务 ID
+     * @param action      操作类型（approve / reject / transfer）
+     * @param comment     审批意见
+     * @param targetUserId 转交目标用户 ID（仅 transfer 时有效）
+     * @return 操作结果 VO（含任务状态、实例状态、下一节点信息）
+     * @throws GlobalException 任务不存在、已被处理或不支持的操作类型时抛出
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public OperateResultVO processAction(Long taskId, String action, String comment, Long targetUserId) {
