@@ -52,7 +52,7 @@ import {
   message,
 } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 const { Text } = Typography;
 
@@ -144,6 +144,24 @@ function buildFormValues(values: EntryApplicationFormValues) {
   };
 }
 
+function buildEntryFormInitialValues(record?: EntryApplication): Partial<EntryApplicationFormValues> {
+  return {
+    candidateName: record?.candidateName,
+    gender: record?.gender,
+    phone: record?.phone,
+    email: record?.email,
+    idCardNo: record?.idCardNo,
+    deptId: record?.deptId,
+    postId: record?.postId,
+    hireType: record?.hireType || 1,
+    probationMonth: record?.probationMonth ?? 3,
+    probationSalaryRatio: record?.probationSalaryRatio ?? 80,
+    expectedHireDate: parseFormDateValue(record?.expectedHireDate),
+    leaderId: record?.leaderId,
+    remark: record?.remark,
+  };
+}
+
 function getInitial(name?: string) {
   return name?.slice(0, 1) || '人';
 }
@@ -231,6 +249,18 @@ const EntryPage: React.FC = () => {
       setConfirmLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!drawerOpen) {
+      return;
+    }
+    if (editingRecord) {
+      entryForm.setFieldsValue(buildEntryFormInitialValues(editingRecord));
+      return;
+    }
+    entryForm.resetFields();
+    entryForm.setFieldsValue(buildEntryFormInitialValues());
+  }, [drawerOpen, editingRecord, entryForm]);
 
   const columns: ProColumns<EntryApplication>[] = [
     {
@@ -457,6 +487,7 @@ const EntryPage: React.FC = () => {
                 icon={<PlusOutlined />}
                 onClick={() => {
                   setEditingRecord(undefined);
+                  entryForm.resetFields();
                   setDrawerOpen(true);
                 }}
               >
@@ -480,21 +511,7 @@ const EntryPage: React.FC = () => {
           }
         }}
         drawerProps={{ destroyOnClose: true }}
-        initialValues={{
-          candidateName: editingRecord?.candidateName,
-          gender: editingRecord?.gender,
-          phone: editingRecord?.phone,
-          email: editingRecord?.email,
-          idCardNo: editingRecord?.idCardNo,
-          deptId: editingRecord?.deptId,
-          postId: editingRecord?.postId,
-          hireType: editingRecord?.hireType || 1,
-          probationMonth: editingRecord?.probationMonth ?? 3,
-          probationSalaryRatio: editingRecord?.probationSalaryRatio ?? 80,
-          expectedHireDate: parseFormDateValue(editingRecord?.expectedHireDate),
-          leaderId: editingRecord?.leaderId,
-          remark: editingRecord?.remark,
-        }}
+        initialValues={buildEntryFormInitialValues(editingRecord)}
         submitter={{ searchConfig: { submitText: '保存草稿' } }}
         onFinishFailed={() => {
           message.warning('请先补全必填项后再保存');
