@@ -5,3 +5,4 @@
 export * from './api';
 export * from './user';
 export * from './menu';
+export * from './weather';
