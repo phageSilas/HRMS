@@ -588,7 +588,7 @@ const AttendanceSummaryPage: React.FC = () => {
             </Space>
           </Col>
           <Col xs={24} md={20} xl={15}>
-            <Space direction="vertical" size={6} style={{ width: '100%' }}>
+            <Space direction="vertical" size={6} style={{ width: '40%' }}>
               <Text type="secondary">部门</Text>
               <Select
                 showSearch
