@@ -32,9 +32,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -241,10 +243,18 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
     private PageResult<RegularApplicationPageVO> pageEvaluatedRegularApplications(RegularApplicationQueryDTO queryDTO) {
         int pageNum = normalizePageNum(queryDTO.getPageNum());
         int pageSize = normalizePageSize(queryDTO.getPageSize());
+        List<Long> targetEmployeeIds = listFilteredEmployeeIds(queryDTO, false);
+        if ((queryDTO.getDepartmentId() != null || StrUtil.isNotBlank(queryDTO.getKeyword()))
+                && CollUtil.isEmpty(targetEmployeeIds)) {
+            return PageResult.of(Collections.emptyList(), 0, pageNum, pageSize);
+        }
         PersonnelDisplayEnricher displayEnricher = new PersonnelDisplayEnricher(deptService, postService);
         Page<RegularApplicationEntity> page = regularApplicationMapper.selectPage(
                 Page.of(pageNum, pageSize),
-                new LambdaQueryWrapper<RegularApplicationEntity>().orderByDesc(RegularApplicationEntity::getCreateTime)
+                new LambdaQueryWrapper<RegularApplicationEntity>()
+                        .in(CollUtil.isNotEmpty(targetEmployeeIds), RegularApplicationEntity::getEmployeeId, targetEmployeeIds)
+                        .orderByDesc(RegularApplicationEntity::getCreateTime)
+                        .orderByDesc(RegularApplicationEntity::getId)
         );
         Map<Long, EmployeeSnapshotEntity> employeeSnapshotMap = listEmployeeSnapshotMap(
                 page.getRecords().stream().map(RegularApplicationEntity::getEmployeeId).toList()
@@ -264,9 +274,10 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
      * 本方法使用的工具类: StrUtil(hutool)
      */
     private LambdaQueryWrapper<EmployeeSnapshotEntity> buildPendingEmployeeWrapper(RegularApplicationQueryDTO queryDTO) {
+        List<Long> targetDeptIds = resolveTargetDeptIds(queryDTO.getDepartmentId());
         LambdaQueryWrapper<EmployeeSnapshotEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(EmployeeSnapshotEntity::getEmploymentStatus, EMPLOYMENT_STATUS_PROBATION);
-        wrapper.eq(queryDTO.getDepartmentId() != null, EmployeeSnapshotEntity::getDeptId, queryDTO.getDepartmentId());
+        wrapper.in(CollUtil.isNotEmpty(targetDeptIds), EmployeeSnapshotEntity::getDeptId, targetDeptIds);
         wrapper.and(StrUtil.isNotBlank(queryDTO.getKeyword()), keywordWrapper -> keywordWrapper
                 .like(EmployeeSnapshotEntity::getEmployeeName, queryDTO.getKeyword())
                 .or()
@@ -321,6 +332,46 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
                         Function.identity(),
                         (left, right) -> left
                 ));
+    }
+
+    /**
+     * 解析部门树范围内的员工ID列表。
+     *
+     * @param queryDTO 查询参数
+     * @param probationOnly 是否只筛选试用期员工
+     * @return 员工ID列表
+     */
+    private List<Long> listFilteredEmployeeIds(RegularApplicationQueryDTO queryDTO, boolean probationOnly) {
+        LambdaQueryWrapper<EmployeeSnapshotEntity> wrapper = new LambdaQueryWrapper<>();
+        if (probationOnly) {
+            wrapper.eq(EmployeeSnapshotEntity::getEmploymentStatus, EMPLOYMENT_STATUS_PROBATION);
+        }
+        List<Long> targetDeptIds = resolveTargetDeptIds(queryDTO.getDepartmentId());
+        wrapper.in(CollUtil.isNotEmpty(targetDeptIds), EmployeeSnapshotEntity::getDeptId, targetDeptIds);
+        wrapper.and(StrUtil.isNotBlank(queryDTO.getKeyword()), keywordWrapper -> keywordWrapper
+                .like(EmployeeSnapshotEntity::getEmployeeName, queryDTO.getKeyword())
+                .or()
+                .like(EmployeeSnapshotEntity::getEmployeeNo, queryDTO.getKeyword()));
+        return employeeSnapshotMapper.selectList(wrapper).stream()
+                .map(EmployeeSnapshotEntity::getId)
+                .toList();
+    }
+
+    /**
+     * 解析部门树范围ID，包含所选部门自身及全部子孙部门。
+     *
+     * @param departmentId 所选部门ID
+     * @return 部门树范围ID列表
+     */
+    private List<Long> resolveTargetDeptIds(Long departmentId) {
+        if (departmentId == null) {
+            return Collections.emptyList();
+        }
+        List<Long> deptIds = deptService.getSubDeptIds(departmentId);
+        if (CollUtil.isEmpty(deptIds)) {
+            return List.of(departmentId);
+        }
+        return new ArrayList<>(Set.copyOf(deptIds));
     }
 
     /**
