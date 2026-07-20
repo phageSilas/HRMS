@@ -5,6 +5,7 @@
 
 import type { PageQuery, PageResult } from '@/types/api';
 import request from '@/utils/request';
+import type { Dayjs } from 'dayjs';
 
 export const ApprovalStatus = {
   DRAFT: 0,
@@ -32,7 +33,7 @@ export interface EntryApplication {
   hireType?: number;
   probationMonth?: number;
   probationSalaryRatio?: number;
-  expectedHireDate: string;
+  expectedHireDate: string | number[];
   leaderId?: number;
   remark?: string;
   approvalStatus: ApprovalStatusValue;
@@ -60,7 +61,7 @@ export interface EntryApplicationFormValues {
   hireType: number;
   probationMonth: number;
   probationSalaryRatio?: number;
-  expectedHireDate: string;
+  expectedHireDate: string | number[] | Dayjs;
   leaderId?: number;
   remark?: string;
 }

@@ -50,7 +50,7 @@ import {
   Typography,
   message,
 } from 'antd';
-import type { Dayjs } from 'dayjs';
+import dayjs, { type Dayjs } from 'dayjs';
 import React, { useMemo, useRef, useState } from 'react';
 
 const { Text } = Typography;
@@ -101,14 +101,39 @@ const statusTabs = [
   { key: String(ApprovalStatus.ENTERED), label: '已入职' },
 ];
 
-function formatDateValue(value?: string | Dayjs): string | undefined {
+function parseFormDateValue(
+  value?: string | number[] | Dayjs,
+): Dayjs | undefined {
   if (!value) {
     return undefined;
   }
-  if (typeof value === 'string') {
+  if (dayjs.isDayjs(value)) {
     return value;
   }
-  return value.format('YYYY-MM-DD');
+  if (Array.isArray(value)) {
+    const [year, month, day] = value;
+    if (!year || !month || !day) {
+      return undefined;
+    }
+    const parsedDate = dayjs(new Date(year, month - 1, day));
+    return parsedDate.isValid() ? parsedDate : undefined;
+  }
+  const parsedDate = dayjs(value);
+  return parsedDate.isValid() ? parsedDate : undefined;
+}
+
+function formatDateValue(value?: string | number[] | Dayjs): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  if (dayjs.isDayjs(value)) {
+    return value.format('YYYY-MM-DD');
+  }
+  if (Array.isArray(value)) {
+    return parseFormDateValue(value)?.format('YYYY-MM-DD');
+  }
+  const parsedDate = dayjs(value);
+  return parsedDate.isValid() ? parsedDate.format('YYYY-MM-DD') : value;
 }
 
 function buildFormValues(values: EntryApplicationFormValues) {
@@ -131,6 +156,7 @@ const EntryPage: React.FC = () => {
   const [activeStatus, setActiveStatus] = useState<string>('all');
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
   const [confirmForm] = Form.useForm<{ actualHireDate: Dayjs }>();
+  const [entryForm] = Form.useForm<EntryApplicationFormValues>();
 
   const statisticCards = useMemo(
     () => [
@@ -431,6 +457,7 @@ const EntryPage: React.FC = () => {
       </Card>
 
       <DrawerForm<EntryApplicationFormValues>
+        form={entryForm}
         title={editingRecord ? '编辑入职申请' : '新建入职申请'}
         width={760}
         open={drawerOpen}
@@ -438,6 +465,7 @@ const EntryPage: React.FC = () => {
           setDrawerOpen(open);
           if (!open) {
             setEditingRecord(undefined);
+            entryForm.resetFields();
           }
         }}
         drawerProps={{ destroyOnClose: true }}
@@ -452,13 +480,17 @@ const EntryPage: React.FC = () => {
           hireType: editingRecord?.hireType || 1,
           probationMonth: editingRecord?.probationMonth ?? 3,
           probationSalaryRatio: editingRecord?.probationSalaryRatio ?? 80,
-          expectedHireDate: editingRecord?.expectedHireDate,
+          expectedHireDate: parseFormDateValue(editingRecord?.expectedHireDate),
           leaderId: editingRecord?.leaderId,
           remark: editingRecord?.remark,
         }}
         submitter={{ searchConfig: { submitText: '保存草稿' } }}
+        onFinishFailed={() => {
+          message.warning('请先补全必填项后再保存');
+        }}
         onFinish={async (values) => {
-          const payload = buildFormValues(values);
+          try {
+            const payload = buildFormValues(values);
           if (editingRecord) {
             await updateEntryApplication(editingRecord.id, payload);
             message.success('入职申请已更新');
@@ -466,9 +498,17 @@ const EntryPage: React.FC = () => {
             await createEntryApplication(payload);
             message.success('入职申请已保存为草稿');
           }
-          setDrawerOpen(false);
-          reloadTable();
-          return true;
+            setDrawerOpen(false);
+            reloadTable();
+            return true;
+          } catch (error) {
+            if (error instanceof Error && error.message) {
+              message.error(error.message);
+            } else {
+              message.error('保存失败，请检查表单后重试');
+            }
+            return false;
+          }
         }}
       >
         <ProFormGroup title="候选人基本信息">
