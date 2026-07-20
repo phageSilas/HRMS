@@ -16,7 +16,7 @@ import com.hrms.business.personnel.dto.TransferApplicationCreateRequestDTO;
 import com.hrms.business.personnel.dto.TransferApplicationQueryDTO;
 import com.hrms.business.personnel.entity.EmployeeSnapshotEntity;
 import com.hrms.business.personnel.entity.TransferApplicationEntity;
-import com.hrms.business.personnel.enums.ApplicationStatusEnum;
+import com.hrms.business.personnel.common.enums.ApplicationStatusEnum;
 import com.hrms.business.personnel.mapper.EmployeeSnapshotMapper;
 import com.hrms.business.personnel.mapper.TransferApplicationMapper;
 import com.hrms.business.personnel.convert.PersonnelDisplayEnricher;
@@ -42,35 +42,25 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.hrms.business.personnel.common.constant.TransferApplicationConstant.*;
+import static com.hrms.business.personnel.common.enums.ServiceErrorCodeEnum.EMPLOYEE_NOT_FOUND;
+import static com.hrms.business.personnel.common.enums.ServiceErrorCodeEnum.TRANSFER_APPLICATION_DUPLICATE;
+
 /**
  * 调岗申请服务实现
  */
 @Service
 @RequiredArgsConstructor
 public class TransferApplicationServiceImpl implements TransferApplicationService {
-
-    private static final ErrorCode EMPLOYEE_NOT_FOUND = new ErrorCode(40060, "员工不存在");
-
-    private static final ErrorCode TRANSFER_APPLICATION_DUPLICATE = new ErrorCode(40071, "员工已有进行中的调岗申请");
-
-    private static final Long IMPOSSIBLE_EMPLOYEE_ID = -1L;
-
-    private static final int DEFAULT_PAGE_NUM = 1;
-
-    private static final int DEFAULT_PAGE_SIZE = 20;
-
-    private static final int MAX_PAGE_SIZE = 200;
-
+    // 调岗申请Mapper
     private final TransferApplicationMapper transferApplicationMapper;
-
-    private final EmployeeSnapshotMapper employeeSnapshotMapper;
-
+    // 员工服务
     private final EmployeeService employeeService;
-
+    // 审批引擎
     private final ApprovalEngine approvalEngine;
-
+    // 部门服务
     private final DeptService deptService;
-
+    // 岗位服务
     private final PostService postService;
 
     /**

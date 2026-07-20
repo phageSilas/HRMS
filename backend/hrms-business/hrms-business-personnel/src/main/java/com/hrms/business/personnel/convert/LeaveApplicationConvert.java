@@ -2,8 +2,8 @@ package com.hrms.business.personnel.convert;
 
 import com.hrms.business.personnel.entity.EmployeeSnapshotEntity;
 import com.hrms.business.personnel.entity.LeaveApplicationEntity;
-import com.hrms.business.personnel.enums.ApplicationStatusEnum;
-import com.hrms.business.personnel.enums.LeaveTypeEnum;
+import com.hrms.business.personnel.common.enums.ApplicationStatusEnum;
+import com.hrms.business.personnel.common.enums.LeaveTypeEnum;
 import com.hrms.business.personnel.vo.LeaveApplicationPageVO;
 
 /**

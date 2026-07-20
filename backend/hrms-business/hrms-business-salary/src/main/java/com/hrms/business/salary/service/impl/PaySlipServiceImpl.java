@@ -15,7 +15,7 @@ import com.hrms.business.salary.entity.SalaryBatchItemEntity;
 import com.hrms.business.salary.entity.SalaryEmployeeSnapshotEntity;
 import com.hrms.business.salary.entity.SalaryPayslipViewRecordEntity;
 import com.hrms.business.salary.entity.SalarySysUserEntity;
-import com.hrms.business.salary.enums.SalaryBatchStatusEnum;
+import com.hrms.business.salary.common.enums.SalaryBatchStatusEnum;
 import com.hrms.business.salary.service.PaySlipService;
 import com.hrms.business.salary.vo.SalaryManagePayslipPageVO;
 import com.hrms.business.salary.vo.SalaryPayslipDetailVO;
@@ -54,7 +54,8 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.math.BigDecimal;
+
+import static com.hrms.business.salary.common.constant.PaySlipConstant.*;
 
 /**
  * 工资条服务实现。
@@ -63,21 +64,7 @@ import java.math.BigDecimal;
 @Service
 @RequiredArgsConstructor
 public class PaySlipServiceImpl implements PaySlipService {
-    // 工资条管理 可见状态: 薪资批次状态
-    private static final Set<String> PAYSLIP_VISIBLE_STATUS = Set.of(
-            SalaryBatchStatusEnum.APPROVING.name(),
-            SalaryBatchStatusEnum.APPROVED.name(),
-            SalaryBatchStatusEnum.RELEASED.name(),
-            SalaryBatchStatusEnum.ARCHIVED.name()
-    );
-    // 工资条管理 可见状态:职位
-    private static final Set<String> SALARY_MANAGER_ROLE_CODES = Set.of(
-            "FINANCE", "HR", "HR_TEST", "ADMIN", "ROLE_ADMIN"
-    );
-    // 工资条管理 可见状态:查看状态
-    private static final Set<String> PAYSLIP_MANAGE_VIEW_STATUS = Set.of(
-            "VIEWED", "UNVIEWED", "UNPUBLISHED"
-    );
+
 
     private final SalaryBatchMapper salaryBatchMapper;
     private final SalaryBatchItemMapper salaryBatchItemMapper;

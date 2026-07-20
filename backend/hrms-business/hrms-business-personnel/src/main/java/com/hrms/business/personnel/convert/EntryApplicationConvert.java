@@ -1,7 +1,7 @@
 package com.hrms.business.personnel.convert;
 
 import com.hrms.business.personnel.entity.EntryApplicationEntity;
-import com.hrms.business.personnel.enums.ApplicationStatusEnum;
+import com.hrms.business.personnel.common.enums.ApplicationStatusEnum;
 import com.hrms.business.personnel.dto.EntryApplicationCreateOrUpdateRequestDTO;
 import com.hrms.business.personnel.vo.EntryApplicationPageVO;
 

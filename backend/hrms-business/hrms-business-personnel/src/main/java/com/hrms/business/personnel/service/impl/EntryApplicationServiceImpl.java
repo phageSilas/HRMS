@@ -14,7 +14,7 @@ import com.hrms.business.personnel.dto.EntryApplicationConfirmRequestDTO;
 import com.hrms.business.personnel.dto.EntryApplicationCreateOrUpdateRequestDTO;
 import com.hrms.business.personnel.dto.EntryApplicationQueryDTO;
 import com.hrms.business.personnel.entity.EntryApplicationEntity;
-import com.hrms.business.personnel.enums.ApplicationStatusEnum;
+import com.hrms.business.personnel.common.enums.ApplicationStatusEnum;
 import com.hrms.business.personnel.mapper.EntryApplicationMapper;
 import com.hrms.business.personnel.convert.PersonnelDisplayEnricher;
 import com.hrms.business.personnel.service.EntryApplicationService;
@@ -40,6 +40,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static com.hrms.business.personnel.common.constant.EntryApplicationConstant.*;
+import static com.hrms.business.personnel.common.enums.ServiceErrorCodeEnum.*;
+
 /**
  * 入职申请服务实现
  */
@@ -47,23 +50,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 public class EntryApplicationServiceImpl implements EntryApplicationService {
 
-    private static final ErrorCode ENTRY_APPLICATION_PHONE_DUPLICATE = new ErrorCode(40045, "手机号已存在入职申请");
 
-    private static final ErrorCode ENTRY_APPLICATION_NOT_FOUND = new ErrorCode(40041, "入职申请不存在");
 
-    private static final ErrorCode ENTRY_APPLICATION_NOT_DRAFT = new ErrorCode(40042, "非草稿状态无法修改");
-
-    private static final ErrorCode ENTRY_APPLICATION_NOT_APPROVED = new ErrorCode(40044, "审批未通过，无法确认入职");
-
-    private static final ErrorCode ENTRY_APPLICATION_EMPLOYEE_MISSING = new ErrorCode(40046, "已入职申请缺少员工回写信息");
-
-    private static final Map<Long, Object> ENTRY_CONFIRM_LOCKS = new ConcurrentHashMap<>();
-
-    private static final int DEFAULT_PAGE_NUM = 1;
-
-    private static final int DEFAULT_PAGE_SIZE = 20;
-
-    private static final int MAX_PAGE_SIZE = 200;
 
     private final EntryApplicationMapper entryApplicationMapper;
 
@@ -161,7 +149,7 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         EntryApplicationEntity entity = getRequiredEntryApplication(id);
         assertDraft(entity);
 
-        // TODO 跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起入职审批。
+        // 跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起入职审批。
         Long approvalInstanceId = approvalEngine.startApproval(
                 ApprovalTypeEnum.ENTRY.getCode(),       // approvalType = "ENTRY"
                 entity.getId(),                          // bizId

@@ -41,6 +41,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.hrms.business.salary.common.constant.SalaryTemplateConstant.*;
+
 /**
  * 薪资账套服务实现。
  */
@@ -48,16 +50,16 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class SalaryTemplateServiceImpl implements SalaryTemplateService {
 
-    private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-    private static final BigDecimal ZERO_RATE = BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
-    private static final BigDecimal DEFAULT_PENSION_INSURANCE_RATE = new BigDecimal("0.0800");
-    private static final BigDecimal DEFAULT_MEDICAL_INSURANCE_RATE = new BigDecimal("0.0200");
-    private static final BigDecimal DEFAULT_UNEMPLOYMENT_INSURANCE_RATE = new BigDecimal("0.0050");
 
+    // 薪资账套Mapper
     private final SalaryTemplateMapper salaryTemplateMapper;
+    // 薪资账套项Mapper
     private final SalaryTemplateItemMapper salaryTemplateItemMapper;
+    // 员工薪资配置Mapper
     private final EmployeeSalaryProfileMapper employeeSalaryProfileMapper;
+    // 员工薪资快照Mapper
     private final SalaryEmployeeSnapshotMapper employeeSnapshotMapper;
+    // Redis模板提供者
     private final ObjectProvider<StringRedisTemplate> redisTemplateProvider;
 
     /**

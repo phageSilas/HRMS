@@ -1,4 +1,4 @@
-package com.hrms.business.salary.enums;
+package com.hrms.business.salary.common.enums;
 
 import java.util.Set;
 

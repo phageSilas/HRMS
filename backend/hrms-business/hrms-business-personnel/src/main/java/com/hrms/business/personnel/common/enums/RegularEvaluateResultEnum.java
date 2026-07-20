@@ -1,4 +1,4 @@
-package com.hrms.business.personnel.enums;
+package com.hrms.business.personnel.common.enums;
 
 import com.hrms.common.enums.BaseEnum;
 import lombok.Getter;

@@ -19,6 +19,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
+import static com.hrms.business.attendance.common.constant.AttendanceCalendarConstant.DEFAULT_WORKDAYS;
+
 /**
  * 考勤日历配置服务实现。
  */
@@ -26,7 +28,7 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class AttendanceCalendarConfigServiceImpl implements AttendanceCalendarConfigService {
 
-    private static final List<Integer> DEFAULT_WORKDAYS = List.of(1, 2, 3, 4, 5);
+
 
     private final AttendanceCalendarConfigMapper attendanceCalendarConfigMapper;
 

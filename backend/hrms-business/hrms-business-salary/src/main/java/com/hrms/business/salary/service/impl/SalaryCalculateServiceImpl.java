@@ -6,7 +6,6 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hrms.business.attendance.service.AttendanceService;
 import com.hrms.business.attendance.vo.AttendancePayrollSourceVO;
 import com.hrms.business.approval.enums.ApprovalTypeEnum;
@@ -19,8 +18,8 @@ import com.hrms.business.salary.entity.SalaryBatchAdjustmentEntity;
 import com.hrms.business.salary.entity.SalaryBatchEntity;
 import com.hrms.business.salary.entity.SalaryBatchItemEntity;
 import com.hrms.business.salary.entity.SalaryEmployeeSnapshotEntity;
-import com.hrms.business.salary.enums.SalaryBatchStatusEnum;
-import com.hrms.business.salary.enums.SalaryWarningLevelEnum;
+import com.hrms.business.salary.common.enums.SalaryBatchStatusEnum;
+import com.hrms.business.salary.common.enums.SalaryWarningLevelEnum;
 import com.hrms.business.salary.mapper.EmployeeSalaryProfileMapper;
 import com.hrms.business.salary.mapper.SalaryBatchAdjustmentMapper;
 import com.hrms.business.salary.mapper.SalaryBatchItemMapper;
@@ -62,7 +61,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.YearMonth;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -72,6 +70,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.hrms.business.salary.common.constant.SalaryCalculateConstant.*;
+
 /**
  * 薪资核算服务实现。
  */
@@ -80,53 +80,19 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class SalaryCalculateServiceImpl implements SalaryCalculateService {
 
-    private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-    private static final BigDecimal DEFAULT_PENSION_INSURANCE_RATE = new BigDecimal("0.0800");
-    private static final BigDecimal DEFAULT_MEDICAL_INSURANCE_RATE = new BigDecimal("0.0200");
-    private static final BigDecimal DEFAULT_UNEMPLOYMENT_INSURANCE_RATE = new BigDecimal("0.0050");
-    // 薪资条可见状态
-    private static final Set<String> PAYSLIP_VISIBLE_STATUS = Set.of(
-            SalaryBatchStatusEnum.APPROVING.name(),
-            SalaryBatchStatusEnum.APPROVED.name(),
-            SalaryBatchStatusEnum.RELEASED.name(),
-            SalaryBatchStatusEnum.ARCHIVED.name()
-    );
-    // 薪资批次导出允许状态
-    private static final Set<String> BATCH_EXPORT_ALLOWED_STATUS = Set.of(
-            SalaryBatchStatusEnum.APPROVED.name(),
-            SalaryBatchStatusEnum.RELEASED.name()
-    );
-    // 薪资管理员角色码
-    private static final Set<String> SALARY_MANAGER_ROLE_CODES = Set.of(
-            "FINANCE", "HR", "HR_TEST", "ADMIN", "ROLE_ADMIN"
-    );
-    // 薪资调整项码
-    private static final Set<String> SALARY_ADJUST_ITEM_CODES = Set.of(
-            "BASE_SALARY",
-            "ALLOWANCE",
-            "PERFORMANCE_BONUS",
-            "OVERTIME_PAY",
-            "LATE_DEDUCTION",
-            "LEAVE_DEDUCTION",
-            "SOCIAL_INSURANCE",
-            "PENSION_INSURANCE",
-            "MEDICAL_INSURANCE",
-            "UNEMPLOYMENT_INSURANCE",
-            "HOUSING_FUND",
-            "INCOME_TAX"
-    );
-    private static final String SALARY_EXPORT_MIME_TYPE =
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-    private static final String SALARY_EXPORT_FILE_TYPE = "xlsx";
-    private static final String SALARY_EXPORT_BUSINESS_TYPE = "SALARY_BATCH_EXPORT";
+
 
     private final SalaryBatchMapper salaryBatchMapper;
     private final SalaryBatchAdjustmentMapper salaryBatchAdjustmentMapper;
     private final SalaryBatchItemMapper salaryBatchItemMapper;
     private final SalaryEmployeeSnapshotMapper employeeSnapshotMapper;
     private final EmployeeSalaryProfileMapper employeeSalaryProfileMapper;
+    // Redis模板提供者
     private final ObjectProvider<StringRedisTemplate> redisTemplateProvider;
+
+    // 出勤服务提供者
     private final ObjectProvider<AttendanceService> attendanceServiceProvider;
+    // 批次审批引擎
     private final SalaryBatchCalculateProducer salaryBatchCalculateProducer;
     private final ApprovalEngine approvalEngine;
     private final RoleService roleService;

@@ -31,7 +31,7 @@ import com.hrms.business.attendance.entity.EmployeeSnapshotEntity;
 import com.hrms.business.attendance.entity.LeaveBalanceEntity;
 import com.hrms.business.attendance.entity.LeaveRequestEntity;
 import com.hrms.business.attendance.entity.DictDataEntity;
-import com.hrms.business.attendance.enums.ClockPeriodEnum;
+import com.hrms.business.attendance.common.enums.ClockPeriodEnum;
 import com.hrms.business.attendance.mapper.AttendanceGroupMapper;
 import com.hrms.business.attendance.mapper.AttendanceCorrectionMapper;
 import com.hrms.business.attendance.mapper.AttendanceGroupMemberMapper;
@@ -104,6 +104,9 @@ import java.util.stream.IntStream;
 import java.util.Collections;
 import java.math.RoundingMode;
 
+import static com.hrms.business.attendance.common.constant.AttendanceServiceConstant.*;
+import static com.hrms.business.attendance.common.enums.AttendanceServiceErrorEnum.*;
+
 /**
  * 考勤管理服务实现。
  */
@@ -112,37 +115,6 @@ import java.math.RoundingMode;
 @Slf4j
 public class AttendanceServiceImpl implements AttendanceService {
 
-    private static final ErrorCode ATTENDANCE_GROUP_NOT_FOUND = new ErrorCode(40052, "考勤组不存在");
-
-    private static final ErrorCode ATTENDANCE_EMPLOYEE_NOT_FOUND = new ErrorCode(40053, "当前用户未关联员工档案");
-
-    private static final ErrorCode ATTENDANCE_CLOCK_DUPLICATE = new ErrorCode(40054, "当前时段已打卡");
-
-    private static final ErrorCode ATTENDANCE_CLOCK_RANGE_INVALID = new ErrorCode(40055, "不在允许的打卡范围内");
-
-    private static final ErrorCode ATTENDANCE_CORRECTION_DUPLICATE = new ErrorCode(40056, "当前日期和类型已有审批中的补卡申请");
-
-    private static final ErrorCode LEAVE_DAYS_INVALID = new ErrorCode(40057, "请假天数必须大于0且不超过30天");
-
-    private static final ErrorCode ATTENDANCE_GROUP_MEMBER_EXISTS = new ErrorCode(40058, "考勤组已关联成员，无法删除");
-
-    private static final ErrorCode ATTENDANCE_GROUP_RECORD_EXISTS = new ErrorCode(40059, "考勤组已产生打卡记录，无法删除");
-
-    private static final long GROUP_RECORD_MAX_DAYS = 31L;
-
-    private static final int DASHBOARD_RANKING_LIMIT = 10;
-
-    private static final Set<String> DASHBOARD_FULL_SCOPE_ROLE_CODES = Set.of("HR", "HR_TEST", "ADMIN", "ROLE_ADMIN");
-
-    private static final Set<String> LEAVE_MANAGE_FULL_SCOPE_ROLE_CODES = Set.of("HR", "HR_TEST", "ADMIN", "ROLE_ADMIN");
-
-    private static final String LEAVE_MANAGE_MANAGER_ROLE_CODE = "MANAGER";
-
-    private static final String GROUP_SCOPE_DEPT = "DEPT";
-
-    private static final String GROUP_SCOPE_POST = "POST";
-
-    private static final String GROUP_SCOPE_EMPLOYEE = "EMPLOYEE";
 
     private final AttendanceCalendarConfigService attendanceCalendarConfigService;
 
