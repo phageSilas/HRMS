@@ -16,6 +16,7 @@ import type {
   EntryApplication,
   EntryApplicationFormValues,
 } from '@/services/process';
+import { getDeptList, getPostList } from '@/services/organization';
 import {
   CheckCircleOutlined,
   EditOutlined,
@@ -175,6 +176,12 @@ const EntryPage: React.FC = () => {
   const [editingLoadingId, setEditingLoadingId] = useState<number>();
   const [activeStatus, setActiveStatus] = useState<string>('all');
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
+  const [realDepartmentOptions, setRealDepartmentOptions] = useState<
+    { label: string; value: number }[]
+  >([]);
+  const [realPostOptions, setRealPostOptions] = useState<
+    { label: string; value: number }[]
+  >([]);
   const [confirmForm] = Form.useForm<{ actualHireDate: Dayjs }>();
   const [entryForm] = Form.useForm<EntryApplicationFormValues>();
 
@@ -262,6 +269,32 @@ const EntryPage: React.FC = () => {
     entryForm.setFieldsValue(buildEntryFormInitialValues());
   }, [drawerOpen, editingRecord, entryForm]);
 
+  useEffect(() => {
+    const loadOrganizationOptions = async () => {
+      try {
+        const [departments, posts] = await Promise.all([
+          getDeptList(),
+          getPostList({ pageNum: 1, pageSize: 200 }),
+        ]);
+        setRealDepartmentOptions(
+          (departments || []).map((item) => ({
+            label: item.deptName,
+            value: item.id,
+          })),
+        );
+        setRealPostOptions(
+          (posts.records || []).map((item) => ({
+            label: item.postName,
+            value: item.id,
+          })),
+        );
+      } catch (error) {
+        message.error('部门或职位数据加载失败，请刷新后重试');
+      }
+    };
+    loadOrganizationOptions();
+  }, []);
+
   const columns: ProColumns<EntryApplication>[] = [
     {
       title: '关键词',
@@ -274,7 +307,7 @@ const EntryPage: React.FC = () => {
       dataIndex: 'departmentId',
       hideInTable: true,
       valueType: 'select',
-      fieldProps: { options: departmentOptions, allowClear: true },
+      fieldProps: { options: realDepartmentOptions, allowClear: true },
     },
     {
       title: '申请日期',
@@ -580,14 +613,14 @@ const EntryPage: React.FC = () => {
             name="deptId"
             label="所属部门"
             width="md"
-            options={departmentOptions}
+            options={realDepartmentOptions}
             rules={[{ required: true, message: '请选择所属部门' }]}
           />
           <ProFormSelect
             name="postId"
             label="职位"
             width="md"
-            options={postOptions}
+            options={realPostOptions}
             rules={[{ required: true, message: '请选择职位' }]}
           />
           <ProFormSelect
