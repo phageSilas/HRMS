@@ -1,9 +1,19 @@
 /**
- * 调岗申请页面。
- * 对接调岗申请分页和创建接口。
+ * 调岗申请页面。对接调岗申请分页和创建接口。
  */
 
-import { getDeptList } from '@/services/organization';
+import {
+  getEmployeeDetail,
+  getEmployeeList,
+  type Employee,
+  type EmployeeBrief,
+} from '@/services/employee';
+import {
+  getDeptDetail,
+  getDeptList,
+  getPostList,
+  type PostItem,
+} from '@/services/organization';
 import {
   ApprovalStatus,
   createTransferApplication,
@@ -27,11 +37,21 @@ import {
 } from '@ant-design/pro-components';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { useSearchParams } from '@umijs/max';
-import { Button, Card, Col, Row, Space, Tag, Typography, message } from 'antd';
+import { Button, Card, Col, Form, Row, Space, Tag, Typography, message } from 'antd';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { formatProcessDateTime } from '../utils';
 
 const { Text } = Typography;
+
+type SelectOption = {
+  label: string;
+  value: number;
+};
+
+type JobLevelOption = {
+  label: string;
+  value: string;
+};
 
 const statusMeta: Record<number, { text: string; color: string }> = {
   [ApprovalStatus.DRAFT]: { text: '草稿', color: 'default' },
@@ -41,47 +61,91 @@ const statusMeta: Record<number, { text: string; color: string }> = {
   [ApprovalStatus.WITHDRAWN]: { text: '已撤回', color: 'default' },
 };
 
-const createDepartmentOptions = [
-  { label: '人力资源部', value: 1 },
-  { label: '技术部', value: 2 },
-  { label: '产品部', value: 3 },
-  { label: '财务部', value: 4 },
-  { label: '平台架构部', value: 5 },
-];
-
-const positionOptions = [
-  { label: 'HR 专员', value: 101 },
-  { label: 'Java 开发工程师', value: 102 },
-  { label: '前端开发工程师', value: 103 },
-  { label: '产品经理', value: 104 },
-  { label: '高级开发工程师', value: 201 },
-  { label: '技术负责人', value: 202 },
-];
-
-const leaderOptions = [
-  { label: '王敏（1001）', value: 1001 },
-  { label: '李强（1002）', value: 1002 },
-  { label: '赵玲（1003）', value: 1003 },
-];
-
 type TransferFormValues = TransferApplicationCreateRequest & {
   employeeName?: string;
   employeeNo?: string;
   fromDeptName?: string;
   fromPostName?: string;
+  fromJobLevel?: string;
+  fromLeaderId?: number;
 };
+
+function buildLeaderRoleLabel(
+  employeeId: number,
+  leaderIds: Set<number>,
+  postName?: string,
+) {
+  const isLeader = leaderIds.has(employeeId);
+  const isHr = /hr|人力/i.test(postName || '');
+  if (isLeader && isHr) {
+    return 'Leader / HR';
+  }
+  if (isLeader) {
+    return 'Leader';
+  }
+  if (isHr) {
+    return 'HR';
+  }
+  return '';
+}
+
+function buildJobLevelOptions(post?: PostItem): JobLevelOption[] {
+  const minLevel = post?.jobLevelMin?.trim();
+  const maxLevel = post?.jobLevelMax?.trim();
+  if (!minLevel && !maxLevel) {
+    return [];
+  }
+  if (minLevel && !maxLevel) {
+    return [{ label: minLevel, value: minLevel }];
+  }
+  if (!minLevel && maxLevel) {
+    return [{ label: maxLevel, value: maxLevel }];
+  }
+  if (minLevel === maxLevel) {
+    return [{ label: minLevel!, value: minLevel! }];
+  }
+
+  const minMatch = minLevel?.match(/^([A-Za-z]+)(\d+)$/);
+  const maxMatch = maxLevel?.match(/^([A-Za-z]+)(\d+)$/);
+  if (
+    minMatch &&
+    maxMatch &&
+    minMatch[1] === maxMatch[1] &&
+    Number(minMatch[2]) <= Number(maxMatch[2])
+  ) {
+    const levelPrefix = minMatch[1];
+    const start = Number(minMatch[2]);
+    const end = Number(maxMatch[2]);
+    if (end - start <= 20) {
+      return Array.from({ length: end - start + 1 }, (_, index) => {
+        const level = `${levelPrefix}${start + index}`;
+        return { label: level, value: level };
+      });
+    }
+  }
+
+  return Array.from(new Set([minLevel!, maxLevel!])).map((level) => ({
+    label: level,
+    value: level,
+  }));
+}
 
 const TransferPage: React.FC = () => {
   const actionRef = useRef<ActionType>();
   const [modalOpen, setModalOpen] = useState(false);
-  const [departmentOptions, setDepartmentOptions] = useState<
-    { label: string; value: number }[]
-  >([]);
+  const [departmentOptions, setDepartmentOptions] = useState<SelectOption[]>([]);
+  const [realPostOptions, setRealPostOptions] = useState<PostItem[]>([]);
+  const [realLeaderOptions, setRealLeaderOptions] = useState<SelectOption[]>([]);
+  const [employeeLoading, setEmployeeLoading] = useState(false);
+  const [postLoading, setPostLoading] = useState(false);
+  const [leaderLoading, setLeaderLoading] = useState(false);
+  const [currentEmployeeDetail, setCurrentEmployeeDetail] = useState<Employee>();
+  const [form] = Form.useForm<TransferFormValues>();
 
+  const selectedToDeptId = Form.useWatch('toDeptId', form);
+  const selectedToPostId = Form.useWatch('toPostId', form);
   const [searchParams] = useSearchParams();
   const employeeIdFromUrl = searchParams.get('employeeId');
-  const employeeNameFromUrl = searchParams.get('employeeName') || '';
-  const employeeNoFromUrl = searchParams.get('employeeNo') || '';
 
   useEffect(() => {
     if (employeeIdFromUrl) {
@@ -114,6 +178,244 @@ const TransferPage: React.FC = () => {
           .includes(input.trim().toLowerCase()),
     [],
   );
+
+  const postOptions = useMemo<SelectOption[]>(
+    () =>
+      (realPostOptions || []).map((item) => ({
+        label: item.postName,
+        value: item.id,
+      })),
+    [realPostOptions],
+  );
+
+  const selectedPost = useMemo(
+    () => realPostOptions.find((item) => item.id === selectedToPostId),
+    [realPostOptions, selectedToPostId],
+  );
+
+  const jobLevelOptions = useMemo(
+    () => buildJobLevelOptions(selectedPost),
+    [selectedPost],
+  );
+
+  const jobLevelPlaceholder = useMemo(() => {
+    if (!selectedToPostId) {
+      return '请先选择新职位';
+    }
+    if (!jobLevelOptions.length) {
+      return '该岗位未配置职级，可手动输入';
+    }
+    if (jobLevelOptions.length === 1) {
+      return '将自动带出职级';
+    }
+    return `可选: ${jobLevelOptions.map((item) => item.value).join(' / ')}`;
+  }, [jobLevelOptions, selectedToPostId]);
+
+  const resetEmployeeRelatedFields = () => {
+    form.setFieldsValue({
+      employeeName: undefined,
+      employeeNo: undefined,
+      fromDeptName: undefined,
+      fromPostName: undefined,
+      fromJobLevel: undefined,
+      fromLeaderId: undefined,
+    });
+    setCurrentEmployeeDetail(undefined);
+  };
+
+  const handleEmployeeLookup = async (rawEmployeeId?: number | string | null) => {
+    const employeeId = Number(rawEmployeeId);
+    if (!employeeId || employeeId < 1) {
+      resetEmployeeRelatedFields();
+      return;
+    }
+    setEmployeeLoading(true);
+    try {
+      const detail = await getEmployeeDetail(employeeId);
+      setCurrentEmployeeDetail(detail);
+      form.setFieldsValue({
+        employeeId: detail.id,
+        employeeName: detail.employeeName,
+        employeeNo: detail.employeeNo,
+        fromDeptName: detail.deptName,
+        fromPostName: detail.postName,
+        fromJobLevel: detail.jobLevel,
+        fromLeaderId: detail.leaderId,
+      });
+    } catch (error) {
+      resetEmployeeRelatedFields();
+      message.error('未找到该员工，请确认员工ID后重试');
+    } finally {
+      setEmployeeLoading(false);
+    }
+  };
+
+  const triggerEmployeeLookup = () => {
+    void handleEmployeeLookup(form.getFieldValue('employeeId'));
+  };
+
+  useEffect(() => {
+    if (!modalOpen || !selectedToDeptId) {
+      setRealPostOptions([]);
+      setRealLeaderOptions([]);
+      setPostLoading(false);
+      setLeaderLoading(false);
+      if (!selectedToDeptId) {
+        form.setFieldsValue({
+          toPostId: undefined,
+          toJobLevel: undefined,
+          toLeaderId: undefined,
+        });
+      }
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadDeptRelatedOptions = async () => {
+      setPostLoading(true);
+      setLeaderLoading(true);
+      try {
+        const [postPage, currentDept] = await Promise.all([
+          getPostList({ pageNum: 1, pageSize: 200, deptId: selectedToDeptId }),
+          getDeptDetail(selectedToDeptId),
+        ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        const nextPosts = postPage.records || [];
+        setRealPostOptions(nextPosts);
+
+        const currentPostId = form.getFieldValue('toPostId');
+        if (currentPostId && !nextPosts.some((item) => item.id === currentPostId)) {
+          form.setFieldsValue({
+            toPostId: undefined,
+            toJobLevel: undefined,
+          });
+        }
+
+        const parentDept =
+          currentDept.parentId && currentDept.parentId > 0
+            ? await getDeptDetail(currentDept.parentId)
+            : undefined;
+
+        if (cancelled) {
+          return;
+        }
+
+        const targetDeptIds = [
+          currentDept.id,
+          ...(parentDept?.id ? [parentDept.id] : []),
+        ];
+        const leaderIds = new Set<number>(
+          [currentDept.leaderEmployeeId, parentDept?.leaderEmployeeId].filter(
+            (item): item is number => typeof item === 'number' && item > 0,
+          ),
+        );
+        const employeePage = await getEmployeeList({
+          deptIds: targetDeptIds,
+          pageNum: 1,
+          pageSize: 200,
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        const nextLeaderOptions = (employeePage.records || [])
+          .filter((employee: EmployeeBrief) => {
+            const isLeader = leaderIds.has(employee.id);
+            const isHr = /hr|人力/i.test(employee.postName || '');
+            return isLeader || isHr;
+          })
+          .map((employee: EmployeeBrief) => {
+            const roleLabel = buildLeaderRoleLabel(
+              employee.id,
+              leaderIds,
+              employee.postName,
+            );
+            return {
+              label: roleLabel
+                ? `${employee.employeeName}（${employee.deptName} · ${roleLabel}）`
+                : `${employee.employeeName}（${employee.deptName}）`,
+              value: employee.id,
+            };
+          })
+          .filter(
+            (option, index, array) =>
+              array.findIndex((item) => item.value === option.value) === index,
+          );
+
+        setRealLeaderOptions(nextLeaderOptions);
+
+        const currentLeaderId = form.getFieldValue('toLeaderId');
+        if (
+          currentLeaderId &&
+          !nextLeaderOptions.some((option) => option.value === currentLeaderId)
+        ) {
+          form.setFieldsValue({ toLeaderId: undefined });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setRealPostOptions([]);
+          setRealLeaderOptions([]);
+          message.error('新岗位或新汇报人候选加载失败，请重新选择新部门后重试');
+        }
+      } finally {
+        if (!cancelled) {
+          setPostLoading(false);
+          setLeaderLoading(false);
+        }
+      }
+    };
+
+    void loadDeptRelatedOptions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [form, modalOpen, selectedToDeptId]);
+
+  useEffect(() => {
+    if (!modalOpen) {
+      return;
+    }
+
+    if (!selectedToPostId) {
+      form.setFieldsValue({ toJobLevel: undefined });
+      return;
+    }
+
+    const currentJobLevel = form.getFieldValue('toJobLevel');
+    if (jobLevelOptions.length === 1) {
+      if (currentJobLevel !== jobLevelOptions[0].value) {
+        form.setFieldsValue({ toJobLevel: jobLevelOptions[0].value });
+      }
+      return;
+    }
+
+    if (
+      currentJobLevel &&
+      jobLevelOptions.length &&
+      !jobLevelOptions.some((item) => item.value === currentJobLevel)
+    ) {
+      form.setFieldsValue({ toJobLevel: undefined });
+    }
+  }, [form, jobLevelOptions, modalOpen, selectedToPostId]);
+
+  useEffect(() => {
+    if (!modalOpen || !employeeIdFromUrl) {
+      return;
+    }
+    const employeeId = Number(employeeIdFromUrl);
+    if (!employeeId || employeeId < 1) {
+      return;
+    }
+    form.setFieldsValue({ employeeId });
+    void handleEmployeeLookup(employeeId);
+  }, [employeeIdFromUrl, form, modalOpen]);
 
   const columns: ProColumns<TransferApplication>[] = [
     {
@@ -252,16 +554,26 @@ const TransferPage: React.FC = () => {
       />
 
       <ModalForm<TransferFormValues>
+        form={form}
         title="创建调岗申请"
         width={760}
         open={modalOpen}
-        onOpenChange={setModalOpen}
+        onOpenChange={(open) => {
+          setModalOpen(open);
+          if (!open) {
+            form.resetFields();
+            setCurrentEmployeeDetail(undefined);
+            setRealPostOptions([]);
+            setRealLeaderOptions([]);
+            setEmployeeLoading(false);
+            setPostLoading(false);
+            setLeaderLoading(false);
+          }
+        }}
         modalProps={{ destroyOnClose: true, centered: true }}
         submitter={{ searchConfig: { submitText: '提交审批' } }}
         initialValues={{
           employeeId: employeeIdFromUrl ? Number(employeeIdFromUrl) : undefined,
-          employeeName: employeeNameFromUrl || undefined,
-          employeeNo: employeeNoFromUrl || undefined,
         }}
         onFinish={async (values) => {
           const payload: TransferApplicationCreateRequest = {
@@ -287,17 +599,60 @@ const TransferPage: React.FC = () => {
             label="员工 ID"
             width="sm"
             min={1}
-            rules={[{ required: true, message: '请输入调岗员工 ID' }]}
+            rules={[{ required: true, message: '请输入调岗员工ID' }]}
+            fieldProps={{
+              onBlur: () => {
+                triggerEmployeeLookup();
+              },
+              onPressEnter: (event) => {
+                event.preventDefault();
+                triggerEmployeeLookup();
+              },
+            }}
           />
-          <ProFormText name="employeeName" label="员工姓名" width="md" />
-          <ProFormText name="employeeNo" label="员工工号" width="md" />
+          <ProFormText
+            name="employeeName"
+            label="员工姓名"
+            width="md"
+            fieldProps={{
+              readOnly: true,
+              placeholder: employeeLoading ? '员工信息加载中...' : '输入员工ID后自动带出',
+            }}
+          />
+          <ProFormText
+            name="employeeNo"
+            label="员工工号"
+            width="md"
+            fieldProps={{
+              readOnly: true,
+              placeholder: employeeLoading ? '员工信息加载中...' : '输入员工ID后自动带出',
+            }}
+          />
         </ProFormGroup>
 
         <Row gutter={16}>
           <Col span={12}>
             <Card size="small" title="原岗位信息（只读）" style={{ minHeight: 252 }}>
-              <ProFormText name="fromDeptName" label="原部门" disabled placeholder="员工接口完善后自动带出" />
-              <ProFormText name="fromPostName" label="原职位" disabled placeholder="员工接口完善后自动带出" />
+              <ProFormText
+                name="fromDeptName"
+                label="原部门"
+                fieldProps={{
+                  readOnly: true,
+                  placeholder: currentEmployeeDetail
+                    ? '已自动带出员工原部门'
+                    : '员工接口完善后自动带出',
+                }}
+              />
+              <ProFormText
+                name="fromPostName"
+                label="原职位"
+                fieldProps={{
+                  readOnly: true,
+                  placeholder: currentEmployeeDetail
+                    ? '已自动带出员工原职位'
+                    : '员工接口完善后自动带出',
+                }}
+              />
             </Card>
           </Col>
           <Col span={12}>
@@ -305,28 +660,50 @@ const TransferPage: React.FC = () => {
               <ProFormSelect
                 name="toDeptId"
                 label="新部门"
-                options={createDepartmentOptions}
+                options={departmentOptions}
                 rules={[{ required: true, message: '请选择新部门' }]}
+                fieldProps={{
+                  allowClear: true,
+                  showSearch: true,
+                  filterOption: departmentFilterOption,
+                  optionFilterProp: 'label',
+                  placeholder: '请选择新部门',
+                }}
               />
               <ProFormSelect
                 name="toPostId"
                 label="新职位"
-                options={positionOptions}
+                options={postOptions}
                 rules={[{ required: true, message: '请选择新职位' }]}
+                fieldProps={{
+                  disabled: !selectedToDeptId,
+                  loading: postLoading,
+                  allowClear: true,
+                  showSearch: true,
+                  optionFilterProp: 'label',
+                  placeholder: selectedToDeptId ? '请选择新职位' : '请先选择新部门',
+                }}
               />
-              <ProFormSelect
+              <ProFormText
                 name="toJobLevel"
                 label="新职级"
-                options={[
-                  { label: 'P5', value: 'P5' },
-                  { label: 'P6', value: 'P6' },
-                  { label: 'P7', value: 'P7' },
-                ]}
+                fieldProps={{
+                  readOnly: jobLevelOptions.length === 1,
+                  placeholder: jobLevelPlaceholder,
+                }}
               />
               <ProFormSelect
                 name="toLeaderId"
                 label="新汇报人"
-                options={leaderOptions}
+                options={realLeaderOptions}
+                fieldProps={{
+                  disabled: !selectedToDeptId,
+                  loading: leaderLoading,
+                  allowClear: true,
+                  showSearch: true,
+                  optionFilterProp: 'label',
+                  placeholder: selectedToDeptId ? '请选择新汇报人' : '请先选择新部门',
+                }}
               />
             </Card>
           </Col>
