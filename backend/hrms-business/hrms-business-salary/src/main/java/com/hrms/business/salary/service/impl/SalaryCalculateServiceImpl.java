@@ -533,7 +533,7 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
      * 本方法使用的工具类: Wrappers(MyBatis-Plus),BigDecimal(JDK),Transactional(Spring)
      */
     @Transactional(rollbackFor = Exception.class)
-    protected void doCalculateBatch(Long batchId) {
+    public void doCalculateBatch(Long batchId) {
         SalaryBatchEntity batch = getBatchRequired(batchId);
         batch.setBatchStatus(SalaryBatchStatusEnum.CALCULATING.name());// 设置批次状态为核算中
         salaryBatchMapper.updateById(batch);

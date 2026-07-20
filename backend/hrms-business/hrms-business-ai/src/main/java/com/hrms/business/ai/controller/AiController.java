@@ -13,6 +13,8 @@ import com.hrms.common.web.PageResult;
 import com.hrms.common.web.Result;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.MediaType;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -44,7 +46,13 @@ public class AiController {
      */
     @PostMapping("/chat")
     @Operation(summary = "发送消息", description = "发送消息并 SSE 流式获取 AI 回答")
-    public SseEmitter chat(@Valid @RequestBody ChatRequestDTO request) {
+    public SseEmitter chat(@Valid @RequestBody ChatRequestDTO request, HttpServletResponse response) {
+        // 在异步线程发送数据前先设置 SSE 响应头，
+        // 确保 response 的 Content-Type 正确
+        response.setContentType(MediaType.TEXT_EVENT_STREAM_VALUE);
+        response.setHeader("Cache-Control", "no-cache");
+        response.setHeader("Connection", "keep-alive");
+        response.setHeader("X-Accel-Buffering", "no");
         Long userId = SecurityContextHolder.getUserId();
         if (userId == null) {
             throw new GlobalException(ErrorCode.UNAUTHORIZED);

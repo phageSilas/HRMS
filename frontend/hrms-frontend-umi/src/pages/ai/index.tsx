@@ -719,15 +719,11 @@ const AiChatPage: React.FC = () => {
           onContent: (text) => {
             // 累加增量内容到 streamingRef
             streamingRef.current += text;
-            // 使用 requestAnimationFrame 节流，避免 React 18 自动批处理
-            // 导致连续多次 setStreamingContent 合并为一次渲染
-            if (!streamingUpdatePendingRef.current) {
-              streamingUpdatePendingRef.current = true;
-              requestAnimationFrame(() => {
-                streamingUpdatePendingRef.current = false;
-                setStreamingContent(streamingRef.current);
-              });
-            }
+            // 每次收到增量文本直接 setState
+            // 数据层（services/ai）已在每个 SSE event 间插入 await setTimeout(0)
+            // 将不同事件的 setState 拆分到不同的 macrotask 中，
+            // 避免 React 18 自动批处理合并连续的 setStreamingContent 调用。
+            setStreamingContent(streamingRef.current);
           },
           onEnd: (reason, rawData) => {
             abortRef.current = null;
