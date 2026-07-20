@@ -49,6 +49,17 @@ import static com.hrms.business.personnel.common.enums.ServiceErrorCodeEnum.*;
 @Service
 @RequiredArgsConstructor
 public class RegularApplicationServiceImpl implements RegularApplicationService {
+    private static final List<Integer> PENDING_APPROVAL_STATUSES = List.of(
+            ApplicationStatusEnum.DRAFT.getCode(),
+            ApplicationStatusEnum.APPROVING.getCode()
+    );
+
+    private static final List<Integer> EVALUATED_APPROVAL_STATUSES = List.of(
+            ApplicationStatusEnum.APPROVED.getCode(),
+            ApplicationStatusEnum.REJECTED.getCode(),
+            ApplicationStatusEnum.ENTERED.getCode()
+    );
+
     // 转正申请Mapper
     private final RegularApplicationMapper regularApplicationMapper;
     // 员工快照Mapper
@@ -186,8 +197,7 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
     private void assertNoProcessingRegularApplication(Long employeeId) {
         Long count = regularApplicationMapper.selectCount(new LambdaQueryWrapper<RegularApplicationEntity>()
                 .eq(RegularApplicationEntity::getEmployeeId, employeeId)
-                .in(RegularApplicationEntity::getApprovalStatus,
-                        ApplicationStatusEnum.DRAFT.getCode(), ApplicationStatusEnum.APPROVING.getCode()));//替换状态为草稿或审批中
+                .in(RegularApplicationEntity::getApprovalStatus, PENDING_APPROVAL_STATUSES));//替换状态为草稿或审批中
         if (count != null && count > 0) {
             throw new GlobalException(REGULAR_APPLICATION_DUPLICATE);
         }
@@ -204,21 +214,27 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
         int pageNum = normalizePageNum(queryDTO.getPageNum());
         int pageSize = normalizePageSize(queryDTO.getPageSize());
         PersonnelDisplayEnricher displayEnricher = new PersonnelDisplayEnricher(deptService, postService);
-        Page<EmployeeSnapshotEntity> page = employeeSnapshotMapper.selectPage(
-                Page.of(pageNum, pageSize),
+        List<EmployeeSnapshotEntity> matchedEmployees = employeeSnapshotMapper.selectList(
                 buildPendingEmployeeWrapper(queryDTO)
         );
-        Map<Long, RegularApplicationEntity> processingApplicationMap = listProcessingRegularApplicationMap(
-                page.getRecords().stream().map(EmployeeSnapshotEntity::getId).toList()
+        Map<Long, RegularApplicationEntity> latestApplicationMap = listLatestRegularApplicationMap(
+                matchedEmployees.stream().map(EmployeeSnapshotEntity::getId).toList()
         );
-        List<RegularApplicationPageVO> records = page.getRecords().stream()
+        List<EmployeeSnapshotEntity> eligibleEmployees = matchedEmployees.stream()
+                .filter(employee -> !isLatestApplicationEvaluated(latestApplicationMap.get(employee.getId())))
+                .toList();
+        List<EmployeeSnapshotEntity> pageRecords = paginateEmployees(eligibleEmployees, pageNum, pageSize);
+        Map<Long, RegularApplicationEntity> processingApplicationMap = listProcessingRegularApplicationMap(
+                pageRecords.stream().map(EmployeeSnapshotEntity::getId).toList()
+        );
+        List<RegularApplicationPageVO> records = pageRecords.stream()
                 // map 方法: 将流中的每个元素（在这里是 EmployeeSnapshotEntity 对象）转换为另一种形式（RegularApplicationPageVO 对象）。
                 .map(employee -> RegularApplicationConvert.toPendingVO(
                         employee,
                         processingApplicationMap.get(employee.getId())))
                 .map(displayEnricher::enrichRegularApplication)
                 .toList();
-        return PageResult.of(records, page.getTotal(), pageNum, pageSize);
+        return PageResult.of(records, eligibleEmployees.size(), pageNum, pageSize);
     }
 
     /**
@@ -244,6 +260,7 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
                 Page.of(pageNum, pageSize),
                 new LambdaQueryWrapper<RegularApplicationEntity>()
                         .in(CollUtil.isNotEmpty(targetEmployeeIds), RegularApplicationEntity::getEmployeeId, targetEmployeeIds)
+                        .in(RegularApplicationEntity::getApprovalStatus, EVALUATED_APPROVAL_STATUSES)
                         .orderByDesc(RegularApplicationEntity::getCreateTime)
                         .orderByDesc(RegularApplicationEntity::getId)
         );
@@ -314,9 +331,7 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
         List<RegularApplicationEntity> applications = regularApplicationMapper.selectList(
                 new LambdaQueryWrapper<RegularApplicationEntity>()
                         .in(RegularApplicationEntity::getEmployeeId, employeeIds)
-                        .in(RegularApplicationEntity::getApprovalStatus,
-                                ApplicationStatusEnum.DRAFT.getCode(),
-                                ApplicationStatusEnum.APPROVING.getCode())
+                        .in(RegularApplicationEntity::getApprovalStatus, PENDING_APPROVAL_STATUSES)
                         .orderByDesc(RegularApplicationEntity::getCreateTime)
                         .orderByDesc(RegularApplicationEntity::getId)
         );
@@ -326,6 +341,64 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
                         Function.identity(),
                         (left, right) -> left
                 ));
+    }
+
+    /**
+     * 批量查询员工最新一条转正申请映射。
+     *
+     * @param employeeIds 员工ID列表
+     * @return 员工最新转正申请映射
+     * 本方法使用的工具类: CollUtil(hutool),Collectors(JDK)
+     */
+    private Map<Long, RegularApplicationEntity> listLatestRegularApplicationMap(List<Long> employeeIds) {
+        if (CollUtil.isEmpty(employeeIds)) {
+            return Collections.emptyMap();
+        }
+        List<RegularApplicationEntity> applications = regularApplicationMapper.selectList(
+                new LambdaQueryWrapper<RegularApplicationEntity>()
+                        .in(RegularApplicationEntity::getEmployeeId, employeeIds)
+                        .orderByDesc(RegularApplicationEntity::getCreateTime)
+                        .orderByDesc(RegularApplicationEntity::getId)
+        );
+        return applications.stream()
+                .collect(Collectors.toMap(
+                        RegularApplicationEntity::getEmployeeId,
+                        Function.identity(),
+                        (left, right) -> left
+                ));
+    }
+
+    /**
+     * 判断员工最新一条转正申请是否已经进入已评估范围。
+     *
+     * @param latestApplication 员工最新转正申请
+     * @return 是否已评估
+     * 本方法使用的工具类: 无
+     */
+    private boolean isLatestApplicationEvaluated(RegularApplicationEntity latestApplication) {
+        return latestApplication != null
+                && EVALUATED_APPROVAL_STATUSES.contains(latestApplication.getApprovalStatus());
+    }
+
+    /**
+     * 对员工列表做内存分页。
+     *
+     * @param employees 员工列表
+     * @param pageNum 页码
+     * @param pageSize 每页条数
+     * @return 当前页员工列表
+     * 本方法使用的工具类: Math(JDK),CollUtil(hutool)
+     */
+    private List<EmployeeSnapshotEntity> paginateEmployees(List<EmployeeSnapshotEntity> employees, int pageNum, int pageSize) {
+        if (CollUtil.isEmpty(employees)) {
+            return Collections.emptyList();
+        }
+        int fromIndex = Math.max((pageNum - 1) * pageSize, 0);
+        if (fromIndex >= employees.size()) {
+            return Collections.emptyList();
+        }
+        int toIndex = Math.min(fromIndex + pageSize, employees.size());
+        return employees.subList(fromIndex, toIndex);
     }
 
     /**
