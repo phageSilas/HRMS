@@ -1,6 +1,5 @@
 package com.hrms.business.mycenter.service;
 
-import com.hrms.business.mycenter.dto.ProfileUpdateRequest;
 import com.hrms.business.mycenter.dto.ProfileVO;
 import com.hrms.common.web.PageResult;
 
@@ -16,14 +15,6 @@ public interface MyCenterService {
      * @return 个人档案
      */
     ProfileVO getProfile(Long userId);
-
-    /**
-     * 更新个人档案
-     *
-     * @param userId  用户ID
-     * @param profile 更新请求
-     */
-    void updateProfile(Long userId, ProfileUpdateRequest profile);
 
     /**
      * 获取我发起的申请列表（首页预览）
