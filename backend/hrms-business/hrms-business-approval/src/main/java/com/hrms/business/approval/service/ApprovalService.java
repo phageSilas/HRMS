@@ -27,28 +27,4 @@ public interface ApprovalService {
      */
     Long startApproval(String type, Long bizId, String formData);
 
-    /**
-     * 审批通过
-     *
-     * @param taskId  任务ID
-     * @param comment 审批意见
-     */
-    void approve(Long taskId, String comment);
-
-    /**
-     * 审批驳回
-     *
-     * @param taskId  任务ID
-     * @param comment 审批意见
-     */
-    void reject(Long taskId, String comment);
-
-    /**
-     * 转交审批
-     *
-     * @param taskId       任务ID
-     * @param delegateToId 被转交人用户ID
-     */
-    void delegate(Long taskId, Long delegateToId);
-
 }
