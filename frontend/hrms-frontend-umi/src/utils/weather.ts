@@ -1,5 +1,5 @@
 /**
- * 首页天气数据转换逻辑
+ * 天气数据转换工具
  */
 
 import type {
@@ -7,7 +7,7 @@ import type {
   HomeWeatherType,
   UapiWeatherRecord,
   UapiWeatherResponse,
-} from './types';
+} from '@/types/weather';
 
 export const DEFAULT_HOME_WEATHER_INFO: HomeWeatherInfo = {
   type: '多云',
@@ -21,27 +21,8 @@ const SUNNY_CODE_SET = new Set(['0', '00', '100', '900']);
 const CLOUDY_CODE_SET = new Set(['1', '01', '101', '102', '103']);
 const OVERCAST_CODE_SET = new Set(['2', '02', '104']);
 const RAINY_CODE_SET = new Set([
-  '3',
-  '03',
-  '300',
-  '301',
-  '302',
-  '303',
-  '304',
-  '305',
-  '306',
-  '307',
-  '308',
-  '309',
-  '310',
-  '311',
-  '312',
-  '313',
-  '314',
-  '315',
-  '316',
-  '317',
-  '318',
+  '3', '03', '300', '301', '302', '303', '304', '305', '306', '307', '308',
+  '309', '310', '311', '312', '313', '314', '315', '316', '317', '318',
 ]);
 
 function isRecord(value: unknown): value is UapiWeatherRecord {
@@ -129,30 +110,15 @@ function resolveWeatherTypeByText(text?: string): HomeWeatherType {
     return '晴天';
   }
 
-  if (
-    text.includes('多云') ||
-    text.includes('少云') ||
-    text.includes('晴间多云')
-  ) {
+  if (text.includes('多云') || text.includes('少云') || text.includes('晴间多云')) {
     return '多云';
   }
 
-  if (
-    text.includes('雨') ||
-    text.includes('雪') ||
-    text.includes('雷') ||
-    text.includes('冰')
-  ) {
+  if (text.includes('雨') || text.includes('雪') || text.includes('雷') || text.includes('冰')) {
     return '雨天';
   }
 
-  if (
-    text.includes('阴') ||
-    text.includes('雾') ||
-    text.includes('霾') ||
-    text.includes('沙') ||
-    text.includes('浮尘')
-  ) {
+  if (text.includes('阴') || text.includes('雾') || text.includes('霾') || text.includes('沙') || text.includes('浮尘')) {
     return '阴天';
   }
 
@@ -161,28 +127,17 @@ function resolveWeatherTypeByText(text?: string): HomeWeatherType {
 
 function buildTip(record: UapiWeatherRecord) {
   const directTip = pickString(record, [
-    'tip',
-    'tips',
-    'advice',
-    'prompt',
-    'notice',
-    'suggestion',
+    'tip', 'tips', 'advice', 'prompt', 'notice', 'suggestion',
   ]);
   if (directTip) {
     return directTip;
   }
 
   const windDirection = pickString(record, [
-    'wind_direction',
-    'windDirection',
-    'wd',
+    'wind_direction', 'windDirection', 'wd',
   ]);
   const windPower = pickString(record, [
-    'wind_power',
-    'windPower',
-    'wind_scale',
-    'windScale',
-    'ws',
+    'wind_power', 'windPower', 'wind_scale', 'windScale', 'ws',
   ]);
 
   if (windDirection && windPower) {
@@ -205,22 +160,13 @@ export function transformUapiWeatherToHomeInfo(
   }
 
   const weatherCode = pickString(record, [
-    'weather_code',
-    'weatherCode',
-    'code',
+    'weather_code', 'weatherCode', 'code',
   ]);
   const rawWeatherText = pickString(record, [
-    'weather',
-    'weather_name',
-    'weatherName',
-    'text',
-    'condition',
+    'weather', 'weather_name', 'weatherName', 'text', 'condition',
   ]);
   const temperature = pickString(record, [
-    'temperature',
-    'temp',
-    'current_temperature',
-    'currentTemperature',
+    'temperature', 'temp', 'current_temperature', 'currentTemperature',
   ]);
 
   const resolvedType =

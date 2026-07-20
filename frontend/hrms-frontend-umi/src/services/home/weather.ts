@@ -2,16 +2,14 @@
  * 首页天气接口请求
  */
 
-import { transformUapiWeatherToHomeInfo } from './transform';
-import type { HomeWeatherInfo, UapiWeatherResponse } from './types';
+import { transformUapiWeatherToHomeInfo } from '@/utils/weather';
+import type { HomeWeatherInfo, UapiWeatherResponse } from '@/types/weather';
 
 const WEATHER_API_URL = 'https://uapis.cn/api/v1/misc/weather?city=郑州';
 const WEATHER_REQUEST_TIMEOUT = 8000;
 
 /**
  * 获取郑州实时天气
- *
- * 本方法使用的工具类: fetch(Web API),AbortController(Web API),transformUapiWeatherToHomeInfo(当前目录下的 transform.ts)
  */
 export async function fetchZhengzhouWeather(): Promise<HomeWeatherInfo | null> {
   if (typeof window === 'undefined') {

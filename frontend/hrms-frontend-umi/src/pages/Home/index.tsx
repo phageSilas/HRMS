@@ -14,12 +14,9 @@ import { Button, Card, Input, Typography } from 'antd';
 import dayjs from 'dayjs';
 import React, { useEffect, useMemo, useState } from 'react';
 import styles from './index.less';
-import {
-  DEFAULT_HOME_WEATHER_INFO,
-  fetchZhengzhouWeather,
-  type HomeWeatherInfo,
-  type HomeWeatherType,
-} from './weather';
+import { DEFAULT_HOME_WEATHER_INFO } from '@/utils/weather';
+import { fetchZhengzhouWeather } from '@/services/home/weather';
+import type { HomeWeatherInfo, HomeWeatherType } from '@/types/weather';
 
 const { Paragraph, Text, Title } = Typography;
 const { TextArea } = Input;
