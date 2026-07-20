@@ -3,6 +3,8 @@ server:
   port: ${SERVER_PORT:8080}
   servlet:
     context-path: /
+  tomcat:
+    async-request-timeout: 60000
   error:
     include-message: always
     include-binding-errors: always

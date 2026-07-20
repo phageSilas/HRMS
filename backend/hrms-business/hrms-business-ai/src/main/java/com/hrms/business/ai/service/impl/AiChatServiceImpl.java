@@ -90,6 +90,10 @@ public class AiChatServiceImpl implements AiChatService {
         // ========== 5. 异步调用百炼 API ==========
         Long finalConversationId = conversationId;
         CompletableFuture.runAsync(() -> {
+            String fullResponse = null;
+            List<Map<String, String>> suggestions = List.of();
+            String aiTitle = null;
+
             try {
                 // 查询历史消息
                 List<MessageEntity> history = messageMapper.selectList(
@@ -99,34 +103,18 @@ public class AiChatServiceImpl implements AiChatService {
 
                 // 调用百炼应用 App Completion API（应用自动处理知识库检索 + LLM 生成）
                 // 如果是新会话，会自动在回复末尾添加 ---TITLE--- 标记输出标题
-                String fullResponse = callDashScopeApp(emitter, history, request.getContent(), isNewConversation);
+                fullResponse = callDashScopeApp(emitter, history, request.getContent(), isNewConversation);
                 log.info("[AI_RESPONSE] 完整响应长度={}, 最后200字符=[{}]",
                         fullResponse != null ? fullResponse.length() : 0,
                         fullResponse != null && fullResponse.length() > 200 ? fullResponse.substring(fullResponse.length() - 200) : fullResponse);
 
                 // 解析路由建议（从 AI 回复中提取）
-                List<Map<String, String>> suggestions = parseSuggestions(fullResponse);
+                suggestions = parseSuggestions(fullResponse);
 
                 // 如果是新会话，解析 AI 生成的标题
-                String aiTitle = null;
                 if (isNewConversation) {
                     aiTitle = parseTitle(fullResponse);
                     log.info("[AI_TITLE] 解析标题: {}", aiTitle);
-                }
-
-                // 保存 AI 回复到数据库（会自动去除 ---TITLE--- 标记）
-                saveAiResponse(finalConversationId, fullResponse, suggestions);
-
-                // 更新会话标题
-                if (aiTitle != null && !aiTitle.isBlank()) {
-                    ConversationEntity entity = conversationMapper.selectById(finalConversationId);
-                    if (entity != null) {
-                        entity.setTitle(aiTitle);
-                        conversationMapper.updateById(entity);
-                        log.info("[AI_TITLE] 更新会话标题: {} → {}",
-                                firstUserMessage.length() > 20 ? firstUserMessage.substring(0, 20) + "..." : firstUserMessage,
-                                aiTitle);
-                    }
                 }
 
                 // 再发送 end 事件（含路由建议）
@@ -152,6 +140,26 @@ public class AiChatServiceImpl implements AiChatService {
                 try {
                     emitter.completeWithError(e);
                 } catch (Exception ignored) {
+                }
+            } finally {
+                // 无论正常完成还是异常，都保存已收到的 AI 回复到数据库
+                if (fullResponse != null && !fullResponse.isBlank()) {
+                    saveAiResponse(finalConversationId, fullResponse, suggestions);
+
+                    // 更新会话标题（异常路径下也尝试解析）
+                    if (aiTitle == null && isNewConversation) {
+                        aiTitle = parseTitle(fullResponse);
+                    }
+                    if (aiTitle != null && !aiTitle.isBlank()) {
+                        ConversationEntity entity = conversationMapper.selectById(finalConversationId);
+                        if (entity != null) {
+                            entity.setTitle(aiTitle);
+                            conversationMapper.updateById(entity);
+                            log.info("[AI_TITLE] 更新会话标题: {} → {}",
+                                    firstUserMessage.length() > 20 ? firstUserMessage.substring(0, 20) + "..." : firstUserMessage,
+                                    aiTitle);
+                        }
+                    }
                 }
             }
         });
@@ -199,6 +207,18 @@ public class AiChatServiceImpl implements AiChatService {
         if (isNewConversation) {
             promptContent = userContent + "\n\n（在回答结束时，用 ---TITLE--- 标记输出一个不超过10个字的对话标题，概括用户意图。直接输出标题文字，不要引号）";
         }
+        // 路由建议指令：指导 AI 在适当时输出功能页面快捷链接
+        promptContent += "\n\n如果你认为需要推荐 HRMS 相关功能页面的快捷链接，请在回答最后用 ---SUGGESTIONS--- 标记输出 JSON 数组。" +
+                "格式：[{\"label\":\"页面名称\",\"path\":\"/路由路径\"}]。" +
+                "可用的路由路径有：/employee/list（员工列表）、/attendance/punch（员工打卡）、/attendance/record（考勤记录）、" +
+                "/attendance/leaveManage（请假管理）、/attendance/summary（考勤统计）、" +
+                "/process/entry（入职申请）、/process/regular（转正申请）、/process/transfer（调岗申请）、/process/leave（离职申请）、" +
+                "/salary/account（薪资账套）、/salary/payslip（工资条）、/salary/batch（薪资核算）、" +
+                "/approval/workspace（审批工作台）、/approval/delegation（委托审批）、" +
+                "/organization/dept（部门管理）、/organization/post（职位管理）、" +
+                "/system/user（用户管理）、/system/role（角色管理）、" +
+                "/profile/index（个人首页）、/profile/attendance（我的考勤）、/profile/salary（我的薪资）。" +
+                "只推荐与用户问题相关的页面，最多推荐3个。不要推荐无关页面。";
         promptBuilder.append("用户：").append(promptContent);
 
         // ===== 构建 App API 请求体 =====
@@ -387,7 +407,18 @@ public class AiChatServiceImpl implements AiChatService {
         }
 
         // 构建消息列表
-        String sysPrompt = "你是 HRMS（人力资源管理系统）的智能助手。请用中文简洁、专业地回答用户问题。";
+        String routeSuggestionPrompt = "如果你认为需要推荐 HRMS 相关功能页面的快捷链接，请在回答最后用 ---SUGGESTIONS--- 标记输出 JSON 数组。" +
+                "格式：[{\"label\":\"页面名称\",\"path\":\"/路由路径\"}]。" +
+                "可用的路由路径有：/employee/list（员工列表）、/attendance/punch（员工打卡）、/attendance/record（考勤记录）、" +
+                "/attendance/leaveManage（请假管理）、/attendance/summary（考勤统计）、" +
+                "/process/entry（入职申请）、/process/regular（转正申请）、/process/transfer（调岗申请）、/process/leave（离职申请）、" +
+                "/salary/account（薪资账套）、/salary/payslip（工资条）、/salary/batch（薪资核算）、" +
+                "/approval/workspace（审批工作台）、/approval/delegation（委托审批）、" +
+                "/organization/dept（部门管理）、/organization/post（职位管理）、" +
+                "/system/user（用户管理）、/system/role（角色管理）、" +
+                "/profile/index（个人首页）、/profile/attendance（我的考勤）、/profile/salary（我的薪资）。" +
+                "只推荐与用户问题相关的页面，最多推荐3个。不要推荐无关页面。";
+        String sysPrompt = "你是 HRMS（人力资源管理系统）的智能助手。请用中文简洁、专业地回答用户问题。\n\n" + routeSuggestionPrompt;
         if (isNewConversation) {
             sysPrompt += "\n\n在回答结束时，用 ---TITLE--- 标记输出一个不超过10个字的对话标题，概括用户意图。直接输出标题文字，不要引号。";
         }
@@ -511,8 +542,24 @@ public class AiChatServiceImpl implements AiChatService {
         }
 
         try {
+            // 从标记后提取完整 JSON 数组（支持多行格式）
             String jsonPart = fullResponse.substring(jsonStart).trim();
-            int jsonEnd = jsonPart.indexOf('\n');
+
+            // 查找匹配的 JSON 数组结束位置（处理多行 JSON）
+            int bracketDepth = 0;
+            int jsonEnd = -1;
+            for (int i = 0; i < jsonPart.length(); i++) {
+                char c = jsonPart.charAt(i);
+                if (c == '[') {
+                    bracketDepth++;
+                } else if (c == ']') {
+                    bracketDepth--;
+                    if (bracketDepth == 0) {
+                        jsonEnd = i + 1;
+                        break;
+                    }
+                }
+            }
             if (jsonEnd > 0) {
                 jsonPart = jsonPart.substring(0, jsonEnd);
             }

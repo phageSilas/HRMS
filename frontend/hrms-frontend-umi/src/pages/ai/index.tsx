@@ -33,7 +33,7 @@ import {
   SendOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { useRequest } from '@umijs/max';
+import { history, useRequest } from '@umijs/max';
 import {
   Avatar,
   Button,
@@ -245,7 +245,7 @@ const SuggestionCards: React.FC<SuggestionCardsProps> = ({ suggestions }) => {
             size="small"
             hoverable
             onClick={() => {
-              window.location.href = s.path;
+              history.push(s.path);
             }}
             style={{
               borderRadius: 8,
@@ -341,6 +341,32 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[rehypeRaw]}
+                components={{
+                  a: ({ href, children }) => {
+                    if (href?.startsWith('/')) {
+                      return (
+                        <a
+                          href={href}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            history.push(href);
+                          }}
+                        >
+                          {children}
+                        </a>
+                      );
+                    }
+                    return (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {children}
+                      </a>
+                    );
+                  },
+                }}
               >
                 {message.content}
               </ReactMarkdown>
@@ -799,7 +825,7 @@ const AiChatPage: React.FC = () => {
   // ---- 新建会话 ----
 
   const handleNewConversation = () => {
-    creatingNewConversationRef.current = false;
+    creatingNewConversationRef.current = true;
     setCurrentId(null);
     setMessages([]);
     setStreamingContent('');
