@@ -2,6 +2,7 @@ package com.hrms.business.salary.controller;
 
 import com.hrms.business.salary.dto.EmployeeSalaryProfileRequestDTO;
 import com.hrms.business.salary.service.SalaryTemplateService;
+import com.hrms.business.salary.vo.EmployeeSalaryProfileDetailVO;
 import com.hrms.business.salary.vo.EmployeeSalaryProfileVO;
 import com.hrms.common.web.Result;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -35,6 +37,19 @@ public class SalaryProfileController {
     @GetMapping("/{employeeId}/profile")
     public Result<EmployeeSalaryProfileVO> getEmployeeProfile(@PathVariable("employeeId") Long employeeId) {
         return Result.success(salaryTemplateService.getEmployeeProfile(employeeId));
+    }
+
+    /**
+     * 查询员工薪资档案详情。
+     *
+     * @param employeeId 员工ID
+     * @return 员工薪资档案详情
+     * 本方法使用的工具类: 无
+     */
+    @GetMapping("/detail")
+    public Result<EmployeeSalaryProfileDetailVO> getEmployeeProfileDetail(
+            @RequestParam("employeeId") Long employeeId) {
+        return Result.success(salaryTemplateService.getEmployeeProfileDetail(employeeId));
     }
 
     /**

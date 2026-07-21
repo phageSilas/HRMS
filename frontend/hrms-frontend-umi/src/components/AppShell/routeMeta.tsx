@@ -117,6 +117,7 @@ export const shellRoutes: ShellRouteMeta[] = [
     icon: <PayCircleOutlined />,
     keywords: ['薪资', '账套'],
   },
+  { path: '/salary/profile', title: '薪资档案', group: '薪资管理', keywords: ['薪资', '档案'] },
   { path: '/salary/batch', title: '薪资核算', group: '薪资管理', keywords: ['薪资', '核算'] },
   { path: '/salary/payslip', title: '工资条', group: '薪资管理', keywords: ['工资条'] },
   {
