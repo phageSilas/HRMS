@@ -477,6 +477,7 @@ public class SalaryTemplateServiceImpl implements SalaryTemplateService {
             return;
         }
         EmployeeSalaryProfileHistoryEntity history = new EmployeeSalaryProfileHistoryEntity();
+        history.setId(IdUtil.getSnowflakeNextId());
         history.setEmployeeId(employeeId);
         history.setTemplateIdBefore(beforeProfile == null ? null : beforeProfile.getTemplateId());
         history.setTemplateIdAfter(afterProfile.getTemplateId());
