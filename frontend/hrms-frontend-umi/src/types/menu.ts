@@ -34,7 +34,7 @@ export function transformMenus(menus: any[], parentPath?: string): MenuItem[] {
     return [];
   }
 
-  return menus.map(menu => {
+  const transformedMenus = menus.map(menu => {
     const currentPath = menu.path || '';
 
     const item: MenuItem = {
@@ -51,6 +51,44 @@ export function transformMenus(menus: any[], parentPath?: string): MenuItem[] {
     }
 
     return item;
+  });
+
+  if (!parentPath) {
+    return ensureSalaryProfileMenu(transformedMenus);
+  }
+  return transformedMenus;
+}
+
+/**
+ * 为薪资管理菜单兜底注入“薪资档案”入口，避免后端菜单未同步时页面无入口。
+ */
+export function ensureSalaryProfileMenu(menus: MenuItem[]): MenuItem[] {
+  return menus.map((menu) => {
+    if (menu.path !== '/salary') {
+      return menu;
+    }
+    const children = menu.children || [];
+    if (children.some((child) => child.path === '/salary/profile')) {
+      return menu;
+    }
+    const profileMenu: MenuItem = {
+      key: 'salary-profile',
+      name: '薪资档案',
+      path: '/salary/profile',
+      parentPath: '/salary',
+    };
+    const accountIndex = children.findIndex((child) => child.path === '/salary/account');
+    if (accountIndex < 0) {
+      return { ...menu, children: [...children, profileMenu] };
+    }
+    return {
+      ...menu,
+      children: [
+        ...children.slice(0, accountIndex + 1),
+        profileMenu,
+        ...children.slice(accountIndex + 1),
+      ],
+    };
   });
 }
 

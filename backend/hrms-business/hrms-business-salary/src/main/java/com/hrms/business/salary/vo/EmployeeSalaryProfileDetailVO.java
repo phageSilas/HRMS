@@ -7,17 +7,16 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 /**
- * 员工薪资档案返回视图。
+ * 员工薪资档案详情返回视图。
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class EmployeeSalaryProfileVO {
-
-    private Long id;
+public class EmployeeSalaryProfileDetailVO {
 
     private Long employeeId;
 
@@ -29,6 +28,10 @@ public class EmployeeSalaryProfileVO {
 
     private String deptName;
 
+    private Long postId;
+
+    private String postName;
+
     private Integer employmentStatus;
 
     private String employmentStatusDesc;
@@ -36,6 +39,8 @@ public class EmployeeSalaryProfileVO {
     private Long templateId;
 
     private String templateName;
+
+    private Boolean assignedTemplate;
 
     private BigDecimal baseSalary;
 
@@ -45,27 +50,13 @@ public class EmployeeSalaryProfileVO {
 
     private BigDecimal socialInsuranceBase;
 
-    private BigDecimal pensionInsuranceBase;
-
-    private BigDecimal pensionInsuranceRate;
-
-    private BigDecimal medicalInsuranceBase;
-
-    private BigDecimal medicalInsuranceRate;
-
-    private BigDecimal unemploymentInsuranceBase;
-
-    private BigDecimal unemploymentInsuranceRate;
-
     private BigDecimal housingFundBase;
 
     private BigDecimal probationSalaryRatio;
 
-    private String bankName;
-
-    private String bankAccountMasked;
-
     private LocalDate effectiveDate;
 
     private String remark;
+
+    private List<EmployeeSalaryProfileHistoryVO> history;
 }

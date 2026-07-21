@@ -5,6 +5,7 @@
 
 import LayoutFrame from '@/components/AppShell/LayoutFrame';
 import { getCurrentUser } from '@/services/auth';
+import { ensureSalaryProfileMenu } from '@/types/menu';
 import type { UserInfo } from '@/types/user';
 import type { RunTimeLayoutConfig } from '@umijs/max';
 import { history } from '@umijs/max';
@@ -33,9 +34,13 @@ export async function getInitialState(): Promise<InitialState> {
   if (token && localUserText) {
     try {
       const parsed = JSON.parse(localUserText) as UserInfo;
+      const patchedMenus = parsed.menus ? ensureSalaryProfileMenu(parsed.menus) : parsed.menus;
       return {
-        currentUser: parsed,
-        menus: parsed.menus,  // 从缓存中恢复菜单
+        currentUser: {
+          ...parsed,
+          menus: patchedMenus,
+        },
+        menus: patchedMenus,  // 从缓存中恢复菜单
         loading: false
       };
     } catch {

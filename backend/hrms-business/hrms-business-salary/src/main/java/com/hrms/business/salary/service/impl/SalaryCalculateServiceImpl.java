@@ -602,6 +602,15 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
         BigDecimal baseSalary = money(profile.getBaseSalary());
         // 补贴
         BigDecimal allowance = money(profile.getAllowance());
+        BigDecimal probationSalaryRatio = Optional.ofNullable(employee.getProbationSalaryRatio())
+                .orElse(new BigDecimal("100"));
+        if (Objects.equals(employee.getEmploymentStatus(), 1)
+                && probationSalaryRatio.compareTo(BigDecimal.ZERO) > 0) {
+            BigDecimal probationFactor = probationSalaryRatio
+                    .divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
+            baseSalary = money(baseSalary.multiply(probationFactor));
+            allowance = money(allowance.multiply(probationFactor));
+        }
         // 绩效奖金
         BigDecimal performanceBonus = money(profile.getPerformanceBase());
         // 加班费

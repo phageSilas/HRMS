@@ -48,6 +48,9 @@ public class EmployeeSalaryProfileRequestDTO {
 
     private BigDecimal housingFundBase;
 
+    @DecimalMin("0.0000")
+    private BigDecimal probationSalaryRatio;
+
     private String bankName;
 
     private String bankAccount;
@@ -55,4 +58,6 @@ public class EmployeeSalaryProfileRequestDTO {
     private LocalDate effectiveDate;
 
     private String remark;
+
+    private String changeReason;
 }

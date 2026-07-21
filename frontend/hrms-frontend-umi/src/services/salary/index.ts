@@ -52,6 +52,67 @@ export interface SalaryTemplateCreateOrUpdateRequest {
   items?: SalaryTemplateItem[];
 }
 
+export interface SalaryEmployeeProfileHistoryItem {
+  id: number;
+  employeeId: number;
+  templateIdBefore?: number;
+  templateNameBefore?: string;
+  templateIdAfter?: number;
+  templateNameAfter?: string;
+  baseSalaryBefore?: number | string;
+  baseSalaryAfter?: number | string;
+  allowanceBefore?: number | string;
+  allowanceAfter?: number | string;
+  performanceBaseBefore?: number | string;
+  performanceBaseAfter?: number | string;
+  socialInsuranceBaseBefore?: number | string;
+  socialInsuranceBaseAfter?: number | string;
+  housingFundBaseBefore?: number | string;
+  housingFundBaseAfter?: number | string;
+  probationSalaryRatioBefore?: number | string;
+  probationSalaryRatioAfter?: number | string;
+  changeReason?: string;
+  createTime?: string;
+  createBy?: number;
+}
+
+export interface SalaryEmployeeProfileDetail {
+  employeeId: number;
+  employeeNo?: string;
+  employeeName?: string;
+  deptId?: number;
+  deptName?: string;
+  postId?: number;
+  postName?: string;
+  employmentStatus?: number;
+  employmentStatusDesc?: string;
+  templateId?: number;
+  templateName?: string;
+  assignedTemplate?: boolean;
+  baseSalary?: number | string;
+  allowance?: number | string;
+  performanceBase?: number | string;
+  socialInsuranceBase?: number | string;
+  housingFundBase?: number | string;
+  probationSalaryRatio?: number | string;
+  effectiveDate?: string;
+  remark?: string;
+  history?: SalaryEmployeeProfileHistoryItem[];
+}
+
+export interface SalaryEmployeeProfileUpdateRequest {
+  templateId?: number;
+  baseSalary: number | string;
+  allowance?: number | string;
+  performanceBase?: number | string;
+  socialInsuranceBase?: number | string;
+  housingFundBase?: number | string;
+  probationSalaryRatio?: number | string;
+  effectiveDate?: string;
+  remark?: string;
+  changeReason?: string;
+}
+
 // ============ 薪资核算类型 ============
 
 export interface SalaryBatch {
@@ -242,6 +303,19 @@ export async function getEmployeeSalaryAccount(employeeId: number) {
     baseSalary: number;
     probationSalaryRatio: number;
   }>(`/api/v1/salary/employees/${employeeId}/profile`);
+}
+
+export async function getSalaryEmployeeProfileDetail(employeeId: number) {
+  return request.get<SalaryEmployeeProfileDetail>('/api/v1/salary/employees/detail', {
+    params: { employeeId },
+  });
+}
+
+export async function updateSalaryEmployeeProfile(
+  employeeId: number,
+  data: SalaryEmployeeProfileUpdateRequest,
+) {
+  return request.put<SalaryEmployeeProfileDetail>(`/api/v1/salary/employees/${employeeId}/profile`, data);
 }
 
 // ============ 薪资核算接口 ============
