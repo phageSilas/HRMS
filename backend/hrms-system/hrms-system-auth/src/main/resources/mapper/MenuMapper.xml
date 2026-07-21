@@ -5,18 +5,36 @@
     <!-- 根据角色 ID 列表查询菜单列表 -->
     <!-- menu_type: 1=目录, 2=菜单, 3=按钮 -->
     <!-- 返回目录和菜单，过滤按钮（type=3） -->
+    <!-- 临时方案：查询角色关联的菜单 + 这些菜单的父级目录 -->
     <select id="selectMenusByRoleIds" resultType="com.hrms.system.auth.entity.MenuEntity">
-        SELECT m.* FROM sys_menu m
-        INNER JOIN sys_role_menu rm ON m.id = rm.menu_id
-        WHERE rm.role_id IN
-        <foreach collection="roleIds" item="roleId" open="(" separator="," close=")">
-            #{roleId}
-        </foreach>
-          AND m.is_deleted = 0
-          AND rm.is_deleted = 0
+        SELECT DISTINCT m.* FROM sys_menu m
+        WHERE m.is_deleted = 0
           AND m.menu_type IN (1, 2)
           AND m.visible = 1
           AND m.status = 1
+          AND (
+              -- 1. 角色直接关联的菜单
+              m.id IN (
+                  SELECT rm.menu_id FROM sys_role_menu rm
+                  WHERE rm.role_id IN
+                  <foreach collection="roleIds" item="roleId" open="(" separator="," close=")">
+                      #{roleId}
+                  </foreach>
+                  AND rm.is_deleted = 0
+              )
+              -- 2. 角色关联菜单的父级目录（只补全有子菜单权限的一级目录）
+              OR m.id IN (
+                  SELECT DISTINCT m2.parent_id FROM sys_menu m2
+                  INNER JOIN sys_role_menu rm2 ON m2.id = rm2.menu_id
+                  WHERE rm2.role_id IN
+                  <foreach collection="roleIds" item="roleId" open="(" separator="," close=")">
+                      #{roleId}
+                  </foreach>
+                  AND rm2.is_deleted = 0
+                  AND m2.parent_id > 0
+                  AND m2.is_deleted = 0
+              )
+          )
         ORDER BY m.sort_no
     </select>
 
