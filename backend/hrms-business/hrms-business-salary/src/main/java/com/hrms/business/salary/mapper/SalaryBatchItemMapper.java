@@ -153,4 +153,17 @@ public interface SalaryBatchItemMapper extends BaseMapper<SalaryBatchItemEntity>
      * 本方法使用的工具类：foreach(MyBatis XML)
      */
     int insertBatch(@Param("list") List<SalaryBatchItemEntity> list);
+
+    /**
+     * 游标分页查询批次下的员工薪资明细（基于主键ID，O(1)性能）。
+     *
+     * @param batchId  批次ID
+     * @param lastId   上一页最后一条记录ID，首次传null
+     * @param pageSize 每页条数
+     * @return 员工薪资明细列表
+     * 本方法使用的工具类：@Param(MyBatis)
+     */
+    List<SalaryBatchItemEntity> selectBatchItemsByCursor(@Param("batchId") Long batchId,
+                                                         @Param("lastId") Long lastId,
+                                                         @Param("pageSize") int pageSize);
 }

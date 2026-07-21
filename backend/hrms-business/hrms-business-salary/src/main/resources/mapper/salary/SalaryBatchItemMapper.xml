@@ -24,3 +24,17 @@
     </insert>
 
 </mapper>
+
+    <!--
+        游标分页查询批次下的员工薪资明细（基于主键ID）
+        本方法使用的工具类：if(MyBatis XML)
+    -->
+    <select id="selectBatchItemsByCursor" resultType="com.hrms.business.salary.entity.SalaryBatchItemEntity">
+        SELECT * FROM hr_salary_batch_item
+        WHERE batch_id = #{batchId}
+        <if test="lastId != null">
+            AND id &gt; #{lastId}
+        </if>
+        ORDER BY id ASC
+        LIMIT #{pageSize}
+    </select>

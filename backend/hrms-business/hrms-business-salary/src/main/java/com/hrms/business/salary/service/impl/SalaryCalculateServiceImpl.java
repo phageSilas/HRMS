@@ -67,10 +67,13 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import com.hrms.business.salary.dto.SalaryBatchItemQueryDTO;
+import com.hrms.common.web.PageResult;
 import static com.hrms.business.salary.common.constant.SalaryCalculateConstant.*;
 
 /**
@@ -1661,10 +1664,140 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
      * 删除薪资批次缓存。
      * @param batchId 薪资批次ID
      */
+
+    /**
+     * ????????????10??Redis????????????
+     *
+     * @param batchId  ??ID
+     * @param queryDTO ??????
+     * @return ????
+     * ??????????StringRedisTemplate(spring-data-redis),JSONUtil(hutool),CompletableFuture(JDK)
+     */
+    @Override
+    public PageResult<SalaryBatchItemVO> pageBatchItems(Long batchId, SalaryBatchItemQueryDTO queryDTO) {
+        int pageSize = Math.min(queryDTO.getPageSize() != null ? queryDTO.getPageSize() : 20, 100);
+        int pageNum = queryDTO.getPageNum() != null ? queryDTO.getPageNum() : 1;
+
+        // ?10????Redis??
+        StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+        if (pageNum <= 10 && redisTemplate != null) {
+            String cacheKey = SalaryCacheKeys.batchItemPage(batchId, pageNum);
+            String cached = redisTemplate.opsForValue().get(cacheKey);
+            if (cached != null) {
+                if ("__EMPTY__".equals(cached)) {
+                    // ?????????
+                    return PageResult.of(List.of(), 0, pageNum, pageSize);
+                }
+                return JSONUtil.toBean(cached, PageResult.class);
+            }
+        }
+
+        // ????????10????????DB
+        Long lastId = queryDTO.getLastId();
+        List<SalaryBatchItemEntity> entities = salaryBatchItemMapper.selectBatchItemsByCursor(
+                batchId, lastId, pageSize + 1);
+
+        boolean hasMore = entities.size() > pageSize;
+        if (hasMore) {
+            entities = entities.subList(0, pageSize);
+        }
+
+        // ???????
+        Map<Long, SalaryEmployeeSnapshotEntity> employeeMap = entities.isEmpty()
+                ? Map.of()
+                : listEmployeesByIds(entities.stream().map(SalaryBatchItemEntity::getEmployeeId).distinct().toList());
+
+        List<SalaryBatchItemVO> records = entities.stream()
+                .map(item -> toBatchItemVO(item, employeeMap.get(item.getEmployeeId())))
+                .toList();
+
+        Long nextLastId = records.isEmpty() ? null : records.get(records.size() - 1).getId();
+
+        PageResult<SalaryBatchItemVO> result = new PageResult<>();
+        result.setRecords(records);
+        result.setTotal(hasMore ? -1 : records.size());
+        result.setPageSize(pageSize);
+        result.setPages(hasMore ? -1 : 1);
+
+        // ??Redis?????10??
+        if (pageNum <= 10 && redisTemplate != null) {
+            String cacheKey = SalaryCacheKeys.batchItemPage(batchId, pageNum);
+            if (records.isEmpty()) {
+                // ?????1??????
+                redisTemplate.opsForValue().set(cacheKey, "__EMPTY__", 1, java.util.concurrent.TimeUnit.MINUTES);
+            } else {
+                redisTemplate.opsForValue().set(cacheKey, JSONUtil.toJsonStr(result), 10, java.util.concurrent.TimeUnit.MINUTES);
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * ???????10????Redis??????????
+     *
+     * @param batchId ??ID
+     * ??????????StringRedisTemplate(spring-data-redis),JSONUtil(hutool),CompletableFuture(JDK)
+     */
+    private void cacheBatchItemPages(Long batchId) {
+        StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+        if (redisTemplate == null) {
+            return;
+        }
+        CompletableFuture.runAsync(() -> {
+            int pageSize = 20;
+            Long cursorId = null;
+            for (int pageNum = 1; pageNum <= 10; pageNum++) {
+                String cacheKey = SalaryCacheKeys.batchItemPage(batchId, pageNum);
+                // ???????
+                if (Boolean.TRUE.equals(redisTemplate.hasKey(cacheKey))) {
+                    continue;
+                }
+                // ????????????????ID????
+                List<SalaryBatchItemEntity> entities = salaryBatchItemMapper.selectBatchItemsByCursor(
+                        batchId, cursorId, pageSize + 1);
+                boolean hasMore = entities.size() > pageSize;
+                if (hasMore) {
+                    entities = entities.subList(0, pageSize);
+                }
+                if (entities.isEmpty()) {
+                    // ???????????
+                    redisTemplate.opsForValue().set(cacheKey, "__EMPTY__", 1, java.util.concurrent.TimeUnit.MINUTES);
+                    break;
+                }
+                // ????????ID???????
+                cursorId = entities.get(entities.size() - 1).getId();
+                // ???????
+                Map<Long, SalaryEmployeeSnapshotEntity> employeeMap = listEmployeesByIds(entities.stream()
+                        .map(SalaryBatchItemEntity::getEmployeeId).distinct().toList());
+                List<SalaryBatchItemVO> records = entities.stream()
+                        .map(item -> toBatchItemVO(item, employeeMap.get(item.getEmployeeId())))
+                        .toList();
+                PageResult<SalaryBatchItemVO> pageResult = new PageResult<>();
+                pageResult.setRecords(records);
+                pageResult.setTotal(hasMore ? -1 : records.size());
+                pageResult.setPageSize(pageSize);
+                pageResult.setPages(hasMore ? -1 : 1);
+                redisTemplate.opsForValue().set(cacheKey, JSONUtil.toJsonStr(pageResult),
+                        10, java.util.concurrent.TimeUnit.MINUTES);
+            }
+        }).exceptionally(ex -> {
+            log.error("???????????, batchId={}", batchId, ex);
+            return null;
+        });
+    }
+
     private void evictBatchCache(Long batchId) {
         StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
         if (redisTemplate != null) {
+            // ??????
             redisTemplate.delete(SalaryCacheKeys.batchPreview(batchId));
+            // ????????
+            String prefix = SalaryCacheKeys.batchItemPagesPrefix(batchId);
+            Set<String> keys = redisTemplate.keys(prefix + "*");
+            if (keys != null && !keys.isEmpty()) {
+                redisTemplate.delete(keys);
+            }
         }
     }
 }

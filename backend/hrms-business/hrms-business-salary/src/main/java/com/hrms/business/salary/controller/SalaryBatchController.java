@@ -2,12 +2,14 @@ package com.hrms.business.salary.controller;
 
 import com.hrms.business.salary.dto.SalaryBatchCreateRequestDTO;
 import com.hrms.business.salary.dto.SalaryBatchAdjustmentRequestDTO;
+import com.hrms.business.salary.dto.SalaryBatchItemQueryDTO;
 import com.hrms.business.salary.service.SalaryCalculateService;
 import com.hrms.business.salary.vo.SalaryBatchItemVO;
 import com.hrms.business.salary.vo.SalaryBatchExportVO;
 import com.hrms.business.salary.vo.SalaryBatchPreviewVO;
 import com.hrms.business.salary.vo.SalaryBatchTrendVO;
 import com.hrms.business.salary.vo.SalaryBatchVO;
+import com.hrms.common.web.PageResult;
 import com.hrms.common.web.Result;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -127,6 +129,19 @@ public class SalaryBatchController {
     @GetMapping("/{id}/preview")
     public Result<SalaryBatchPreviewVO> previewBatch(@PathVariable Long id) {
         return Result.success(salaryCalculateService.previewBatch(id));
+    }
+
+    /**
+     * 分页查询薪资批次明细（前10页走Redis缓存，超出走游标分页）。
+     *
+     * @param id       批次ID
+     * @param queryDTO 分页查询参数
+     * @return 分页结果
+     */
+    @GetMapping("/{id}/items")
+    public Result<PageResult<SalaryBatchItemVO>> pageBatchItems(@PathVariable Long id,
+                                                               SalaryBatchItemQueryDTO queryDTO) {
+        return Result.success(salaryCalculateService.pageBatchItems(id, queryDTO));
     }
 
     /**
