@@ -20,6 +20,8 @@ public class SalaryTemplateQueryDTO {
 
     private String scope;
 
+    private Long employeeId;
+
     private Integer status;
 
     @Min(1)

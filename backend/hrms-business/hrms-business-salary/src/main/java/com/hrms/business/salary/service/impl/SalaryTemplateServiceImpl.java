@@ -91,6 +91,24 @@ public class SalaryTemplateServiceImpl implements SalaryTemplateService {
         // 添加账套范围条件
         appendTemplateScopeCondition(wrapper, queryDTO.getScope());
         wrapper.orderByDesc(SalaryTemplateEntity::getCreateTime);
+        if (queryDTO.getEmployeeId() != null) {
+            EmployeeDetailVO employeeDetail = employeeService.getEmployeeDetail(queryDTO.getEmployeeId());
+            List<SalaryTemplateEntity> matchedTemplates = salaryTemplateMapper.selectList(wrapper).stream()
+                    .filter(template -> matchesTemplateScope(template, employeeDetail))
+                    .toList();
+            int pageNum = Optional.ofNullable(queryDTO.getPageNum()).orElse(1);
+            int pageSize = Optional.ofNullable(queryDTO.getPageSize()).orElse(10);
+            int fromIndex = Math.min((pageNum - 1) * pageSize, matchedTemplates.size());
+            int toIndex = Math.min(fromIndex + pageSize, matchedTemplates.size());
+            List<SalaryTemplateEntity> pageRecords = matchedTemplates.subList(fromIndex, toIndex);
+            List<Long> templateIds = pageRecords.stream().map(SalaryTemplateEntity::getId).toList();
+            Map<Long, List<SalaryTemplateItemEntity>> itemMap = listTemplateItems(templateIds).stream()
+                    .collect(Collectors.groupingBy(SalaryTemplateItemEntity::getTemplateId));
+            List<SalaryTemplatePageVO> records = pageRecords.stream()
+                    .map(entity -> toTemplateVO(entity, itemMap.getOrDefault(entity.getId(), List.of())))
+                    .toList();
+            return PageResult.of(records, matchedTemplates.size(), pageNum, pageSize);
+        }
         Page<SalaryTemplateEntity> page = salaryTemplateMapper.selectPage(
                 Page.of(queryDTO.getPageNum(), queryDTO.getPageSize()), wrapper);
         List<Long> templateIds = page.getRecords().stream().map(SalaryTemplateEntity::getId).toList();
@@ -246,7 +264,10 @@ public class SalaryTemplateServiceImpl implements SalaryTemplateService {
         EmployeeDetailVO employeeDetail = employeeService.getEmployeeDetail(employeeId);
         // 只有当请求中包含账套ID时才进行账套存在性检查
         if (requestDTO.getTemplateId() != null) {
-            getTemplateRequired(requestDTO.getTemplateId());
+            SalaryTemplateEntity template = getTemplateRequired(requestDTO.getTemplateId());
+            if (!matchesTemplateScope(template, employeeDetail)) {
+                throw new GlobalException(ErrorCode.PARAM_FORMAT_ERROR, "当前员工不在该薪资账套适用范围内");
+            }
         }
         EmployeeSalaryProfileEntity profile = employeeSalaryProfileMapper.selectOne(Wrappers
                 .lambdaQuery(EmployeeSalaryProfileEntity.class)
@@ -694,6 +715,59 @@ public class SalaryTemplateServiceImpl implements SalaryTemplateService {
             return;
         }
         wrapper.like(SalaryTemplateEntity::getScopeValue, scopeText);
+    }
+
+    /**
+     * 判断员工是否命中薪资账套适用范围。
+     *
+     * @param template 薪资账套
+     * @param employeeDetail 员工详情
+     * @return 是否命中
+     * 本方法使用的工具类: StrUtil(hutool),CollUtil(hutool)
+     */
+    private boolean matchesTemplateScope(SalaryTemplateEntity template, EmployeeDetailVO employeeDetail) {
+        if (template == null || employeeDetail == null) {
+            return false;
+        }
+        String scopeType = normalizeScopeType(template.getScopeType());
+        if ("ALL".equals(scopeType)) {
+            return true;
+        }
+        List<String> scopeValues = parseTemplateScopeValues(template.getScopeValue());
+        if (CollUtil.isEmpty(scopeValues)) {
+            return false;
+        }
+        if ("DEPT".equals(scopeType)) {
+            return employeeDetail.getDeptId() != null
+                    && scopeValues.contains(String.valueOf(employeeDetail.getDeptId()));
+        }
+        if ("EMPLOYEE".equals(scopeType)) {
+            return employeeDetail.getId() != null
+                    && scopeValues.contains(String.valueOf(employeeDetail.getId()));
+        }
+        if ("JOB_LEVEL".equals(scopeType)) {
+            return StrUtil.isNotBlank(employeeDetail.getJobLevel())
+                    && scopeValues.contains(employeeDetail.getJobLevel().trim());
+        }
+        return false;
+    }
+
+    /**
+     * 解析薪资账套适用范围值列表。
+     *
+     * @param scopeValue 适用范围值
+     * @return 范围值列表
+     * 本方法使用的工具类: StrUtil(hutool)
+     */
+    private List<String> parseTemplateScopeValues(String scopeValue) {
+        if (StrUtil.isBlank(scopeValue)) {
+            return List.of();
+        }
+        return List.of(scopeValue.split(",")).stream()
+                .map(String::trim)
+                .filter(StrUtil::isNotBlank)
+                .distinct()
+                .toList();
     }
 
     /**

@@ -116,6 +116,7 @@ const SalaryProfilePage: React.FC = () => {
   const [editOpen, setEditOpen] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<number>();
   const [profileDetail, setProfileDetail] = useState<SalaryEmployeeProfileDetail>();
+  const [templateOutOfScope, setTemplateOutOfScope] = useState(false);
 
   /** 加载部门列表，供员工筛选和部门选择使用。 */
   const loadDepartments = async () => {
@@ -132,14 +133,23 @@ const SalaryProfilePage: React.FC = () => {
   };
 
   /** 加载可用薪资账套，供薪资档案编辑时选择账套。 */
-  const loadTemplates = async () => {
+  const loadTemplates = async (employeeId?: number) => {
     setTemplateLoading(true);
     try {
-      const result = await getSalaryTemplateList({ pageNum: 1, pageSize: 200, status: 1 });
-      setTemplates(result.records || []);
+      const result = await getSalaryTemplateList({
+        pageNum: 1,
+        pageSize: 200,
+        status: 1,
+        employeeId,
+      });
+      const nextTemplates = result.records || [];
+      setTemplates(nextTemplates);
+      return nextTemplates;
     } catch (error) {
       const text = error instanceof Error ? error.message : '薪资账套列表加载失败';
+      setTemplates([]);
       message.error(text);
+      return [];
     } finally {
       setTemplateLoading(false);
     }
@@ -147,7 +157,6 @@ const SalaryProfilePage: React.FC = () => {
 
   useEffect(() => {
     void loadDepartments();
-    void loadTemplates();
   }, []);
 
   const departmentOptions = useMemo(
@@ -225,6 +234,7 @@ const SalaryProfilePage: React.FC = () => {
         deptId: undefined,
       });
       setEmployeeOptions([]);
+      setTemplateOutOfScope(false);
       setProfileDetail(undefined);
       setSelectedEmployeeId(undefined);
       return;
@@ -256,6 +266,7 @@ const SalaryProfilePage: React.FC = () => {
   const handleEmployeeSelect = async (employeeId?: number) => {
     if (!employeeId) {
       searchForm.setFieldsValue({ employeeId: undefined, employeeOptionId: undefined });
+      setTemplateOutOfScope(false);
       setProfileDetail(undefined);
       setSelectedEmployeeId(undefined);
       return;
@@ -265,12 +276,18 @@ const SalaryProfilePage: React.FC = () => {
   };
 
   /** 打开档案编辑弹窗，并根据当前详情回填表单。 */
-  const openEditModal = () => {
+  const openEditModal = async () => {
     if (!profileDetail || !selectedEmployeeId) {
       return;
     }
+    const availableTemplates = await loadTemplates(selectedEmployeeId);
+    const currentTemplateAvailable =
+      profileDetail.templateId == null
+        ? true
+        : availableTemplates.some((item) => item.id === profileDetail.templateId);
+    setTemplateOutOfScope(!currentTemplateAvailable && profileDetail.templateId != null);
     editForm.setFieldsValue({
-      templateId: profileDetail.templateId,
+      templateId: currentTemplateAvailable ? profileDetail.templateId : undefined,
       baseSalary: Number(profileDetail.baseSalary || 0),
       allowance: Number(profileDetail.allowance || 0),
       performanceBase: Number(profileDetail.performanceBase || 0),
@@ -284,6 +301,9 @@ const SalaryProfilePage: React.FC = () => {
       remark: profileDetail.remark,
       changeReason: '',
     });
+    if (!currentTemplateAvailable && profileDetail.templateId != null) {
+      message.warning('当前已分配账套已不适用于该员工，请重新选择可用账套');
+    }
     setEditOpen(true);
   };
 
@@ -539,6 +559,14 @@ const SalaryProfilePage: React.FC = () => {
         width={720}
         destroyOnClose
       >
+        {templateOutOfScope && (
+          <Alert
+            type="warning"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message="当前已分配账套已不再适用于该员工，请重新选择可用账套"
+          />
+        )}
         <Form<ProfileEditFormValues>
           form={editForm}
           layout="vertical"
