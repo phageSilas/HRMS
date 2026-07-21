@@ -294,7 +294,7 @@ public class DeptServiceImpl implements DeptService {
         DeptEntity dept = new DeptEntity();
         dept.setDeptName(createDTO.getDeptName());
         dept.setDeptCode(createDTO.getDeptCode());
-        dept.setLeaderUserId(createDTO.getLeaderUserId());
+        dept.setLeaderEmployeeId(createDTO.getLeaderEmployeeId());
         dept.setSortNo(createDTO.getSortNo());
         dept.setRemark(createDTO.getRemark());
         dept.setStatus(1);
@@ -350,7 +350,7 @@ public class DeptServiceImpl implements DeptService {
         checkDeptAccess(dept, dataScope, userDeptId);
 
         dept.setDeptName(updateDTO.getDeptName());
-        dept.setLeaderUserId(updateDTO.getLeaderUserId());
+        dept.setLeaderEmployeeId(updateDTO.getLeaderEmployeeId());
         dept.setSortNo(updateDTO.getSortNo());
         dept.setRemark(updateDTO.getRemark());
 

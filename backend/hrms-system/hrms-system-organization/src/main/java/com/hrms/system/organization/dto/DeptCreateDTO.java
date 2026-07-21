@@ -19,8 +19,8 @@ public class DeptCreateDTO {
     @Schema(description = "上级部门 ID，不传或传 0 表示根部门", example = "0")
     private Long parentId;
 
-    @Schema(description = "部门负责人用户 ID", example = "1")
-    private Long leaderUserId;
+    @Schema(description = "部门负责人员工ID", example = "100")
+    private Long leaderEmployeeId;
 
     @Schema(description = "排序号", example = "1")
     private Integer sortNo;

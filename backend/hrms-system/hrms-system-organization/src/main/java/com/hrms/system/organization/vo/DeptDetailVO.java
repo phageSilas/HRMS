@@ -39,9 +39,6 @@ public class DeptDetailVO {
     @Schema(description = "部门负责人员工 ID")
     private Long leaderEmployeeId;
 
-    @Schema(description = "负责人姓名")
-    private String leaderName;
-
     @Schema(description = "员工数量")
     private Integer employeeCount;
 

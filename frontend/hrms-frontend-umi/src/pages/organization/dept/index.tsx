@@ -116,7 +116,7 @@ const DeptPage: React.FC = () => {
       setModalTitle('编辑部门');
       form.setFieldsValue({
         deptName: detail.deptName,
-        leaderUserId: detail.leaderUserId,
+        leaderEmployeeId: detail.leaderEmployeeId,
         sortNo: detail.sortNo,
         remark: detail.remark,
       });
@@ -324,7 +324,9 @@ const DeptPage: React.FC = () => {
                   {currentDept.parentName || '根部门'}
                 </Descriptions.Item>
                 <Descriptions.Item label="部门负责人">
-                  {currentDept.leaderName || (
+                  {currentDept.leaderEmployeeId ? (
+                    <Tag color="blue">{currentDept.leaderEmployeeId}</Tag>
+                  ) : (
                     <span style={{ color: '#999' }}>未设置</span>
                   )}
                 </Descriptions.Item>
@@ -407,10 +409,10 @@ const DeptPage: React.FC = () => {
             <Input placeholder="请输入部门名称" />
           </Form.Item>
           <Form.Item
-            name="leaderUserId"
-            label="部门负责人"
+            name="leaderEmployeeId"
+            label="部门负责人ID"
           >
-            <InputNumber style={{ width: '100%' }} placeholder="请输入负责人用户ID" />
+            <InputNumber style={{ width: '100%' }} placeholder="请输入负责人员工ID" />
           </Form.Item>
           <Form.Item
             name="sortNo"

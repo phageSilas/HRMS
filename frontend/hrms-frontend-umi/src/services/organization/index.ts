@@ -48,7 +48,6 @@ export interface DeptDetail {
   deptLevel: number;
   leaderUserId: number | null;
   leaderEmployeeId: number | null;
-  leaderName: string;
   employeeCount: number;
   sortNo: number;
   status: number;
@@ -63,7 +62,7 @@ export interface DeptCreateRequest {
   deptName: string;
   deptCode: string;
   parentId?: number;
-  leaderUserId?: number;
+  leaderEmployeeId?: number;
   sortNo?: number;
   remark?: string;
 }
@@ -73,7 +72,7 @@ export interface DeptCreateRequest {
  */
 export interface DeptUpdateRequest {
   deptName: string;
-  leaderUserId?: number;
+  leaderEmployeeId?: number;
   sortNo?: number;
   remark?: string;
 }
