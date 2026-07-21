@@ -670,11 +670,12 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
         int block = 0;
         BigDecimal totalGross = ZERO;
         BigDecimal totalNet = ZERO;
+        List<SalaryBatchItemEntity> items = new ArrayList<>(employees.size());
         // 遍历员工并计算薪资项
         for (SalaryEmployeeSnapshotEntity employee : employees) {
             SalaryBatchItemEntity item = calculateEmployeeItem(batch, employee, profileMap.get(employee.getId()),
                     attendanceMap.get(employee.getId()));
-            salaryBatchItemMapper.insert(item);
+            items.add(item);
             totalGross = totalGross.add(item.getGrossSalary());
             totalNet = totalNet.add(item.getNetSalary());
             if (SalaryWarningLevelEnum.YELLOW.name().equals(item.getWarningLevel())) {
@@ -684,6 +685,9 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
             } else if (SalaryWarningLevelEnum.BLOCK.name().equals(item.getWarningLevel())) {
                 block++;
             }
+        }
+        if (!items.isEmpty()) {
+            salaryBatchItemMapper.insertBatch(items);
         }
         //Lombok的Builder模式主要用于创建新对象，而不是修改现有对象
         batch.setBatchStatus(SalaryBatchStatusEnum.PENDING_REVIEW.name());

@@ -102,6 +102,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.Collections;
+import java.util.concurrent.TimeUnit;
 import java.math.RoundingMode;
 
 import static com.hrms.business.attendance.common.constant.AttendanceServiceConstant.*;
@@ -1769,34 +1770,49 @@ public class AttendanceServiceImpl implements AttendanceService {
      * @param month    月份
      * @param employeeIds 员工ID
      * @return 薪资考勤数据
-     * 本方法使用的工具类: JSONUtil(hutool)
+
+    /**
+     * 查询薪资考勤数据（批量版：先查Redis缓存，未命中员工一次性批量查DB并回填缓存）。
+     *
+     * @param month       月份
+     * @param employeeIds 员工ID列表
+     * @return 薪资考勤数据
+     * 本方法使用的工具类: JSONUtil(hutool),StringRedisTemplate(spring-data-redis),AttendanceCacheKeys(本模块cache包),HashMap(JDK)
      */
     @Override
     public List<AttendancePayrollSourceVO> getPayrollSource(String month, List<Long> employeeIds) {
         List<EmployeeSnapshotEntity> employees = findStatEmployees(employeeIds);
+        // 1. 批量查 Redis 缓存
+        Map<Long, AttendancePayrollSourceVO> cachedMap = new HashMap<>();
+        List<EmployeeSnapshotEntity> uncachedEmployees = new ArrayList<>();
+        for (EmployeeSnapshotEntity e : employees) {
+            String cached = stringRedisTemplate.opsForValue().get(AttendanceCacheKeys.monthStat(e.getId(), month));
+            if (StrUtil.isNotBlank(cached)) {
+                cachedMap.put(e.getId(), JSONUtil.toBean(cached, AttendancePayrollSourceVO.class));
+            } else {
+                uncachedEmployees.add(e);
+            }
+        }
+        // 2. 对未缓存的员工批量查DB并回填缓存
+        if (!uncachedEmployees.isEmpty()) {
+            List<AttendancePayrollSourceVO> computed = computePayrollSourcesBatch(month, uncachedEmployees);
+            for (AttendancePayrollSourceVO vo : computed) {
+                cachedMap.put(vo.getEmployeeId(), vo);
+                stringRedisTemplate.opsForValue().set(
+                        AttendanceCacheKeys.monthStat(vo.getEmployeeId(), month),
+                        JSONUtil.toJsonStr(vo),
+                        30, TimeUnit.MINUTES);
+            }
+        }
+        // 3. 按原始顺序组装结果
         return employees.stream()
-                .map(employee -> getPayrollSourceFromCache(month, employee))
+                .map(e -> cachedMap.get(e.getId()))
                 .toList();
     }
 
     /**
-     * 从缓存读取薪资考勤数据，未命中时即时计算。
-     *
-     * @param month    月份
-     * @param employee 员工快照
-     * @return 薪资考勤数据
-     * 本方法使用的工具类: JSONUtil(hutool),AttendanceCacheKeys(本模块cache包)
-     */
-    private AttendancePayrollSourceVO getPayrollSourceFromCache(String month, EmployeeSnapshotEntity employee) {
-        String cached = stringRedisTemplate.opsForValue().get(AttendanceCacheKeys.monthStat(employee.getId(), month));
-        if (StrUtil.isNotBlank(cached)) {
-            return JSONUtil.toBean(cached, AttendancePayrollSourceVO.class);
-        }
-        return computePayrollSource(month, employee);
-    }
-
     /**
-     * 批量计算薪资考勤数据。
+     * 批量计算薪资考勤数据（月度统计生成等场景使用）。
      *
      * @param month       月份
      * @param employeeIds 员工ID列表
@@ -1804,9 +1820,7 @@ public class AttendanceServiceImpl implements AttendanceService {
      * 本方法使用的工具类: List(JDK)
      */
     private List<AttendancePayrollSourceVO> computePayrollSources(String month, List<Long> employeeIds) {
-        return findStatEmployees(employeeIds).stream()
-                .map(employee -> computePayrollSource(month, employee))
-                .toList();
+        return computePayrollSourcesBatch(month, findStatEmployees(employeeIds));
     }
 
     /**
@@ -1865,6 +1879,65 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .absenceDays(BigDecimal.valueOf(Math.max(0, shouldAttendDays - actualAttendDays)).subtract(leaveDays).max(BigDecimal.ZERO))
                 .overtimeHours(BigDecimal.ZERO)
                 .build();
+    }
+
+    /**
+     * 批量计算薪资考勤数据：一次性查出所有员工的打卡记录和请假数据，内存分组后逐员工聚合。
+     *
+     * @param month     月份
+     * @param employees 待计算的员工快照列表
+     * @return 薪资考勤数据
+     * 本方法使用的工具类: YearMonth(JDK),BigDecimal(JDK),Collectors(JDK),Stream(JDK) 
+     */
+    private List<AttendancePayrollSourceVO> computePayrollSourcesBatch(String month, List<EmployeeSnapshotEntity> employees) {
+        YearMonth yearMonth = YearMonth.parse(month);
+        LocalDate startDate = yearMonth.atDay(1);
+        LocalDate endDate = yearMonth.atEndOfMonth();
+        List<Long> employeeIds = employees.stream().map(EmployeeSnapshotEntity::getId).toList();
+
+        // 批量查打卡记录
+        List<AttendanceRecordEntity> allRecords = attendanceRecordMapper.selectByEmployeeIdsAndDateRange(
+                employeeIds, startDate, endDate);
+        Map<Long, List<AttendanceRecordEntity>> recordMap = allRecords.stream()
+                .collect(Collectors.groupingBy(AttendanceRecordEntity::getEmployeeId));
+
+        // 批量查请假记录
+        List<LeaveRequestEntity> allLeaves = leaveRequestMapper.selectList(
+                new LambdaQueryWrapper<LeaveRequestEntity>()
+                        .in(LeaveRequestEntity::getEmployeeId, employeeIds)
+                        .eq(LeaveRequestEntity::getApprovalStatus, 2)
+                        .ge(LeaveRequestEntity::getStartTime, startDate.atStartOfDay())
+                        .le(LeaveRequestEntity::getStartTime, endDate.atTime(LocalTime.MAX)));
+        Map<Long, BigDecimal> leaveDayMap = allLeaves.stream()
+                .collect(Collectors.groupingBy(LeaveRequestEntity::getEmployeeId,
+                        Collectors.reducing(BigDecimal.ZERO, LeaveRequestEntity::getTotalDays, BigDecimal::add)));
+
+        int shouldAttendDays = countWeekdays(startDate, endDate);
+
+        return employees.stream().map(employee -> {
+            List<AttendanceRecordEntity> records = recordMap.getOrDefault(employee.getId(), List.of());
+            BigDecimal leaveDays = leaveDayMap.getOrDefault(employee.getId(), BigDecimal.ZERO);
+
+            int lateCount = (int) records.stream().filter(r -> "LATE".equals(r.getClockInStatus())).count();
+            int earlyLeaveCount = (int) records.stream().filter(r -> "EARLY_LEAVE".equals(r.getClockOutStatus())).count();
+            int actualAttendDays = (int) records.stream()
+                    .filter(r -> r.getClockInTime() != null || r.getClockOutTime() != null)
+                    .count();
+
+            return AttendancePayrollSourceVO.builder()
+                    .employeeId(employee.getId())
+                    .employeeNo(employee.getEmployeeNo())
+                    .employeeName(employee.getEmployeeName())
+                    .shouldAttendDays(shouldAttendDays)
+                    .actualAttendDays(actualAttendDays)
+                    .lateCount(lateCount)
+                    .earlyLeaveCount(earlyLeaveCount)
+                    .leaveDays(leaveDays)
+                    .absenceDays(BigDecimal.valueOf(Math.max(0, shouldAttendDays - actualAttendDays))
+                            .subtract(leaveDays).max(BigDecimal.ZERO))
+                    .overtimeHours(BigDecimal.ZERO)
+                    .build();
+        }).toList();
     }
 
     /**

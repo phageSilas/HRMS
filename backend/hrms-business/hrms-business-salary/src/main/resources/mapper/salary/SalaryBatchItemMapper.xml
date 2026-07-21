@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hrms.business.salary.mapper.SalaryBatchItemMapper">
+
+    <!--
+        批量插入薪资核算明细
+        本方法使用的工具类：foreach(MyBatis XML)
+    -->
+    <insert id="insertBatch" parameterType="list">
+        INSERT INTO hr_salary_batch_item
+        (batch_id, employee_id, base_salary, allowance, performance_bonus, overtime_pay,
+         late_deduction, leave_deduction, social_insurance, pension_insurance, medical_insurance,
+         unemployment_insurance, housing_fund, income_tax, gross_salary, deduction_total, net_salary,
+         warning_level, warning_reason, create_time, update_time)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.batchId}, #{item.employeeId}, #{item.baseSalary}, #{item.allowance},
+             #{item.performanceBonus}, #{item.overtimePay}, #{item.lateDeduction}, #{item.leaveDeduction},
+             #{item.socialInsurance}, #{item.pensionInsurance}, #{item.medicalInsurance},
+             #{item.unemploymentInsurance}, #{item.housingFund}, #{item.incomeTax}, #{item.grossSalary},
+             #{item.deductionTotal}, #{item.netSalary}, #{item.warningLevel}, #{item.warningReason},
+             #{item.createTime}, #{item.updateTime})
+        </foreach>
+    </insert>
+
+</mapper>

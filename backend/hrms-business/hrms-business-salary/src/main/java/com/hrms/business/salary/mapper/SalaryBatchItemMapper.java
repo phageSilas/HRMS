@@ -11,6 +11,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -143,4 +144,13 @@ public interface SalaryBatchItemMapper extends BaseMapper<SalaryBatchItemEntity>
     Page<SalaryManagePayslipPageVO> selectManagePayslipPage(Page<SalaryManagePayslipPageVO> page,
                                                             @Param("query") SalaryManagePayslipQueryDTO query,
                                                             @Param("visibleStatuses") Set<String> visibleStatuses);
+
+    /**
+     * 批量插入薪资核算明细
+     *
+     * @param list 薪资核算明细列表
+     * @return 影响行数
+     * 本方法使用的工具类：foreach(MyBatis XML)
+     */
+    int insertBatch(@Param("list") List<SalaryBatchItemEntity> list);
 }
