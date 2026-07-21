@@ -295,6 +295,7 @@ public class PaySlipServiceImpl implements PaySlipService {
         //获取薪资批次
         SalaryBatchEntity batch = getBatchRequired(item.getBatchId());
         SalaryEmployeeSnapshotEntity employee = employeeSnapshotMapper.selectById(item.getEmployeeId());
+        recordPayslipView(item, batch);
         return payslipDetailBuilder(item, employee)
                 .salaryMonth(batch.getSalaryMonth())
                 .batchNo(batch.getBatchNo())
