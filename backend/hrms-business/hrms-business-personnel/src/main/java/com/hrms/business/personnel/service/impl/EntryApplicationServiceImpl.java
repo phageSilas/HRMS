@@ -88,6 +88,11 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         return PageResult.of(records, page.getTotal(), pageNum, pageSize);
     }
 
+    /**
+     * 统计入职申请。
+     * @param queryDTO 入职申请查询参数
+      * @return 入职申请统计信息
+     */
     @Override
     public EntryApplicationStatsVO statsEntryApplications(EntryApplicationQueryDTO queryDTO) {
         StringRedisTemplate rt = redisTemplateProvider.getIfAvailable();
