@@ -1745,7 +1745,7 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
             return;
         }
         CompletableFuture.runAsync(() -> {
-            int pageSize = 10;
+            int pageSize = 20;
             Long cursorId = null;
             for (int pageNum = 1; pageNum <= 10; pageNum++) {
                 String cacheKey = SalaryCacheKeys.batchItemPage(batchId, pageNum);
