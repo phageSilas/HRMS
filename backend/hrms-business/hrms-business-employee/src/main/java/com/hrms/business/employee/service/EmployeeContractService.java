@@ -3,6 +3,7 @@ package com.hrms.business.employee.service;
 import com.hrms.business.employee.dto.ContractCreateDTO;
 import com.hrms.business.employee.dto.ContractUpdateDTO;
 import com.hrms.business.employee.entity.EmployeeContractEntity;
+import com.hrms.business.employee.vo.EmployeeContractDetailVO;
 import com.hrms.business.employee.vo.EmployeeContractVO;
 
 import java.util.List;
@@ -59,5 +60,23 @@ public interface EmployeeContractService {
      * @return 当前生效的合同
      */
     EmployeeContractEntity getCurrentContract(Long employeeId);
+
+    /**
+     * 获取所有合同列表（带分页和员工信息）
+     *
+     * @param pageNum  页码
+     * @param pageSize 每页数量
+     * @param keyword  关键词（员工姓名、工号、合同编号）
+     * @return 合同列表（包含员工信息）
+     */
+    List<EmployeeContractDetailVO> getAllContracts(Integer pageNum, Integer pageSize, String keyword);
+
+    /**
+     * 获取所有合同总数
+     *
+     * @param keyword 关键词（员工姓名、工号、合同编号）
+     * @return 合同总数
+     */
+    long getAllContractsCount(String keyword);
 
 }

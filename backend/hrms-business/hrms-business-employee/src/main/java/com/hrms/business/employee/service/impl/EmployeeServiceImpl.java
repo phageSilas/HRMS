@@ -21,6 +21,7 @@ import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
 import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
+import org.springframework.dao.DuplicateKeyException;
 import com.hrms.system.auth.dto.UserCreateDTO;
 import com.hrms.system.auth.entity.RoleEntity;
 import com.hrms.system.auth.service.FieldPermissionService;
@@ -211,19 +212,32 @@ public class EmployeeServiceImpl implements EmployeeService {
         if (dept == null || dept.getDeptCode() == null || dept.getDeptCode().isEmpty()) {
             throw new GlobalException(ErrorCode.PARAM_VALIDATION_FAILED, "部门编码不存在，无法生成工号");
         }
-        EmployeeGenNoVO genNoVO = generateEmployeeNo(dept.getDeptCode());
-        entity.setEmployeeNo(genNoVO.getEmployeeNo());
 
-        // 保存员工记录
-        employeeMapper.insert(entity);
+        // 带重试的工号生成和插入（处理并发冲突）
+        int maxRetries = 5;
+        for (int i = 0; i < maxRetries; i++) {
+            EmployeeGenNoVO genNoVO = generateEmployeeNoWithRetry(dept.getDeptCode(), i);
+            entity.setEmployeeNo(genNoVO.getEmployeeNo());
+            try {
+                // 保存员工记录
+                employeeMapper.insert(entity);
 
-        // 创建系统账号（独立事务，失败不回滚员工创建）
-        createUserAccountInNewTransaction(entity);
+                // 创建系统账号（独立事务，失败不回滚员工创建）
+                createUserAccountInNewTransaction(entity);
 
-        // 发布员工创建事件，更新部门人数
-        eventPublisher.publishEvent(new EmployeeChangeEvent(this, EmployeeChangeEvent.ChangeType.CREATE, entity.getId(), entity.getDeptId(), entity.getDeptId()));
+                // 发布员工创建事件，更新部门人数
+                eventPublisher.publishEvent(new EmployeeChangeEvent(this, EmployeeChangeEvent.ChangeType.CREATE, entity.getId(), entity.getDeptId(), entity.getDeptId()));
 
-        return entity;
+                return entity;
+            } catch (DuplicateKeyException e) {
+                if (i == maxRetries - 1) {
+                    throw new GlobalException(ErrorCode.PARAM_VALIDATION_FAILED, "生成工号失败，请重试");
+                }
+                log.warn("工号冲突，重试生成工号: {}", entity.getEmployeeNo());
+            }
+        }
+
+        throw new GlobalException(ErrorCode.PARAM_VALIDATION_FAILED, "生成工号失败，请重试");
     }
 
     @Override
@@ -427,6 +441,13 @@ public class EmployeeServiceImpl implements EmployeeService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public EmployeeGenNoVO generateEmployeeNo(String deptCode) {
+        return generateEmployeeNoWithRetry(deptCode, 0);
+    }
+
+    /**
+     * 生成工号（带重试次数参数，用于并发冲突时生成不同工号）
+     */
+    private EmployeeGenNoVO generateEmployeeNoWithRetry(String deptCode, int retryCount) {
         // 获取当前年份
         String year = String.valueOf(LocalDate.now().getYear());
 
@@ -449,6 +470,9 @@ public class EmployeeServiceImpl implements EmployeeService {
                 log.warn("解析工号序号失败: {}", lastNo);
             }
         }
+
+        // 如果有重试次数，加上重试偏移量避免冲突
+        nextSeq += retryCount;
 
         // 格式化为3位序号
         String seqStr = String.format("%03d", nextSeq);
