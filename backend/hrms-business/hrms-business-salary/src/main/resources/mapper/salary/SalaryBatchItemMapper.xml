@@ -23,7 +23,7 @@
         </foreach>
     </insert>
 
-</mapper>
+
 
     <!--
         游标分页查询批次下的员工薪资明细（基于主键ID）
@@ -38,3 +38,4 @@
         ORDER BY id ASC
         LIMIT #{pageSize}
     </select>
+</mapper>

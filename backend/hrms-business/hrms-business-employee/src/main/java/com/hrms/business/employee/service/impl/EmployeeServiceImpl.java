@@ -111,7 +111,8 @@ public class EmployeeServiceImpl implements EmployeeService {
 
         // ?10???? Redis ??
         if (pageNum <= CACHE_MAX_PAGES && stringRedisTemplate != null) {
-            String cacheKey = buildListCacheKey(queryDTO, pageNum);
+            Long userId = SecurityContextHolder.getUserId();
+            String cacheKey = buildListCacheKeyWithUserInfo(queryDTO, pageNum, userId);
             String cached = stringRedisTemplate.opsForValue().get(cacheKey);
             if (cached != null) {
                 if (EMPTY_MARKER.equals(cached)) {
@@ -130,7 +131,8 @@ public class EmployeeServiceImpl implements EmployeeService {
 
         // ????????
         if (pageNum <= CACHE_MAX_PAGES && stringRedisTemplate != null) {
-            String cacheKey = buildListCacheKey(queryDTO, pageNum);
+            Long userId = SecurityContextHolder.getUserId();
+            String cacheKey = buildListCacheKeyWithUserInfo(queryDTO, pageNum, userId);
             if (result.getRecords() == null || result.getRecords().isEmpty()) {
                 stringRedisTemplate.opsForValue().set(cacheKey, EMPTY_MARKER, EMPTY_TTL_MINUTES, TimeUnit.MINUTES);
             } else {
@@ -255,8 +257,9 @@ public class EmployeeServiceImpl implements EmployeeService {
         LambdaQueryWrapper<EmployeeEntity> wrapper = buildEmployeeWrapper(queryDTO);
         if (wrapper == null) {
             // ??????????????
+            Long userId = SecurityContextHolder.getUserId();
             stringRedisTemplate.opsForValue().set(
-                    buildListCacheKey(queryDTO, 1), EMPTY_MARKER, EMPTY_TTL_MINUTES, TimeUnit.MINUTES);
+                    buildListCacheKeyWithUserInfo(queryDTO, 1, userId), EMPTY_MARKER, EMPTY_TTL_MINUTES, TimeUnit.MINUTES);
             return PageResult.of(List.of(), 0, 1, pageSize);
         }
 
@@ -282,8 +285,9 @@ public class EmployeeServiceImpl implements EmployeeService {
         page1.setPages(totalPages);
 
         // ???1?
+        Long userId = SecurityContextHolder.getUserId();
         stringRedisTemplate.opsForValue().set(
-                buildListCacheKey(queryDTO, 1), JSONUtil.toJsonStr(page1), CACHE_TTL_MINUTES, TimeUnit.MINUTES);
+                buildListCacheKeyWithUserInfo(queryDTO, 1, userId), JSONUtil.toJsonStr(page1), CACHE_TTL_MINUTES, TimeUnit.MINUTES);
 
         // ?????2-9??Redis
         if (hasMore && totalPages > 1) {
@@ -312,17 +316,24 @@ public class EmployeeServiceImpl implements EmployeeService {
         cacheQuery.setHireDateEnd(queryDTO.getHireDateEnd());
         cacheQuery.setPageSize(pageSize);
 
+        // 传递当前用户的ID到异步线程
+        Long currentUserId = SecurityContextHolder.getUserId();
+        Long currentDeptId = SecurityContextHolder.getDeptId();
+        List<Long> currentRoleIds = SecurityContextHolder.getRoleIds();
+
         CompletableFuture.runAsync(() -> {
             int pagesToCache = Math.min(CACHE_MAX_PAGES, totalPages);
             for (int pageNum = 2; pageNum <= pagesToCache; pageNum++) {
-                String cacheKey = buildListCacheKey(queryDTO, pageNum);
+                // 使用传递过来的用户ID构建缓存键
+                String cacheKey = buildListCacheKeyWithUserInfo(queryDTO, pageNum, currentUserId);
                 // ???????
                 if (Boolean.TRUE.equals(stringRedisTemplate.hasKey(cacheKey))) {
                     continue;
                 }
                 try {
                     cacheQuery.setPageNum(pageNum);
-                    LambdaQueryWrapper<EmployeeEntity> wrapper = buildEmployeeWrapper(cacheQuery);
+                    // 在异步线程中使用传递过来的用户信息构建包装器
+                    LambdaQueryWrapper<EmployeeEntity> wrapper = buildEmployeeWrapperWithUserInfo(cacheQuery, currentUserId, currentDeptId, currentRoleIds);
                     if (wrapper == null) {
                         stringRedisTemplate.opsForValue().set(cacheKey, EMPTY_MARKER, EMPTY_TTL_MINUTES, TimeUnit.MINUTES);
                         continue;
@@ -355,6 +366,132 @@ public class EmployeeServiceImpl implements EmployeeService {
         });
     }
 
+    /**
+     * 使用传递的用户信息构建员工分页查询的 QueryWrapper（含数据权限和业务过滤）
+     *
+     * @param queryDTO 查询参数
+     * @param userId 当前用户ID
+     * @param deptId 当前用户部门ID
+     * @param roleIds 当前用户角色ID列表
+     * @return QueryWrapper，返回 null 表示数据权限无交集，应返回空结果
+     */
+    private LambdaQueryWrapper<EmployeeEntity> buildEmployeeWrapperWithUserInfo(EmployeeQueryDTO queryDTO, Long userId, Long deptId, List<Long> roleIds) {
+        LambdaQueryWrapper<EmployeeEntity> wrapper = Wrappers.lambdaQuery();
+
+        // ========== 数据权限过滤 ==========
+        List<Long> accessibleDeptIds = resolveAccessibleDeptIdsWithUserInfo(userId, deptId, roleIds);
+        if (accessibleDeptIds != null) {
+            if (accessibleDeptIds.isEmpty()) {
+                wrapper.eq(EmployeeEntity::getCreateBy, userId);
+            } else {
+                if (queryDTO.getDeptIds() != null && !queryDTO.getDeptIds().isEmpty()) {
+                    List<Long> intersected = queryDTO.getDeptIds().stream()
+                            .filter(accessibleDeptIds::contains)
+                            .collect(Collectors.toList());
+                    if (intersected.isEmpty()) {
+                        return null;
+                    }
+                    wrapper.in(EmployeeEntity::getDeptId, intersected);
+                } else {
+                    wrapper.in(EmployeeEntity::getDeptId, accessibleDeptIds);
+                }
+            }
+        }
+
+        // 关键词搜索（姓名/工号/手机号）
+        if (queryDTO.getKeyword() != null && !queryDTO.getKeyword().isEmpty()) {
+            wrapper.and(w -> w.like(EmployeeEntity::getEmployeeName, queryDTO.getKeyword())
+                    .or()
+                    .like(EmployeeEntity::getEmployeeNo, queryDTO.getKeyword())
+                    .or()
+                    .like(EmployeeEntity::getPhone, queryDTO.getKeyword()));
+        }
+
+        // 部门筛选（全量权限且前端传了 deptIds 时生效）
+        if (queryDTO.getDeptIds() != null && !queryDTO.getDeptIds().isEmpty()
+                && accessibleDeptIds == null) {
+            wrapper.in(EmployeeEntity::getDeptId, queryDTO.getDeptIds());
+        }
+
+        // 在职状态筛选
+        if (queryDTO.getEmploymentStatus() != null && !queryDTO.getEmploymentStatus().isEmpty()) {
+            wrapper.in(EmployeeEntity::getEmploymentStatus, queryDTO.getEmploymentStatus());
+        }
+
+        // 职级筛选
+        if (queryDTO.getJobLevel() != null && !queryDTO.getJobLevel().isEmpty()) {
+            wrapper.eq(EmployeeEntity::getJobLevel, queryDTO.getJobLevel());
+        }
+
+        // 入职日期范围
+        if (queryDTO.getHireDateStart() != null) {
+            wrapper.ge(EmployeeEntity::getHireDate, queryDTO.getHireDateStart());
+        }
+        if (queryDTO.getHireDateEnd() != null) {
+            wrapper.le(EmployeeEntity::getHireDate, queryDTO.getHireDateEnd());
+        }
+
+        return wrapper;
+    }
+
+    /**
+     * 使用传递的用户信息获取可访问的部门ID列表
+     * 
+     * @param userId 当前用户ID
+     * @param deptId 当前用户部门ID
+     * @param roleIds 当前用户角色ID列表
+     * @return 可访问的部门ID列表
+     */
+    private List<Long> resolveAccessibleDeptIdsWithUserInfo(Long userId, Long deptId, List<Long> roleIds) {
+        if (userId == null) {
+            return List.of(); // 未登录，返回仅本人
+        }
+
+        // 获取用户角色列表
+        List<RoleEntity> roles = roleService.getRolesByUserId(userId);
+        if (roles.isEmpty()) {
+            return List.of(); // 无角色，返回仅本人
+        }
+
+        // 检查是否为超级管理员角色
+        boolean isAdmin = roles.stream()
+                .anyMatch(r -> "ADMIN".equals(r.getRoleCode()) || "ROLE_ADMIN".equals(r.getRoleCode()));
+        if (isAdmin) {
+            return null; // ADMIN 全量权限
+        }
+
+        // 取最大数据权限范围（多角色时继承最宽权限）
+        int dataScope = roles.stream()
+                .mapToInt(r -> r.getDataScope() != null ? r.getDataScope() : 1)
+                .max()
+                .orElse(1);
+
+        switch (dataScope) {
+            case 4:
+                // 全部
+                return null;
+            case 3: {
+                // 本部门及下属
+                Long resolvedDeptId = deptId != null ? deptId : resolveUserDeptId(userId);
+                if (resolvedDeptId == null) {
+                    return List.of(); // 无部门信息，降级为仅本人
+                }
+                return deptService.getSubDeptIds(resolvedDeptId);
+            }
+            case 2: {
+                // 本部门
+                Long resolvedDeptId = deptId != null ? deptId : resolveUserDeptId(userId);
+                if (resolvedDeptId == null) {
+                    return List.of(); // 无部门信息，降级为仅本人
+                }
+                return List.of(resolvedDeptId);
+            }
+            case 1:
+            default:
+                // 仅本人
+                return List.of();
+        }
+    }
 
     private PageResult<EmployeeListVO> listEmployeesByCursor(EmployeeQueryDTO queryDTO) {
         int pageSize = Math.min(queryDTO.getPageSize(), 100);
@@ -1134,4 +1271,26 @@ public class EmployeeServiceImpl implements EmployeeService {
         return sb.toString();
     }
 
+    /**
+     * ???????? Key
+     *
+     * @param queryDTO ????
+     * @param pageNum  ??
+     * @param userId   ????ID
+     * @return ?? Key
+     * ??????????SecurityContextHolder(hrms-common)
+     */
+    private String buildListCacheKeyWithUserInfo(EmployeeQueryDTO queryDTO, int pageNum, Long userId) {
+        StringBuilder sb = new StringBuilder(CACHE_PREFIX);
+        sb.append(userId != null ? userId : "anonymous").append("|");
+        sb.append(queryDTO.getKeyword() != null ? queryDTO.getKeyword() : "").append("|");
+        sb.append(queryDTO.getDeptIds() != null ? queryDTO.getDeptIds().toString() : "").append("|");
+        sb.append(queryDTO.getEmploymentStatus() != null ? queryDTO.getEmploymentStatus().toString() : "").append("|");
+        sb.append(queryDTO.getJobLevel() != null ? queryDTO.getJobLevel() : "").append("|");
+        sb.append(queryDTO.getHireDateStart() != null ? queryDTO.getHireDateStart().toString() : "").append("|");
+        sb.append(queryDTO.getHireDateEnd() != null ? queryDTO.getHireDateEnd().toString() : "").append("|");
+        sb.append(queryDTO.getPageSize() != null ? queryDTO.getPageSize() : 20).append("|");
+        sb.append(pageNum);
+        return sb.toString();
+    }
 }
