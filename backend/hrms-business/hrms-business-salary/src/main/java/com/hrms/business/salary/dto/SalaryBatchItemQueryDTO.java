@@ -11,7 +11,7 @@ import lombok.Data;
 public class SalaryBatchItemQueryDTO {
 
     @Schema(description = "每页条数，最大100", example = "20")
-    private Integer pageSize = 20;
+    private Integer pageSize = 10;
 
     @Schema(description = "游标分页：上一页最后一条记录的ID（首次不传）", example = "5001")
     private Long lastId;

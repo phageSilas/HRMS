@@ -541,16 +541,24 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
         }
         SalaryBatchEntity batch = getBatchRequired(batchId);
         // 获取批次下的所有员工薪资明细
-        List<SalaryBatchItemEntity> items = salaryBatchItemMapper.selectList(Wrappers
-                .lambdaQuery(SalaryBatchItemEntity.class)
-                .eq(SalaryBatchItemEntity::getBatchId, batchId)
-                .orderByAsc(SalaryBatchItemEntity::getEmployeeId));
-        Map<Long, SalaryEmployeeSnapshotEntity> employeeMap = listEmployeesByIds(
-                items.stream().map(SalaryBatchItemEntity::getEmployeeId).toList());
+        // 仅获取第1页（10条），避免一次性加载全部导致前端卡顿
+        List<SalaryBatchItemEntity> items = salaryBatchItemMapper.selectBatchItemsByCursor(
+                batchId, null, 11);
+        boolean hasMore = items.size() > 10;
+        if (hasMore) {
+            items = items.subList(0, 10);
+        }
+        Map<Long, SalaryEmployeeSnapshotEntity> employeeMap = items.isEmpty()
+                ? Map.of()
+                : listEmployeesByIds(items.stream().map(SalaryBatchItemEntity::getEmployeeId).distinct().toList());
         SalaryBatchPreviewVO vo = SalaryBatchPreviewVO.builder()
                 .batch(toBatchVO(batch))
                 .items(items.stream().map(item -> toBatchItemVO(item, employeeMap.get(item.getEmployeeId()))).toList())
                 .build();
+        // 异步缓存第2-10页到Redis
+        if (hasMore) {
+            cacheBatchItemPages(batchId);
+        }
         // 若缓存不为空则写入缓存
         if (redisTemplate != null) {
             redisTemplate.opsForValue().set(cacheKey, JSONUtil.toJsonStr(vo), 5, TimeUnit.MINUTES);
@@ -1745,7 +1753,7 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
             return;
         }
         CompletableFuture.runAsync(() -> {
-            int pageSize = 20;
+            int pageSize = 10;
             Long cursorId = null;
             for (int pageNum = 1; pageNum <= 10; pageNum++) {
                 String cacheKey = SalaryCacheKeys.batchItemPage(batchId, pageNum);
