@@ -81,12 +81,14 @@ const statusOptions = Object.entries(statusMeta).map(([value, meta]) => ({
 const RECORD_QUERY_STORAGE_PREFIX = 'attendance-record-query';
 const DEPARTMENT_PAGE_SIZE = 200;
 
+/** 从 URL 中解析预选的考勤组 ID。 */
 function parseUrlGroupId() {
   const groupId = new URLSearchParams(window.location.search).get('groupId');
   const parsed = Number(groupId);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
+/** 生成考勤记录查询缓存键，按当前用户隔离筛选条件。 */
 function resolveRecordQueryStorageKey() {
   const userInfoText = localStorage.getItem('userInfo');
   if (!userInfoText) {
@@ -106,6 +108,7 @@ function resolveRecordQueryStorageKey() {
   }
 }
 
+/** 读取缓存中的考勤记录查询条件，用于页面回显和恢复列表状态。 */
 function getStoredRecordQuery(): StoredRecordQueryState {
   const storageKey = resolveRecordQueryStorageKey();
   const storedText = sessionStorage.getItem(storageKey);
@@ -121,6 +124,7 @@ function getStoredRecordQuery(): StoredRecordQueryState {
   }
 }
 
+/** 格式化后端日期值。 */
 function formatBackendDate(value?: string | number[]) {
   if (!value) return '--';
   if (Array.isArray(value)) {
@@ -131,6 +135,7 @@ function formatBackendDate(value?: string | number[]) {
   return value;
 }
 
+/** 格式化后端时间值。 */
 function formatBackendTime(value?: string | number[]) {
   if (!value) return '--';
   if (Array.isArray(value)) {
@@ -140,12 +145,14 @@ function formatBackendTime(value?: string | number[]) {
   return value;
 }
 
+/** 渲染考勤状态标签。 */
 function renderStatusTag(value?: string, fallbackName?: string) {
   if (!value && !fallbackName) return <Text type="secondary">--</Text>;
   const meta = value ? statusMeta[value] : undefined;
   return <Tag color={meta?.color || 'default'}>{fallbackName || meta?.label || value}</Tag>;
 }
 
+/** 构造考勤记录查询参数，供列表请求方法统一复用。 */
 function buildRecordQuery(query: RecordQueryState): AttendanceGroupRecordQuery {
   const params: AttendanceGroupRecordQuery = {
     pageNum: query.pageNum,
@@ -165,6 +172,10 @@ function buildRecordQuery(query: RecordQueryState): AttendanceGroupRecordQuery {
   return params;
 }
 
+/**
+ * 考勤记录页面组件。
+ * 负责按考勤组、日期、部门和状态筛选打卡明细记录。
+ */
 const AttendanceRecordPage: React.FC = () => {
   const [form] = Form.useForm<RecordFilterValues>();
   const storedQuery = getStoredRecordQuery();
@@ -196,6 +207,7 @@ const AttendanceRecordPage: React.FC = () => {
     [departments],
   );
 
+  /** 加载考勤组列表，供页面初始化和筛选条件展示使用。 */
   const loadGroups = async () => {
     setGroupLoading(true);
     try {
@@ -213,6 +225,7 @@ const AttendanceRecordPage: React.FC = () => {
     }
   };
 
+  /** 加载部门列表，供记录筛选中的部门下拉使用。 */
   const loadDepartments = async () => {
     setDepartmentLoading(true);
     try {
@@ -229,6 +242,7 @@ const AttendanceRecordPage: React.FC = () => {
     }
   };
 
+  /** 加载考勤记录列表，内部调用 `buildRecordQuery` 统一构造接口参数。 */
   const loadRecords = async (nextQuery: RecordQueryState) => {
     if (!nextQuery.groupId) {
       setRecordPageData({
@@ -404,6 +418,7 @@ const AttendanceRecordPage: React.FC = () => {
     },
   ];
 
+  /** 执行搜索，基于表单值生成新的查询状态并刷新列表。 */
   const handleSearch = (values: RecordFilterValues) => {
     const dateRange = values.dateRange;
     setQuery((previous) => ({
@@ -419,6 +434,7 @@ const AttendanceRecordPage: React.FC = () => {
     }));
   };
 
+  /** 重置查询条件并恢复默认月份与分页。 */
   const handleReset = () => {
     const nextGroupId = query.groupId || groups[0]?.id;
     setQuery({

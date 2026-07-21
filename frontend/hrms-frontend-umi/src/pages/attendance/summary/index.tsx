@@ -119,6 +119,7 @@ const summaryCardStyles = {
   } satisfies React.CSSProperties,
 };
 
+/** 生成考勤汇总筛选缓存键，按用户隔离月份和部门筛选状态。 */
 function resolveSummaryFilterStorageKey() {
   const userInfoText = localStorage.getItem('userInfo');
   if (!userInfoText) {
@@ -138,6 +139,7 @@ function resolveSummaryFilterStorageKey() {
   }
 }
 
+/** 读取缓存中的考勤汇总筛选条件。 */
 function getStoredSummaryFilter(): Partial<SummaryFilterState> {
   const storageKey = resolveSummaryFilterStorageKey();
   const storedText = sessionStorage.getItem(storageKey);
@@ -153,6 +155,7 @@ function getStoredSummaryFilter(): Partial<SummaryFilterState> {
   }
 }
 
+/** 从本地缓存读取当前登录用户信息。 */
 function getCurrentUserFromStorage() {
   const userInfoText = localStorage.getItem('userInfo');
   if (!userInfoText) {
@@ -166,10 +169,12 @@ function getCurrentUserFromStorage() {
   }
 }
 
+/** 判断当前是否使用 HR 视角，以决定部门筛选权限。 */
 function isHrView(currentUser?: UserContext) {
   return HR_ROLE_CODES.has(currentUser?.roleCode || '');
 }
 
+/** 将数字或数字字符串安全转换为 number。 */
 function toNumber(value?: number | string) {
   if (typeof value === 'number') {
     return value;
@@ -178,6 +183,7 @@ function toNumber(value?: number | string) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+/** 安全除法，避免分母为 0 时出现异常比例。 */
 function safeDivide(numerator: number, denominator: number) {
   if (denominator <= 0) {
     return 0;
@@ -185,6 +191,7 @@ function safeDivide(numerator: number, denominator: number) {
   return numerator / denominator;
 }
 
+/** 将比例转换为百分比文本。 */
 function toPercent(value?: number | null, digits = 1) {
   if (value == null || !Number.isFinite(value)) {
     return '--';
@@ -192,6 +199,7 @@ function toPercent(value?: number | null, digits = 1) {
   return `${(value * 100).toFixed(digits)}%`;
 }
 
+/** 计算环比变化值。 */
 function calcMoM(current: number, previous: number) {
   if (previous === 0) {
     return current === 0 ? 0 : null;
@@ -199,6 +207,7 @@ function calcMoM(current: number, previous: number) {
   return (current - previous) / previous;
 }
 
+/** 根据环比数值判断趋势方向。 */
 function getMomDirection(value: number | null): SummaryMetricMeta['momDirection'] {
   if (value == null) {
     return 'none';
@@ -212,6 +221,7 @@ function getMomDirection(value: number | null): SummaryMetricMeta['momDirection'
   return 'flat';
 }
 
+/** 格式化趋势图日期标签。 */
 function formatDateLabel(value: string | number[]) {
   if (Array.isArray(value)) {
     const [, month, day] = value;
@@ -220,6 +230,7 @@ function formatDateLabel(value: string | number[]) {
   return dayjs(value).format('MM-DD');
 }
 
+/** 规范化趋势图数据，供折线图直接消费。 */
 function normalizeTrendData(dailyTrend: AttendanceTrendPoint[]) {
   return dailyTrend.map((item) => ({
     dateLabel: formatDateLabel(item.date),
@@ -229,6 +240,7 @@ function normalizeTrendData(dailyTrend: AttendanceTrendPoint[]) {
   }));
 }
 
+/** 规范化部门分布数据，统一到数值类型。 */
 function normalizeDeptData(deptDistribution: AttendanceDeptDistribution[]) {
   return deptDistribution.map((item) => ({
     ...item,
@@ -236,6 +248,7 @@ function normalizeDeptData(deptDistribution: AttendanceDeptDistribution[]) {
   }));
 }
 
+/** 规范化异常分布数据，转换为饼图所需结构。 */
 function normalizePieData(exceptionPie: AttendanceExceptionPie[]) {
   return exceptionPie.map((item) => ({
     type: exceptionTypeLabelMap[item.type] || item.type,
@@ -244,6 +257,7 @@ function normalizePieData(exceptionPie: AttendanceExceptionPie[]) {
   }));
 }
 
+/** 渲染环比指标，按方向显示上升或下降状态。 */
 function renderMomValue(
   direction?: SummaryMetricMeta['momDirection'],
   value: number | null | undefined,
@@ -268,6 +282,10 @@ function renderMomValue(
   return <Text style={summaryCardStyles.metricValue}>{text}</Text>;
 }
 
+/**
+ * 考勤汇总看板页面组件。
+ * 负责 HR/主管月度看板、趋势图、部门分布和异常排行展示。
+ */
 const AttendanceSummaryPage: React.FC = () => {
   const currentUser = getCurrentUserFromStorage();
   const isHr = isHrView(currentUser);
@@ -282,6 +300,7 @@ const AttendanceSummaryPage: React.FC = () => {
     deptId: storedFilter.deptId ?? (isHr ? undefined : currentUser?.deptId),
   });
 
+  /** 加载部门列表，供 HR 视角切换部门时使用。 */
   const loadDepartments = async () => {
     setDepartmentLoading(true);
     try {
@@ -298,6 +317,7 @@ const AttendanceSummaryPage: React.FC = () => {
     }
   };
 
+  /** 加载汇总看板数据，内部同时请求当月与上月数据以生成环比指标。 */
   const loadDashboard = async (nextFilter: SummaryFilterState) => {
     setLoading(true);
     try {

@@ -121,6 +121,7 @@ const defaultCalendarConfig: AttendanceCalendarConfig = {
   holidayDates: [],
 };
 
+/** 格式化后端返回的班次时间，统一为 HH:mm 展示。 */
 function formatBackendTime(value?: string | number[]) {
   if (!value) return '--:--';
   if (Array.isArray(value)) {
@@ -133,15 +134,18 @@ function formatBackendTime(value?: string | number[]) {
   return value.slice(0, 5);
 }
 
+/** 将后端时间转换为 TimePicker 值，内部调用 `formatBackendTime` 统一解析格式。 */
 function toPickerTime(value?: string | number[]) {
   const text = formatBackendTime(value);
   return text === '--:--' ? undefined : dayjs(`2026-01-01 ${text}:00`);
 }
 
+/** 将 TimePicker 值转换为接口需要的字符串时间。 */
 function toRequestTime(value?: dayjs.Dayjs) {
   return value ? value.format('HH:mm:ss') : undefined;
 }
 
+/** 规范化节假日日期值，统一兼容数组、紧凑字符串和标准日期字符串。 */
 function normalizeHolidayDateValue(value: string | number[]) {
   if (Array.isArray(value)) {
     const [year, month, day] = value;
@@ -162,12 +166,14 @@ function normalizeHolidayDateValue(value: string | number[]) {
   return parsed.isValid() ? parsed.format('YYYY-MM-DD') : value;
 }
 
+/** 生成节假日展示文案，内部调用 `normalizeHolidayDateValue` 统一格式。 */
 function formatHolidayDateLabel(value: string | number[]) {
   const normalized = normalizeHolidayDateValue(value);
   const parsed = dayjs(normalized, 'YYYY-MM-DD');
   return parsed.isValid() ? parsed.format('YYYY/MM/DD') : normalized;
 }
 
+/** 解析定位范围 JSON 字符串，供编辑考勤组时回填定位字段。 */
 function parseLocationRange(value?: string) {
   if (!value) {
     return {};
@@ -205,6 +211,7 @@ function parseLocationRange(value?: string) {
   }
 }
 
+/** 根据班次类型获取标签样式和文案。 */
 function getShiftMeta(type?: string) {
   return (
     shiftTypeMap[(type || 'FIXED').toUpperCase()] || {
@@ -214,6 +221,7 @@ function getShiftMeta(type?: string) {
   );
 }
 
+/** 将部门树转换为 TreeSelect 可用结构。 */
 function toTreeSelectData(nodes?: DeptTreeNode[]): TreeSelectNode[] {
   return (nodes || []).map((node) => ({
     title: node.deptName,
@@ -223,6 +231,7 @@ function toTreeSelectData(nodes?: DeptTreeNode[]): TreeSelectNode[] {
   }));
 }
 
+/** 构建成员范围请求体，供提交考勤组表单时复用。 */
 function buildMemberRange(
   values: GroupFormValues,
 ): AttendanceGroupRequest['memberRange'] {
@@ -246,6 +255,10 @@ function buildMemberRange(
   };
 }
 
+/**
+ * 考勤组管理页面组件。
+ * 负责考勤组维护、成员范围配置和工作日历规则配置。
+ */
 const AttendanceGroupsPage: React.FC = () => {
   const [form] = Form.useForm<GroupFormValues>();
   const scopeType = Form.useWatch('scopeType', form);
@@ -286,6 +299,7 @@ const AttendanceGroupsPage: React.FC = () => {
     [selectedHolidayDates],
   );
 
+  /** 加载考勤组列表，供页面初始化和新增编辑删除后复用。 */
   const loadGroups = async () => {
     setLoading(true);
     try {
@@ -303,6 +317,7 @@ const AttendanceGroupsPage: React.FC = () => {
     }
   };
 
+  /** 加载考勤日历配置，供工作日配置抽屉切换年份和初始化时复用。 */
   const loadCalendarConfig = async (year = calendarConfigYear) => {
     setCalendarConfigLoading(true);
     try {
@@ -327,6 +342,7 @@ const AttendanceGroupsPage: React.FC = () => {
     }
   };
 
+  /** 加载部门树数据，供考勤组成员范围按部门选择时使用。 */
   const loadDepartmentTree = async () => {
     if (departmentTree.length > 0) {
       return;
@@ -343,6 +359,7 @@ const AttendanceGroupsPage: React.FC = () => {
     }
   };
 
+  /** 加载岗位选项，供考勤组成员范围按岗位选择时使用。 */
   const loadPostOptions = async () => {
     if (postOptions.length > 0) {
       return;
@@ -443,6 +460,7 @@ const AttendanceGroupsPage: React.FC = () => {
     setCalendarPanelDate(value);
   };
 
+  /** 保存日历配置，内部调用 `loadCalendarConfig` 回刷最新规则。 */
   const handleSaveCalendarConfig = async () => {
     try {
       setCalendarConfigSaving(true);
@@ -504,18 +522,21 @@ const AttendanceGroupsPage: React.FC = () => {
     }
   }, [drawerOpen, editingGroup, form]);
 
+  /** 打开新建考勤组抽屉，并重置表单和编辑上下文。 */
   const openCreateDrawer = () => {
     setEditingGroup(undefined);
     form.resetFields();
     setDrawerOpen(true);
   };
 
+  /** 打开编辑考勤组抽屉，内部调用时间和定位解析方法回填表单。 */
   const openEditDrawer = (group: AttendanceGroup) => {
     setEditingGroup(group);
     form.resetFields();
     setDrawerOpen(true);
   };
 
+  /** 关闭考勤组抽屉并清理编辑态。 */
   const closeDrawer = () => {
     setDrawerOpen(false);
     setEditingGroup(undefined);
@@ -525,6 +546,7 @@ const AttendanceGroupsPage: React.FC = () => {
     form.resetFields();
   };
 
+  /** 提交考勤组表单，内部调用 `buildMemberRange` 组装成员范围并刷新列表。 */
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
@@ -574,6 +596,7 @@ const AttendanceGroupsPage: React.FC = () => {
     }
   };
 
+  /** 删除当前选中的考勤组，成功后调用 `loadGroups` 刷新列表。 */
   const handleDeleteGroup = () => {
     if (!editingGroup?.id) {
       return;

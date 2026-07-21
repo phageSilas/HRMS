@@ -1,5 +1,6 @@
 /**
  * 考勤域状态管理
+ * 为考勤记录、请假和汇总页面保留统一的历史状态容器。
  * 负责人：成员 C
  */
 
@@ -42,6 +43,7 @@ const AttendanceModel: AttendanceModelType = {
   effects: {},
 
   reducers: {
+    /** 重置考勤模块的列表与分页状态，便于页面重新进入时恢复初始值。 */
     resetState() {
       return {
         recordList: [],
