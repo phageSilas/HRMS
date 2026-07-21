@@ -25,6 +25,11 @@ import org.apache.commons.lang3.StringUtils;
 
 /**
  * 账号安全服务实现
+ * <p>
+ * 提供密码修改、手机号绑定/解绑、登录日志查询等账号安全相关功能。
+ * 密码修改校验旧密码正确性、新密码复杂度和新旧密码一致性。
+ * 手机号绑定使用密码验证身份（非短信验证码）。
+ * </p>
  */
 @Slf4j
 @Service
@@ -36,11 +41,22 @@ public class AccountServiceImpl implements AccountService {
     private final PasswordEncoder passwordEncoder;
 
     /**
-     * 密码复杂度正则：8位以上，大小写+数字+特殊字符至少3种
+     * 密码复杂度正则：8位以上，大小写字母 + 数字 + 特殊字符至少包含 3 种
      */
     private static final Pattern PASSWORD_PATTERN =
             Pattern.compile("^(?![a-zA-Z]+$)(?!\\d+$)(?![^a-zA-Z\\d]+$).{8,}$");
 
+    /**
+     * 修改密码
+     * <p>
+     * 流程：校验旧密码 → 校验新密码复杂度 → 校验新旧密码不同 → 加密更新密码。
+     * 密码使用 BCrypt 加密存储。
+     * </p>
+     *
+     * @param userId  用户 ID
+     * @param request 密码修改请求（含旧密码、新密码）
+     * @throws GlobalException 用户不存在、旧密码错误、密码不符合规则或新旧密码相同时抛出
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void changePassword(Long userId, PasswordChangeRequest request) {
@@ -73,6 +89,16 @@ public class AccountServiceImpl implements AccountService {
         log.info("用户 {} 密码修改成功", userId);
     }
 
+    /**
+     * 绑定/更换手机号
+     * <p>
+     * 通过验证当前登录密码确认身份，无需短信验证码。
+     * </p>
+     *
+     * @param userId  用户 ID
+     * @param request 手机号绑定请求（含密码和新手机号）
+     * @throws GlobalException 用户不存在或密码错误时抛出
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void bindPhone(Long userId, PhoneBindRequest request) {
@@ -81,13 +107,25 @@ public class AccountServiceImpl implements AccountService {
             throw new GlobalException(ErrorCode.NOT_FOUND, "用户不存在");
         }
 
-        // TODO: 校验短信验证码（接口已预留 verifyCode，短信服务未对接）
+        // 校验当前登录密码
+        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            throw new GlobalException(ErrorCode.PASSWORD_MISMATCH, "密码错误，更换手机失败");
+        }
 
         user.setPhone(request.getPhone());
         userMapper.updateById(user);
-        log.info("用户 {} 绑定手机号成功", userId);
+        log.info("用户 {} 更换手机号成功 → {}", userId, request.getPhone());
     }
 
+    /**
+     * 解绑手机号
+     * <p>
+     * 直接清空用户绑定的手机号。当前短信服务未对接，暂不校验短信验证码。
+     * </p>
+     *
+     * @param userId 用户 ID
+     * @throws GlobalException 用户不存在或未绑定手机号时抛出
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void unbindPhone(Long userId) {
@@ -107,6 +145,12 @@ public class AccountServiceImpl implements AccountService {
         log.info("用户 {} 解绑手机号成功", userId);
     }
 
+    /**
+     * 查询最近 50 条登录日志
+     *
+     * @param userId 用户 ID
+     * @return 登录日志 VO 列表
+     */
     @Override
     public List<LoginLogVO> getLoginLogs(Long userId) {
         List<LoginLogEntity> logs = loginLogMapper.selectList(

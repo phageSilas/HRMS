@@ -28,6 +28,8 @@ export interface ProfileVO {
   jobLevel?: string;
   leaderId?: number;
   hireDate: string;
+  employmentStatus?: number;
+  employmentStatusDesc?: string;
   currentAddress?: string;
   fieldPermissions?: {
     editableFields: string[];
@@ -45,6 +47,11 @@ export interface ProfileUpdateRequest {
   emergencyPhone?: string;
 }
 
+/** 考勤状态枚举 */
+export type AttendanceStatus =
+  | 'NORMAL' | 'LATE' | 'EARLY_LEAVE'
+  | 'MISSED' | 'LEAVE' | 'HOLIDAY' | 'ABSENT';
+
 /** 考勤日历中的某一天 */
 export interface AttendanceDayVO {
   date: string;
@@ -52,6 +59,9 @@ export interface AttendanceDayVO {
   statusDesc: string;
   clockInTime?: string;
   clockOutTime?: string;
+  leaveType?: string;
+  leaveTypeDesc?: string;
+  correctionStatus?: string;
 }
 
 /** 考勤日历 VO */
@@ -114,6 +124,9 @@ export interface LeaveBalanceVO {
   annualTotal: number;
   annualUsed: number;
   annualRemaining: number;
+  sickTotal: number;
+  sickUsed: number;
+  sickRemaining: number;
   compassionateTotal: number;
   compassionateUsed: number;
   compassionateRemaining: number;
@@ -125,10 +138,10 @@ export interface PasswordChangeRequest {
   newPassword: string;
 }
 
-/** 绑定手机请求 */
+/** 绑定/更换手机请求 */
 export interface PhoneBindRequest {
   phone: string;
-  smsCode: string;
+  password: string;
 }
 
 /** 登录日志 VO（与后端 LoginLogVO 对齐） */
@@ -234,6 +247,17 @@ export interface OvertimeRecordVO {
   approvalStatusDesc: string;
   approvalInstanceId?: number;
   createTime: string;
+}
+
+/** 考勤统计数据映射（用于前端统计） */
+export interface AttendanceStats {
+  NORMAL: number;
+  LATE: number;
+  EARLY_LEAVE: number;
+  MISSED: number;
+  LEAVE: number;
+  HOLIDAY: number;
+  ABSENT: number;
 }
 
 /** 考勤统计 VO */

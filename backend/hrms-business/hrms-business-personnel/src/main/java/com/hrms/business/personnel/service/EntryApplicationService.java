@@ -5,6 +5,7 @@ import com.hrms.business.personnel.dto.EntryApplicationQueryDTO;
 import com.hrms.business.personnel.dto.EntryApplicationCreateOrUpdateRequestDTO;
 import com.hrms.business.personnel.vo.EntryApplicationConfirmVO;
 import com.hrms.business.personnel.vo.EntryApplicationPageVO;
+import com.hrms.business.personnel.vo.EntryApplicationStatsVO;
 import com.hrms.business.personnel.vo.EntryApplicationSubmitVO;
 import com.hrms.common.web.PageResult;
 
@@ -22,6 +23,22 @@ public interface EntryApplicationService {
     PageResult<EntryApplicationPageVO> pageEntryApplications(EntryApplicationQueryDTO queryDTO);
 
     /**
+     * 查询入职申请状态统计。
+     *
+     * @param queryDTO 入职申请查询参数
+     * @return 状态统计结果
+     */
+    EntryApplicationStatsVO statsEntryApplications(EntryApplicationQueryDTO queryDTO);
+
+    /**
+     * 获取入职申请详情。
+     *
+     * @param id 入职申请ID
+     * @return 入职申请详情
+     */
+    EntryApplicationPageVO getEntryApplication(Long id);
+
+    /**
      * 创建入职申请草稿。
      *
      * @param requestDTO 入职申请创建参数
@@ -35,7 +52,7 @@ public interface EntryApplicationService {
      * @param id 入职申请ID
      * @param requestDTO 入职申请更新参数
      */
-    void updateEntryApplication(Long id, EntryApplicationCreateOrUpdateRequestDTO requestDTO);
+    EntryApplicationPageVO updateEntryApplication(Long id, EntryApplicationCreateOrUpdateRequestDTO requestDTO);
 
     /**
      * 提交入职申请审批。

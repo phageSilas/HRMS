@@ -241,7 +241,7 @@ const DictPage: React.FC = () => {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      width: 80,
+      width: 100,
       render: (status: number) => statusTag(status),
     },
     {
@@ -254,9 +254,10 @@ const DictPage: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 150,
+      width: 140,
+      fixed: 'right' as const,
       render: (_: any, record: DictTypeItem) => (
-        <Space size={2} wrap>
+        <Space size={4}>
           <Button
             type="link"
             size="small"
@@ -312,15 +313,16 @@ const DictPage: React.FC = () => {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      width: 80,
+      width: 100,
       render: (status: number) => statusTag(status),
     },
     {
       title: '操作',
       key: 'action',
-      width: 150,
+      width: 140,
+      fixed: 'right' as const,
       render: (_: any, record: DictDataItem) => (
-        <Space size={2} wrap>
+        <Space size={4}>
           <Button
             type="link"
             size="small"

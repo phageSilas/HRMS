@@ -35,8 +35,12 @@ import {
   updatePost,
   deletePost,
   getDeptTree,
+  getPostStatsBySequence,
 } from '@/services/organization';
+import { hasEmployeesInPost } from '@/services/employee';
 import type { PostItem, DeptTreeNode } from '@/services/organization';
+import { Card, Row, Col, Statistic } from 'antd';
+import { TeamOutlined, SolutionOutlined, ToolOutlined } from '@ant-design/icons';
 
 const PostPage: React.FC = () => {
   const [createModalVisible, setCreateModalVisible] = useState(false);
@@ -44,6 +48,8 @@ const PostPage: React.FC = () => {
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [currentPost, setCurrentPost] = useState<PostItem | null>(null);
   const [deptList, setDeptList] = useState<{ label: string; value: number }[]>([]);
+  const [postStats, setPostStats] = useState<Record<string, number>>({ M: 0, P: 0, S: 0 });
+  const [sequenceFilter, setSequenceFilter] = useState<string>(''); // 序列筛选状态
   const [createForm] = Form.useForm();
   const [editForm] = Form.useForm();
   const actionRef = useRef<any>();
@@ -78,8 +84,19 @@ const PostPage: React.FC = () => {
     }
   };
 
+  // 获取职位统计
+  const fetchPostStats = async () => {
+    try {
+      const stats = await getPostStatsBySequence();
+      setPostStats(stats);
+    } catch (error) {
+      console.error('获取职位统计失败:', error);
+    }
+  };
+
   useEffect(() => {
     fetchDeptList();
+    fetchPostStats();
   }, []);
 
   // 状态标签
@@ -97,20 +114,18 @@ const PostPage: React.FC = () => {
     {
       title: '职位名称',
       dataIndex: 'postName',
-      width: 150,
+      width: 180,
       fixed: 'left',
-      search: false,
     },
     {
       title: '职位编码',
       dataIndex: 'postCode',
-      width: 120,
-      search: false,
+      width: 150,
     },
     {
       title: '所属序列',
       dataIndex: 'sequenceName',
-      width: 100,
+      width: 120,
       search: false,
       render: (_, record) => (
         <Tag color="blue">{record.sequenceName || record.sequenceCode}</Tag>
@@ -119,14 +134,14 @@ const PostPage: React.FC = () => {
     {
       title: '所属部门',
       dataIndex: 'deptName',
-      width: 150,
+      width: 200,
       search: false,
       render: (text) => text || <span style={{ color: '#999' }}>全公司通用</span>,
     },
     {
       title: '职级范围',
       dataIndex: 'jobLevelRange',
-      width: 120,
+      width: 150,
       search: false,
       render: (_, record) => {
         if (record.jobLevelMin && record.jobLevelMax) {
@@ -138,38 +153,34 @@ const PostPage: React.FC = () => {
     {
       title: '试用期',
       dataIndex: 'defaultProbationMonth',
-      width: 80,
+      width: 100,
       search: false,
       render: (text) => (text ? `${text}个月` : '-'),
     },
     {
       title: '状态',
       dataIndex: 'status',
-      width: 80,
-      valueEnum: {
-        0: { text: '禁用', status: 'Error' },
-        1: { text: '启用', status: 'Success' },
-      },
+      width: 100,
       search: false,
       render: (_, record) => statusTag(record.status),
     },
-    {
-      title: '排序号',
-      dataIndex: 'sortNo',
-      width: 80,
-      search: false,
-    },
-    {
-      title: '创建时间',
-      dataIndex: 'createTime',
-      width: 160,
-      search: false,
-    },
+    // {
+    //   title: '排序号',
+    //   dataIndex: 'sortNo',
+    //   width: 100,
+    //   search: false,
+    // },
+    // {
+    //   title: '创建时间',
+    //   dataIndex: 'createTime',
+    //   width: 180,
+    //   search: false,
+    // },
     {
       title: '操作',
       key: 'action',
       fixed: 'right',
-      width: 160,
+      width: 180,
       search: false,
       render: (_, record) => (
         <Space size={2} wrap>
@@ -221,9 +232,17 @@ const PostPage: React.FC = () => {
   // 删除职位
   const handleDelete = async (id: number) => {
     try {
+      // 检查职位下是否有在职员工
+      const hasEmployees = await hasEmployeesInPost(id);
+      if (hasEmployees) {
+        message.error('该职位下有在职员工，无法删除');
+        return;
+      }
+
       await deletePost(id);
       message.success('删除成功');
       actionRef.current?.reload();
+      fetchPostStats(); // 刷新统计
     } catch (error: any) {
       message.error(error.message || '删除失败');
     }
@@ -237,6 +256,7 @@ const PostPage: React.FC = () => {
       setCreateModalVisible(false);
       createForm.resetFields();
       actionRef.current?.reload();
+      fetchPostStats(); // 刷新统计
       return true;
     } catch (error: any) {
       message.error(error.message || '创建失败');
@@ -252,6 +272,7 @@ const PostPage: React.FC = () => {
       message.success('更新成功');
       setEditModalVisible(false);
       actionRef.current?.reload();
+      fetchPostStats(); // 刷新统计
       return true;
     } catch (error: any) {
       message.error(error.message || '更新失败');
@@ -261,6 +282,44 @@ const PostPage: React.FC = () => {
 
   return (
     <PageContainer title="职位管理">
+      {/* 统计卡片 */}
+      <Row gutter={16} style={{ marginBottom: 16 }}>
+        <Col xs={24} sm={8}>
+          <Card>
+            <Statistic
+              title="管理序列"
+              value={postStats.M || 0}
+              prefix={<TeamOutlined />}
+              suffix="个职位"
+              valueStyle={{ color: '#1890ff' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={8}>
+          <Card>
+            <Statistic
+              title="专业序列"
+              value={postStats.P || 0}
+              prefix={<SolutionOutlined />}
+              suffix="个职位"
+              valueStyle={{ color: '#52c41a' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={8}>
+          <Card>
+            <Statistic
+              title="支持序列"
+              value={postStats.S || 0}
+              prefix={<ToolOutlined />}
+              suffix="个职位"
+              valueStyle={{ color: '#faad14' }}
+            />
+          </Card>
+        </Col>
+      </Row>
+
+      {/* 职位列表表格 */}
       <ProTable<PostItem>
         actionRef={actionRef}
         columns={columns}
@@ -269,16 +328,23 @@ const PostPage: React.FC = () => {
           labelWidth: 'auto',
           searchText: '搜索',
           resetText: '重置',
+          collapsed: true,
+          collapseRender: false, // 隐藏展开/收起按钮
+          span: {
+            xs: 24,
+            sm: 12,
+            md: 8,
+            lg: 6,
+          },
         }}
         cardBordered
         request={async (params) => {
-          const { current: pageNum, pageSize, keyword, deptId, sequenceCode } = params;
+          const { current: pageNum, pageSize, postName, postCode } = params;
           const res = await getPostList({
             pageNum: pageNum || 1,
             pageSize: pageSize || 10,
-            keyword,
-            deptId,
-            sequenceCode,
+            keyword: postName || postCode,
+            sequenceCode: sequenceFilter, // 添加序列筛选
           });
           return {
             data: res.records || [],
@@ -290,6 +356,47 @@ const PostPage: React.FC = () => {
           showSizeChanger: true,
           showQuickJumper: true,
         }}
+        headerTitle={
+          // 序列筛选标签（左侧）
+          <Space>
+            <Button
+              type={sequenceFilter === '' ? 'primary' : 'default'}
+              onClick={() => {
+                setSequenceFilter('');
+                actionRef.current?.reload();
+              }}
+            >
+              全部
+            </Button>
+            <Button
+              type={sequenceFilter === 'M' ? 'primary' : 'default'}
+              onClick={() => {
+                setSequenceFilter('M');
+                actionRef.current?.reload();
+              }}
+            >
+              管理序列
+            </Button>
+            <Button
+              type={sequenceFilter === 'P' ? 'primary' : 'default'}
+              onClick={() => {
+                setSequenceFilter('P');
+                actionRef.current?.reload();
+              }}
+            >
+              专业序列
+            </Button>
+            <Button
+              type={sequenceFilter === 'S' ? 'primary' : 'default'}
+              onClick={() => {
+                setSequenceFilter('S');
+                actionRef.current?.reload();
+              }}
+            >
+              支持序列
+            </Button>
+          </Space>
+        }
         toolBarRender={() => [
           <Button
             key="add"
@@ -312,7 +419,13 @@ const PostPage: React.FC = () => {
         onOpenChange={setCreateModalVisible}
         form={createForm}
         onFinish={handleCreate}
-        width={600}
+        width={680}
+        modalProps={{
+          destroyOnClose: true,
+        }}
+        layout="horizontal"
+        labelCol={{ span: 6 }}
+        wrapperCol={{ span: 18 }}
       >
         <ProFormText
           name="postName"
@@ -371,7 +484,13 @@ const PostPage: React.FC = () => {
         onOpenChange={setEditModalVisible}
         form={editForm}
         onFinish={handleUpdate}
-        width={600}
+        width={680}
+        modalProps={{
+          destroyOnClose: true,
+        }}
+        layout="horizontal"
+        labelCol={{ span: 6 }}
+        wrapperCol={{ span: 18 }}
       >
         <ProFormText
           name="postName"

@@ -1,8 +1,9 @@
 /**
  * 转正管理页面。
- * 接入待转正列表和发起转正评估接口。
+ * 对接待转正列表和发起转正评估接口。
  */
 
+import { getDeptList } from '@/services/organization';
 import {
   applyRegularApplication,
   getRegularApplicationList,
@@ -23,22 +24,25 @@ import {
 } from '@ant-design/pro-components';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { Avatar, Button, Space, Tabs, Tag, Typography, message } from 'antd';
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { formatProcessDateTime } from '../utils';
 
 const { Text } = Typography;
-
-const departmentOptions = [
-  { label: '人力资源部', value: 1 },
-  { label: '技术部', value: 2 },
-  { label: '产品部', value: 3 },
-  { label: '财务部', value: 4 },
-];
 
 const resultOptions = [
   { label: '转正', value: 'pass' },
   { label: '延长试用', value: 'extend' },
   { label: '辞退', value: 'terminate' },
 ];
+
+const statusMeta: Record<number, { text: string; color: string }> = {
+  0: { text: '待审批', color: 'gold' },
+  1: { text: '审批中', color: 'processing' },
+  2: { text: '已通过', color: 'success' },
+  3: { text: '已驳回', color: 'error' },
+  4: { text: '已撤回', color: 'default' },
+  5: { text: '已入职', color: 'blue' },
+};
 
 function getInitial(name?: string) {
   return name?.slice(0, 1) || '员';
@@ -62,20 +66,59 @@ const RegularPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'pending' | 'evaluated'>('pending');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [currentRow, setCurrentRow] = useState<RegularApplication>();
+  const [departmentOptions, setDepartmentOptions] = useState<
+    { label: string; value: number }[]
+  >([]);
+
+  useEffect(() => {
+    const loadDepartments = async () => {
+      try {
+        const departments = await getDeptList();
+        setDepartmentOptions(
+          (departments || []).map((item) => ({
+            label: item.deptName,
+            value: item.id,
+          })),
+        );
+      } catch (error) {
+        message.error('部门数据加载失败，请刷新后重试');
+      }
+    };
+    loadDepartments();
+  }, []);
+
+  const departmentFilterOption = useMemo(
+    () =>
+      (input: string, option?: { label?: string | number }) =>
+        String(option?.label || '')
+          .toLowerCase()
+          .includes(input.trim().toLowerCase()),
+    [],
+  );
 
   const columns: ProColumns<RegularApplication>[] = [
     {
       title: '关键词',
       dataIndex: 'keyword',
       hideInTable: true,
-      fieldProps: { placeholder: '员工姓名 / 工号' },
+      fieldProps: {
+        placeholder: '员工姓名 / 工号',
+        allowClear: true,
+      },
     },
     {
       title: '部门',
       dataIndex: 'departmentId',
       hideInTable: true,
       valueType: 'select',
-      fieldProps: { options: departmentOptions, allowClear: true },
+      fieldProps: {
+        options: departmentOptions,
+        allowClear: true,
+        showSearch: true,
+        filterOption: departmentFilterOption,
+        optionFilterProp: 'label',
+        placeholder: '请输入部门名称',
+      },
     },
     {
       title: '员工',
@@ -120,40 +163,46 @@ const RegularPage: React.FC = () => {
       dataIndex: 'approvalStatus',
       width: 120,
       search: false,
-      render: (_, record) =>
-        activeTab === 'pending' ? (
-          <Tag color="gold">待转正</Tag>
-        ) : (
-          <Tag color={record.approvalStatus === 2 ? 'success' : 'processing'}>
-            {record.approvalStatusDesc || '已评估'}
-          </Tag>
-        ),
+      render: (_, record) => {
+        const meta = statusMeta[record.approvalStatus ?? 0] || {
+          text: record.approvalStatusDesc || '待审批',
+          color: 'default',
+        };
+        return <Tag color={meta.color}>{record.approvalStatusDesc || meta.text}</Tag>;
+      },
     },
     {
       title: '申请时间',
       dataIndex: 'createTime',
-      valueType: 'dateTime',
       width: 170,
       search: false,
+      render: (_, record) => formatProcessDateTime(record.createTime),
     },
     {
       title: '操作',
       valueType: 'option',
       width: 140,
-      render: (_, record) => (
-        <Button
-          size="small"
-          type={activeTab === 'pending' ? 'primary' : 'default'}
-          icon={<FileDoneOutlined />}
-          disabled={activeTab !== 'pending'}
-          onClick={() => {
-            setCurrentRow(record);
-            setDrawerOpen(true);
-          }}
-        >
-          发起转正
-        </Button>
-      ),
+      render: (_, record) => {
+        const disabled = activeTab !== 'pending' || record.approvalStatus === 1;
+        const buttonText = record.approvalStatus === 1 ? '审批中' : '发起转正';
+        return (
+          <Button
+            size="small"
+            type={activeTab === 'pending' ? 'primary' : 'default'}
+            icon={<FileDoneOutlined />}
+            disabled={disabled}
+            onClick={() => {
+              if (disabled) {
+                return;
+              }
+              setCurrentRow(record);
+              setDrawerOpen(true);
+            }}
+          >
+            {buttonText}
+          </Button>
+        );
+      },
     },
   ];
 

@@ -16,7 +16,6 @@ import {
 import {
   Button,
   message,
-  Popconfirm,
   Tag,
   Space,
   Form,
@@ -26,18 +25,17 @@ import {
 import {
   PlusOutlined,
   EditOutlined,
-  DeleteOutlined,
   SettingOutlined,
 } from '@ant-design/icons';
 import {
   getRoleList,
   createRole,
   updateRole,
-  deleteRole,
   assignRoleMenus,
-  getMenuList,
+  getMenuTree,
 } from '@/services/system';
 import type { RoleItem, MenuItem } from '@/types/system';
+import dayjs from 'dayjs';
 
 const RolePage: React.FC = () => {
   const [createModalVisible, setCreateModalVisible] = useState(false);
@@ -45,10 +43,19 @@ const RolePage: React.FC = () => {
   const [assignMenuModalVisible, setAssignMenuModalVisible] = useState(false);
   const [currentRole, setCurrentRole] = useState<RoleItem | null>(null);
   const [menuList, setMenuList] = useState<MenuItem[]>([]);
+  const [menuTreeData, setMenuTreeData] = useState<any[]>([]);
   const [selectedMenuIds, setSelectedMenuIds] = useState<number[]>([]);
   const [createForm] = Form.useForm();
   const [editForm] = Form.useForm();
   const actionRef = useRef<any>();
+
+  // 格式化时间
+  const formatDateTime = (value?: string) => {
+    if (!value) return '-';
+    const date = dayjs(value);
+    if (!date.isValid()) return value;
+    return date.format('YYYY-MM-DD HH:mm');
+  };
 
   // 数据权限范围标签
   const dataScopeTag = (scope: number) => {
@@ -117,12 +124,13 @@ const RolePage: React.FC = () => {
         return <Tag color={item.color}>{item.text}</Tag>;
       },
     },
-    {
-      title: '创建时间',
-      dataIndex: 'createTime',
-      width: 140,
-      search: false,
-    },
+    // {
+    //   title: '创建时间',
+    //   dataIndex: 'createTime',
+    //   width: 140,
+    //   search: false,
+    //   render: (value) => formatDateTime(value),
+    // },
     {
       title: '操作',
       key: 'action',
@@ -149,30 +157,53 @@ const RolePage: React.FC = () => {
           >
             编辑
           </Button>
-          <Popconfirm
-            title="确认删除"
-            description={`确定要删除角色 "${record.roleName}" 吗？`}
-            onConfirm={() => handleDelete(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button type="link" danger size="small" icon={<DeleteOutlined />} style={{ padding: '0 2px' }}>
-              删除
+          {/* 启用/禁用按钮 */}
+          {record.status === 1 ? (
+            <Button
+              type="link"
+              size="small"
+              danger
+              onClick={() => handleToggleStatus(record)}
+            >
+              禁用
             </Button>
-          </Popconfirm>
+          ) : (
+            <Button
+              type="link"
+              size="small"
+              onClick={() => handleToggleStatus(record)}
+            >
+              启用
+            </Button>
+          )}
         </Space>
       ),
     },
   ];
 
-  // 获取菜单列表
+  // 获取菜单列表（树形结构）
   const fetchMenuList = async () => {
     try {
-      const res = await getMenuList();
+      // 调用树形接口，后端已构建好树形结构
+      const res = await getMenuTree();
+      // 将后端返回的树形结构转换为 Ant Design Tree 需要的格式
+      const treeData = convertToTreeData(res || []);
       setMenuList(res || []);
+      setMenuTreeData(treeData);
     } catch (error) {
       console.error('获取菜单列表失败:', error);
     }
+  };
+
+  // 将后端菜单树转换为 Ant Design Tree 格式
+  const convertToTreeData = (menus: MenuItem[]): any[] => {
+    if (!menus || menus.length === 0) return [];
+
+    return menus.map(menu => ({
+      title: menu.menuName,
+      key: menu.id,
+      children: menu.children ? convertToTreeData(menu.children) : [],
+    }));
   };
 
   // 分配菜单权限
@@ -203,14 +234,16 @@ const RolePage: React.FC = () => {
     setEditModalVisible(true);
   };
 
-  // 删除角色
-  const handleDelete = async (id: number) => {
+  // 切换角色状态（启用/禁用）
+  const handleToggleStatus = async (record: RoleItem) => {
+    const newStatus = record.status === 1 ? 0 : 1;
+    const actionText = newStatus === 1 ? '启用' : '禁用';
     try {
-      await deleteRole(id);
-      message.success('删除成功');
+      await updateRole(record.id, { status: newStatus });
+      message.success(`${actionText}成功`);
       actionRef.current?.reload();
     } catch (error: any) {
-      message.error(error.message || '删除失败');
+      message.error(error.message || `${actionText}失败`);
     }
   };
 
@@ -242,45 +275,6 @@ const RolePage: React.FC = () => {
       message.error(error.message || '更新失败');
       return false;
     }
-  };
-
-  // 构建树形数据
-  const buildTreeData = (menus: MenuItem[]): any[] => {
-    const menuMap = new Map<number, MenuItem>();
-    menus.forEach((menu) => menuMap.set(menu.id, menu));
-
-    const treeData: any[] = [];
-    menus.forEach((menu) => {
-      const node = {
-        title: menu.menuName,
-        key: menu.id,
-        children: [] as any[],
-      };
-      if (menu.parentId === 0 || !menu.parentId) {
-        treeData.push(node);
-      } else {
-        const parent = menuMap.get(menu.parentId);
-        if (parent) {
-          const parentNode = findNodeInTree(treeData, menu.parentId);
-          if (parentNode) {
-            parentNode.children = parentNode.children || [];
-            parentNode.children.push(node);
-          }
-        }
-      }
-    });
-    return treeData;
-  };
-
-  const findNodeInTree = (tree: any[], key: number): any | null => {
-    for (const node of tree) {
-      if (node.key === key) return node;
-      if (node.children) {
-        const found = findNodeInTree(node.children, key);
-        if (found) return found;
-      }
-    }
-    return null;
   };
 
   return (
@@ -427,7 +421,7 @@ const RolePage: React.FC = () => {
         <Divider orientation="left">菜单权限</Divider>
         <Tree
           checkable
-          treeData={buildTreeData(menuList)}
+          treeData={menuTreeData}
           checkedKeys={selectedMenuIds}
           onCheck={(checkedKeys) => {
             setSelectedMenuIds(checkedKeys as number[]);

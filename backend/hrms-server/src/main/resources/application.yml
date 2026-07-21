@@ -12,7 +12,7 @@ spring:
   application:
     name: hrms-server
   profiles:
-    active: dev
+    active: prod
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: GMT+8
@@ -97,17 +97,17 @@ hrms:
 
   # AI 智能助手配置（模块 M9）
   # DashScope（阿里云百炼）统一负责：LLM 对话生成 + 知识库 RAG 检索
-  # 使用 OpenAI 兼容模式接口（/compatible-mode/v1/chat/completions）
+  # 使用百炼 App Completion API（应用已在控制台配置知识库和系统 Prompt）
   ai:
     dashscope:
       api-key: ${DASHSCOPE_API_KEY:}
-      # 百炼 OpenAI 兼容模式地址
-      base-url: https://dashscope.aliyuncs.com/compatible-mode
-      # 通义千问模型：qwen3.7-plus（推荐）、qwen-plus、qwen-max（最强）、qwen-turbo（最快）
-      model: qwen3.7-plus
+      # 百炼应用 ID（必填），在百炼控制台「我的应用」中创建后获取
+      app-id: ${DASHSCOPE_APP_ID:}
+      # 百炼 API 基础地址
+      base-url: https://dashscope.aliyuncs.com
+      # 模型（仅 app-id 未配置时的回落 LLM 使用）
+      model: qwen3.7-max
       timeout: 60000
-      # 百炼知识库 ID（可选），未配置时不影响基础对话
-      knowledge-base-id: ${DASHSCOPE_KNOWLEDGE_BASE_ID:}
 
 # SpringDoc OpenAPI
 springdoc:

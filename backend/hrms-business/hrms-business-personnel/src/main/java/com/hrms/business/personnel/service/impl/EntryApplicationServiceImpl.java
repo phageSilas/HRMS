@@ -1,7 +1,6 @@
 package com.hrms.business.personnel.service.impl;
 
 import cn.hutool.core.util.StrUtil;
-import cn.hutool.core.util.IdUtil;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -15,25 +14,34 @@ import com.hrms.business.personnel.dto.EntryApplicationConfirmRequestDTO;
 import com.hrms.business.personnel.dto.EntryApplicationCreateOrUpdateRequestDTO;
 import com.hrms.business.personnel.dto.EntryApplicationQueryDTO;
 import com.hrms.business.personnel.entity.EntryApplicationEntity;
-import com.hrms.business.personnel.enums.ApplicationStatusEnum;
+import com.hrms.business.personnel.common.enums.ApplicationStatusEnum;
 import com.hrms.business.personnel.mapper.EntryApplicationMapper;
+import com.hrms.business.personnel.convert.PersonnelDisplayEnricher;
 import com.hrms.business.personnel.service.EntryApplicationService;
 import com.hrms.business.personnel.vo.EntryApplicationConfirmVO;
 import com.hrms.business.personnel.vo.EntryApplicationPageVO;
+import com.hrms.business.personnel.vo.EntryApplicationStatsVO;
 import com.hrms.business.personnel.vo.EntryApplicationSubmitVO;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
 import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
+import com.hrms.system.organization.service.DeptService;
+import com.hrms.system.organization.service.PostService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+
+import static com.hrms.business.personnel.common.constant.EntryApplicationConstant.*;
+import static com.hrms.business.personnel.common.enums.ServiceErrorCodeEnum.*;
 
 /**
  * 入职申请服务实现
@@ -42,30 +50,18 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 public class EntryApplicationServiceImpl implements EntryApplicationService {
 
-    private static final ErrorCode ENTRY_APPLICATION_PHONE_DUPLICATE = new ErrorCode(40045, "手机号已存在入职申请");
 
-    private static final ErrorCode ENTRY_APPLICATION_NOT_FOUND = new ErrorCode(40041, "入职申请不存在");
 
-    private static final ErrorCode ENTRY_APPLICATION_NOT_DRAFT = new ErrorCode(40042, "非草稿状态无法修改");
-
-    private static final ErrorCode ENTRY_APPLICATION_NOT_APPROVED = new ErrorCode(40044, "审批未通过，无法确认入职");
-
-    private static final ErrorCode ENTRY_APPLICATION_EMPLOYEE_MISSING = new ErrorCode(40046, "已入职申请缺少员工回写信息");
-
-    private static final Map<Long, Object> ENTRY_CONFIRM_LOCKS = new ConcurrentHashMap<>();
-
-    private static final int DEFAULT_PAGE_NUM = 1;
-
-    private static final int DEFAULT_PAGE_SIZE = 20;
-
-    private static final int MAX_PAGE_SIZE = 200;
 
     private final EntryApplicationMapper entryApplicationMapper;
 
-    // 注入
     private final ApprovalEngine approvalEngine;
 
     private final EmployeeService employeeService;
+
+    private final DeptService deptService;
+
+    private final PostService postService;
 
     /**
      * 分页查询入职申请。
@@ -76,14 +72,39 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
     public PageResult<EntryApplicationPageVO> pageEntryApplications(EntryApplicationQueryDTO queryDTO) {
         int pageNum = normalizePageNum(queryDTO.getPageNum());
         int pageSize = normalizePageSize(queryDTO.getPageSize());
+        PersonnelDisplayEnricher displayEnricher = new PersonnelDisplayEnricher(deptService, postService);
         Page<EntryApplicationEntity> page = entryApplicationMapper.selectPage(
                 Page.of(pageNum, pageSize),
                 buildPageQueryWrapper(queryDTO)
         );
         List<EntryApplicationPageVO> records = page.getRecords().stream()
-                .map(EntryApplicationConvert::toPageVO)
+                .map(EntryApplicationConvert::toPageVO)// 转换为页面VO
+                .map(displayEnricher::enrichEntryApplication)// 填充关联信息
                 .toList();
         return PageResult.of(records, page.getTotal(), pageNum, pageSize);
+    }
+
+    @Override
+    public EntryApplicationStatsVO statsEntryApplications(EntryApplicationQueryDTO queryDTO) {
+        return EntryApplicationStatsVO.builder()
+                .all(countByStatus(queryDTO, null))
+                .draft(countByStatus(queryDTO, ApplicationStatusEnum.DRAFT.getCode()))
+                .approving(countByStatus(queryDTO, ApplicationStatusEnum.APPROVING.getCode()))
+                .approved(countByStatus(queryDTO, ApplicationStatusEnum.APPROVED.getCode()))
+                .rejected(countByStatus(queryDTO, ApplicationStatusEnum.REJECTED.getCode()))
+                .entered(countByStatus(queryDTO, ApplicationStatusEnum.ENTERED.getCode()))
+                .build();
+    }
+
+    /**
+     * 查询单个入职申请详情。
+     *
+     * @param id 入职申请ID
+     * @return 入职申请详情
+     */
+    @Override
+    public EntryApplicationPageVO getEntryApplication(Long id) {
+        return enrichEntryApplication(getRequiredEntryApplication(id));
     }
 
     /**
@@ -93,11 +114,14 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
      */
     @Override
     public EntryApplicationPageVO createEntryApplication(EntryApplicationCreateOrUpdateRequestDTO requestDTO) {
+        // 确保手机号唯一
         checkPhoneAvailable(requestDTO.getPhone(), null);
         EntryApplicationEntity entity = EntryApplicationConvert.toEntity(requestDTO);
         entity.setApprovalStatus(ApplicationStatusEnum.DRAFT.getCode());
         entryApplicationMapper.insert(entity);
-        return EntryApplicationConvert.toPageVO(entity);
+        // 转换为页面VO并填充关联信息
+        return new PersonnelDisplayEnricher(deptService, postService)
+                .enrichEntryApplication(EntryApplicationConvert.toPageVO(entity));
     }
 
     /**
@@ -106,12 +130,16 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
      * @param requestDTO 入职申请更新参数
      */
     @Override
-    public void updateEntryApplication(Long id, EntryApplicationCreateOrUpdateRequestDTO requestDTO) {
+    public EntryApplicationPageVO updateEntryApplication(Long id, EntryApplicationCreateOrUpdateRequestDTO requestDTO) {
         EntryApplicationEntity entity = getRequiredEntryApplication(id);
+        // 确保状态为草稿
         assertDraft(entity);
+        // 确保手机号唯一
         checkPhoneAvailable(requestDTO.getPhone(), id);
+        // 填充更新内容
         EntryApplicationConvert.fillEntity(entity, requestDTO);
         entryApplicationMapper.updateById(entity);
+        return enrichEntryApplication(entity);
     }
 
     /**
@@ -125,7 +153,7 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         EntryApplicationEntity entity = getRequiredEntryApplication(id);
         assertDraft(entity);
 
-        // TODO 跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起入职审批。
+        // 跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起入职审批。
         Long approvalInstanceId = approvalEngine.startApproval(
                 ApprovalTypeEnum.ENTRY.getCode(),       // approvalType = "ENTRY"
                 entity.getId(),                          // bizId
@@ -175,23 +203,21 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
                 return buildConfirmedEmployee(lockedEntity);
             }
             assertApproved(lockedEntity);
-            // employeeService.generateEmployeeNo(lockedEntity); 本接口需要调用 hrms-business-employee 模块的生成员工工号接口
+            // 设置实际入职日期
             lockedEntity.setActualHireDate(requestDTO.getActualHireDate());
 
-            // TODO 跨模块调用已完成：当前调用 EmployeeService#createEmployee(createDTO) 创建员工档案。
+            //  跨模块调用已完成：当前调用 EmployeeService#createEmployee(createDTO) 创建员工档案。
             EmployeeEntity createdEmployee = createEmployeeFromEntryApplication(lockedEntity);
 
             Long employeeId = createdEmployee.getId();
             String employeeNo = createdEmployee.getEmployeeNo();
 
-            // TODO 跨模块调用已完成：账号创建已由 EmployeeService#createEmployee(createDTO) 内部完成，personnel 不再重复调用 UserService#createUser(...)。
-
+            //  跨模块调用已完成：账号创建已由 EmployeeService#createEmployee(createDTO) 内部完成，personnel 不再重复调用 UserService#createUser(...)。
             lockedEntity.setEmployeeId(employeeId);
             lockedEntity.setEmployeeNo(employeeNo);
             lockedEntity.setApprovalStatus(ApplicationStatusEnum.ENTERED.getCode());
             entryApplicationMapper.updateById(lockedEntity);
-            // entryConfirmedProducer.send(event); 本接口需要调用通知/MQ模块发送 personnel.entry.confirmed 事件和欢迎通知,本次项目暂不实现
-            //tempSendEntryConfirmedNotice(lockedEntity, employeeId, employeeNo);
+
             return buildConfirmVO(employeeId, employeeNo);
         }
     }
@@ -203,6 +229,7 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
      * @return 本地锁对象
      */
     private Object getEntryConfirmLock(Long id) {
+        // 根据入职申请ID获取本地锁对象，如果不存在则创建一个新对象
         return ENTRY_CONFIRM_LOCKS.computeIfAbsent(id, key -> new Object());
     }
 
@@ -252,7 +279,7 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
     //     }
 
     /**
-     * 临时创建员工档案。
+     * 创建员工档案。
      *
      * @param entity 入职申请实体
      * @return 员工模块创建后的员工实体
@@ -273,7 +300,7 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         createDTO.setProbationSalaryRatio(entity.getProbationSalaryRatio());
         createDTO.setIdCardNo(entity.getIdCardNo());
         createDTO.setRemark("由入职申请确认创建，申请ID：" + entity.getId());
-        // TODO 跨模块调用已完成：当前调用 EmployeeService#createEmployee(createDTO) 创建员工档案并由员工模块生成工号。
+        // 跨模块调用已完成：当前调用 EmployeeService#createEmployee(createDTO) 创建员工档案并由员工模块生成工号。
         return employeeService.createEmployee(createDTO);
     }
 
@@ -314,6 +341,17 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
             throw new GlobalException(ENTRY_APPLICATION_NOT_FOUND);
         }
         return entity;
+    }
+
+    /**
+     * 转换并补齐入职申请展示字段。
+     *
+     * @param entity 入职申请实体
+     * @return 页面展示VO
+     */
+    private EntryApplicationPageVO enrichEntryApplication(EntryApplicationEntity entity) {
+        return new PersonnelDisplayEnricher(deptService, postService)
+                .enrichEntryApplication(EntryApplicationConvert.toPageVO(entity));
     }
 
     /**
@@ -360,19 +398,52 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
      * @return 查询条件
      */
     private LambdaQueryWrapper<EntryApplicationEntity> buildPageQueryWrapper(EntryApplicationQueryDTO queryDTO) {
+        return buildPageQueryWrapper(queryDTO, queryDTO.getApprovalStatus());
+    }
+
+    private LambdaQueryWrapper<EntryApplicationEntity> buildPageQueryWrapper(EntryApplicationQueryDTO queryDTO,
+                                                                             Integer approvalStatus) {
+        List<Long> targetDeptIds = resolveTargetDeptIds(queryDTO.getDepartmentId());
         LambdaQueryWrapper<EntryApplicationEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.and(StrUtil.isNotBlank(queryDTO.getKeyword()), keywordWrapper -> keywordWrapper
                 .like(EntryApplicationEntity::getCandidateName, queryDTO.getKeyword())
                 .or()
                 .like(EntryApplicationEntity::getPhone, queryDTO.getKeyword()));
-        wrapper.eq(queryDTO.getApprovalStatus() != null, EntryApplicationEntity::getApprovalStatus, queryDTO.getApprovalStatus());
-        wrapper.eq(queryDTO.getDepartmentId() != null, EntryApplicationEntity::getDeptId, queryDTO.getDepartmentId());
+        // 根据审批状态进行过滤
+        wrapper.eq(approvalStatus != null, EntryApplicationEntity::getApprovalStatus, approvalStatus);
+        // 根据部门ID进行过滤
+        wrapper.in(!targetDeptIds.isEmpty(), EntryApplicationEntity::getDeptId, targetDeptIds);
+        // 根据申请日期起始进行过滤
         wrapper.ge(queryDTO.getDateStart() != null, EntryApplicationEntity::getCreateTime,
                 queryDTO.getDateStart() == null ? null : LocalDateTime.of(queryDTO.getDateStart(), LocalTime.MIN));
+        // 根据申请日期结束进行过滤
         wrapper.le(queryDTO.getDateEnd() != null, EntryApplicationEntity::getCreateTime,
                 queryDTO.getDateEnd() == null ? null : LocalDateTime.of(queryDTO.getDateEnd(), LocalTime.MAX));
+        // 按创建时间降序排列
         wrapper.orderByDesc(EntryApplicationEntity::getCreateTime);
         return wrapper;
+    }
+
+    private Long countByStatus(EntryApplicationQueryDTO queryDTO, Integer approvalStatus) {
+        Long count = entryApplicationMapper.selectCount(buildPageQueryWrapper(queryDTO, approvalStatus));
+        return count == null ? 0L : count;
+    }
+
+    /**
+     * 解析部门树范围ID，包含所选部门自身及全部子孙部门。
+     *
+     * @param departmentId 所选部门ID
+     * @return 部门树范围ID列表
+     */
+    private List<Long> resolveTargetDeptIds(Long departmentId) {
+        if (departmentId == null) {
+            return List.of();
+        }
+        List<Long> deptIds = deptService.getSubDeptIds(departmentId);
+        if (deptIds == null || deptIds.isEmpty()) {
+            return List.of(departmentId);
+        }
+        return new ArrayList<>(Set.copyOf(deptIds));
     }
 
     /**

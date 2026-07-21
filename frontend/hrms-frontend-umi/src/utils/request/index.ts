@@ -18,7 +18,7 @@ import { message } from 'antd';
 // 走 Umi 代理（开发环境 proxy 配置见 .umirc.ts），不设 baseURL 直连后端
 const instance: AxiosInstance = axios.create({
   baseURL: process.env.API_BASE_URL || '',
-  timeout: 10000,
+  timeout: 0,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -41,7 +41,7 @@ instance.interceptors.request.use(
 // 响应拦截器：处理 Result<T> 格式
 instance.interceptors.response.use(
   (response: AxiosResponse) => {
-    const { code, message: msg, data } = response.data;
+    const { code, message: msg, data } = response.data || {};
 
     // 成功：后端统一成功码为 20000，兼容早期前端 mock 的 0。
     if (code === 20000 || code === 0) {

@@ -15,6 +15,8 @@ import './global.less';
 // 全局状态类型
 export interface InitialState {
   currentUser?: UserInfo;
+  /** 用户菜单树 */
+  menus?: UserInfo['menus'];
   loading?: boolean;
 }
 
@@ -31,7 +33,11 @@ export async function getInitialState(): Promise<InitialState> {
   if (token && localUserText) {
     try {
       const parsed = JSON.parse(localUserText) as UserInfo;
-      return { currentUser: parsed, loading: false };
+      return {
+        currentUser: parsed,
+        menus: parsed.menus,  // 从缓存中恢复菜单
+        loading: false
+      };
     } catch {
       // 缓存数据损坏，走下方逻辑重新获取
     }
@@ -50,11 +56,13 @@ export async function getInitialState(): Promise<InitialState> {
         roleCode: result.roleCode,
         roleName: result.roleName,
         permissions: result.permissions,
+        menus: result.menus,
       };
       // 同步缓存到 localStorage
       localStorage.setItem('userInfo', JSON.stringify(userInfo));
       return {
         currentUser: userInfo,
+        menus: result.menus,
         loading: false,
       };
     } catch {
@@ -136,6 +144,16 @@ export const layout: RunTimeLayoutConfig = ({ initialState, setInitialState }) =
     className: 'hrms-art-layout',
     menu: {
       locale: false,
+    },
+    // 动态菜单：从后端获取的菜单数据渲染侧边栏
+    // menuDataRender 会替换掉默认从路由生成的菜单
+    menuDataRender: (menuList) => {
+      // 如果有从后端获取的菜单数据，则使用后端数据
+      if (initialState?.menus && initialState.menus.length > 0) {
+        return initialState.menus;
+      }
+      // 否则返回空数组
+      return [];
     },
     menuHeaderRender: () =>
       React.createElement(

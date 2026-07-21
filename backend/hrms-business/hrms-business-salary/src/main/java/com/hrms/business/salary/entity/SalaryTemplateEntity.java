@@ -2,6 +2,7 @@ package com.hrms.business.salary.entity;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.hrms.common.entity.BaseEntity;
+import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -12,6 +13,7 @@ import java.time.LocalDate;
  */
 @Data
 @EqualsAndHashCode(callSuper = true)
+
 @TableName("hr_salary_template")
 public class SalaryTemplateEntity extends BaseEntity {
 

@@ -6,6 +6,8 @@ import com.hrms.business.ai.service.AiChatService;
 import com.hrms.business.ai.service.ConversationService;
 import com.hrms.business.ai.vo.ConversationDetailVO;
 import com.hrms.business.ai.vo.ConversationVO;
+import com.hrms.common.exception.ErrorCode;
+import com.hrms.common.exception.GlobalException;
 import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
 import com.hrms.common.web.Result;
@@ -44,6 +46,9 @@ public class AiController {
     @Operation(summary = "发送消息", description = "发送消息并 SSE 流式获取 AI 回答")
     public SseEmitter chat(@Valid @RequestBody ChatRequestDTO request) {
         Long userId = SecurityContextHolder.getUserId();
+        if (userId == null) {
+            throw new GlobalException(ErrorCode.UNAUTHORIZED);
+        }
         return aiChatService.chatStream(userId, request);
     }
 

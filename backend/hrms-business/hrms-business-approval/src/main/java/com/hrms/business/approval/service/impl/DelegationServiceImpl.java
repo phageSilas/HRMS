@@ -4,8 +4,10 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.hrms.business.approval.dto.DelegationCreateRequest;
 import com.hrms.business.approval.dto.DelegationListVO;
 import com.hrms.business.approval.dto.DelegationVO;
+import com.hrms.business.approval.dto.EmployeeBriefDTO;
 import com.hrms.business.approval.entity.ApprovalDelegationEntity;
 import com.hrms.business.approval.mapper.ApprovalDelegationMapper;
+import com.hrms.business.approval.mapper.ApprovalEmployeeMapper;
 import com.hrms.business.approval.service.DelegationService;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
@@ -23,15 +25,21 @@ import java.util.List;
 
 /**
  * 委托审批服务实现
+ * <p>
+ * 提供委托创建、取消、查询功能。委托期间，原审批人的待办任务由被委托人代为处理。
+ * 创建委托时校验有效期重叠，同一委托人不可有重叠的生效委托。
+ * </p>
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class DelegationServiceImpl implements DelegationService {
 
+    /** 日期时间格式化器：yyyy-MM-dd HH:mm:ss */
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final ApprovalDelegationMapper delegationMapper;
+    private final ApprovalEmployeeMapper approvalEmployeeMapper;
     private final UserMapper userMapper;
 
     @Override
@@ -61,12 +69,16 @@ public class DelegationServiceImpl implements DelegationService {
             throw new GlobalException(ErrorCode.DATA_DUPLICATE, "存在重叠的生效委托，请调整时间后重试");
         }
 
-        // 创建委托
+        // 创建委托：将员工ID转换为系统用户ID
+        EmployeeBriefDTO emp = approvalEmployeeMapper.findById(request.getDelegateeId());
+        if (emp == null || emp.getUserId() == null) {
+            throw new GlobalException(ErrorCode.NOT_FOUND, "被委托人不存在或未关联系统用户");
+        }
         ApprovalDelegationEntity entity = new ApprovalDelegationEntity();
         entity.setDelegatorId(userId);
         entity.setDelegatorName(getUserName(userId));
-        entity.setDelegateToId(request.getDelegateeId());
-        entity.setDelegateToName(getUserName(request.getDelegateeId()));
+        entity.setDelegateToId(emp.getUserId());
+        entity.setDelegateToName(getUserName(emp.getUserId()));
         entity.setStartDate(startDate);
         entity.setEndDate(endDate);
         entity.setReason(request.getReason());
@@ -98,6 +110,17 @@ public class DelegationServiceImpl implements DelegationService {
         log.info("委托已取消: id={}, delegatorId={}", id, userId);
     }
 
+    /**
+     * 查询当前用户的委托记录
+     * <p>
+     * 返回所有委托列表，并标记其中状态为"active"的作为当前生效委托。
+     * 状态计算规则：status=0→cancelled（已取消）、status=1且未到期→active（生效中）、
+     * status=1且已到期→expired（已过期）。
+     * </p>
+     *
+     * @param userId 用户 ID
+     * @return 委托列表 VO（含 activeDelegation 当前生效委托）
+     */
     @Override
     public DelegationListVO findMyDelegations(Long userId) {
         List<ApprovalDelegationEntity> all = delegationMapper.selectList(
@@ -135,6 +158,13 @@ public class DelegationServiceImpl implements DelegationService {
         return user != null ? user.getRealName() : String.valueOf(userId);
     }
 
+    /**
+     * 委托实体转 VO（含状态计算）
+     *
+     * @param entity 委托实体
+     * @param now    当前时间（用于计算过期状态）
+     * @return 委托 VO
+     */
     private DelegationVO toVO(ApprovalDelegationEntity entity, LocalDateTime now) {
         DelegationVO vo = new DelegationVO();
         vo.setId(entity.getId());
@@ -142,6 +172,14 @@ public class DelegationServiceImpl implements DelegationService {
         vo.setStartTime(entity.getStartDate().format(DTF));
         vo.setEndTime(entity.getEndDate().format(DTF));
         vo.setReason(entity.getReason());
+
+        // 查询被委托人职位信息
+        if (entity.getDelegateToId() != null) {
+            EmployeeBriefDTO emp = approvalEmployeeMapper.findByUserId(entity.getDelegateToId());
+            if (emp != null) {
+                vo.setPosition(emp.getPostName());
+            }
+        }
 
         // 计算状态
         if (entity.getStatus() == 0) {

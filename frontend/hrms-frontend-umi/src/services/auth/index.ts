@@ -3,6 +3,7 @@
  * 负责人：成员 A
  */
 
+import { transformMenus } from '@/types/menu';
 import { ROLE_PERMISSIONS } from '@/constants/permissions';
 import { ROLE_LIST, RoleCode } from '@/types/user';
 import request from '@/utils/request';
@@ -33,6 +34,8 @@ export interface CurrentUser {
   roleCode: string;
   roleName?: string;
   permissions: string[];
+  /** 用户菜单树 */
+  menus?: any[];
 }
 
 // ============ 接口定义 ============
@@ -77,30 +80,22 @@ export async function login(data: LoginRequest): Promise<LoginResult> {
     const { token, userInfo } = loginResult;
     const roleCode = userInfo.roles?.[0]?.roleCode || RoleCode.ADMIN;
 
-    const user: CurrentUser = {
-      userId: userInfo.id,
-      username: userInfo.username,
-      nickname: userInfo.realName || userInfo.username,
-      realName: userInfo.realName,
-      deptId: userInfo.deptId,
-      deptName: userInfo.deptName,
-      roleCode,
-      roleName: userInfo.roles?.[0]?.roleName || ROLE_NAME_MAP[roleCode] || '系统管理员',
-      permissions: userInfo.permissions?.length > 0
-        ? userInfo.permissions
-        : (ROLE_PERMISSIONS[roleCode] || ROLE_PERMISSIONS.ADMIN),
-    };
-
+    // 存储 token
     localStorage.setItem('token', token);
-    localStorage.setItem('userInfo', JSON.stringify(user));
+
+    // 登录成功后，调用 getCurrentUser 获取完整的用户信息（包含菜单）
+    const currentUser = await getCurrentUser();
+
+    // 存储完整用户信息到本地缓存
+    localStorage.setItem('userInfo', JSON.stringify(currentUser));
 
     return {
       token,
-      userId: user.userId,
-      username: user.username,
-      nickname: user.nickname,
-      roleCode: user.roleCode,
-      permissions: user.permissions,
+      userId: currentUser.userId,
+      username: currentUser.username,
+      nickname: currentUser.nickname,
+      roleCode: currentUser.roleCode,
+      permissions: currentUser.permissions,
     };
   } catch (error: any) {
     // 仅在网络不可达时降级到本地登录（开发/演示环境）
@@ -129,17 +124,16 @@ export async function login(data: LoginRequest): Promise<LoginResult> {
 
 /**
  * 获取当前用户信息
+ * 注意：此函数总是从后端获取最新数据，不使用本地缓存
  */
 export async function getCurrentUser(): Promise<CurrentUser> {
-  const localUserText = localStorage.getItem('userInfo');
-  if (localUserText) {
-    return JSON.parse(localUserText) as CurrentUser;
-  }
-
   // 从后端获取
   const result: any = await request.get('/api/v1/auth/current-user');
 
   const roleCode = result.roles?.[0]?.roleCode || RoleCode.ADMIN;
+
+  // 转换菜单数据
+  const menus = result.menus ? transformMenus(result.menus) : undefined;
 
   return {
     userId: result.id,
@@ -151,6 +145,7 @@ export async function getCurrentUser(): Promise<CurrentUser> {
     roleCode,
     roleName: result.roles?.[0]?.roleName || ROLE_NAME_MAP[roleCode] || '系统管理员',
     permissions: result.permissions || [],
+    menus,
   };
 }
 

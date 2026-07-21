@@ -34,7 +34,7 @@ public class RegularApplicationController {
      *
      * @param queryDTO 转正申请查询参数
      * @return 转正申请分页结果
-     * 本方法使用的工具类: 无
+     *
      */
     @GetMapping
     @Operation(summary = "待转正列表")
@@ -48,7 +48,7 @@ public class RegularApplicationController {
      * @param employeeId 员工ID
      * @param requestDTO 转正评估请求
      * @return 转正评估发起结果
-     * 本方法使用的工具类: 无
+     *
      */
     @PostMapping("/{employeeId}/apply")
     @Operation(summary = "发起转正")

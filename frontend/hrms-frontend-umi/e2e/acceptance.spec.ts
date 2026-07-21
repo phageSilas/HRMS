@@ -11,29 +11,14 @@ test.describe('前端地基验收测试', () => {
 
     await page.waitForURL(/\/home/, { timeout: 10000 });
 
-    const modules = [
-      '权限体系',
-      '组织架构',
-      '员工档案',
-      '入转调离',
-      '考勤管理',
-      '薪资管理',
-      '审批中心',
-      '个人中心',
-      'AI 智能助手',
-    ];
+    await expect(page.getByTestId('home-weather-banner')).toBeVisible();
+    await expect(page.getByTestId('home-quick-entry-punch')).toBeVisible();
+    await expect(page.getByTestId('home-quick-entry-profile')).toBeVisible();
+    await expect(page.getByTestId('home-ai-assistant')).toBeVisible();
 
-    for (const moduleName of modules) {
-      await expect(
-        page.getByTestId(`module-entry-${moduleName}`),
-      ).toBeVisible();
-    }
-
-    await page.getByTestId('module-entry-AI 智能助手').click();
-    await page.waitForURL(/\/ai/, { timeout: 10000 });
-    await expect(
-      page.getByRole('heading', { name: 'AI 智能助手' }),
-    ).toBeVisible();
+    await page.getByTestId('home-quick-entry-profile').click();
+    await page.waitForURL(/\/profile\/index/, { timeout: 10000 });
+    await expect(page.getByRole('heading', { name: '个人中心' })).toBeVisible();
   });
 
   test('12.1 验证登录流程（Mock 模式）', async ({ page }) => {
@@ -141,11 +126,9 @@ test.describe('前端地基验收测试', () => {
 
     await page.waitForURL(/\/home/, { timeout: 10000 });
 
-    // 检查首页是否有内容（统计卡片或提示）
-    const homeContent = page.locator(
-      '.ant-card, .ant-statistic, h4, .ant-empty',
-    );
-    await expect(homeContent.first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('home-weather-banner')).toBeVisible();
+    await expect(page.getByTestId('home-weather-type')).toBeVisible();
+    await expect(page.getByTestId('home-ai-assistant')).toBeVisible();
 
     console.log('✓ 首页统计卡片显示验证成功');
   });
@@ -168,13 +151,16 @@ test.describe('前端地基验收测试', () => {
     // 等待一下确保内容渲染
     await page.waitForTimeout(1000);
 
-    // 检查是否有待办或提示信息
-    await expect(page.getByTestId('module-entry-审批中心')).toBeVisible({
+    // 检查首页快捷入口和助手区域
+    await expect(page.getByTestId('home-quick-entry-punch')).toBeVisible({
       timeout: 5000,
     });
-    const hasContent =
-      (await page.locator('[data-testid^="module-entry-"]').count()) > 0;
-    expect(hasContent).toBeTruthy();
+    await expect(page.getByTestId('home-quick-entry-profile')).toBeVisible({
+      timeout: 5000,
+    });
+    await expect(page.getByTestId('home-ai-send')).toBeVisible({
+      timeout: 5000,
+    });
 
     console.log('✓ 待办列表/申请进度显示验证成功');
   });

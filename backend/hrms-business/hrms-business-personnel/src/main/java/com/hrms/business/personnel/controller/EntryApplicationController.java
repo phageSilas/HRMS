@@ -6,6 +6,7 @@ import com.hrms.business.personnel.dto.EntryApplicationQueryDTO;
 import com.hrms.business.personnel.service.EntryApplicationService;
 import com.hrms.business.personnel.vo.EntryApplicationConfirmVO;
 import com.hrms.business.personnel.vo.EntryApplicationPageVO;
+import com.hrms.business.personnel.vo.EntryApplicationStatsVO;
 import com.hrms.business.personnel.vo.EntryApplicationSubmitVO;
 import com.hrms.common.web.PageResult;
 import com.hrms.common.web.Result;
@@ -45,7 +46,31 @@ public class EntryApplicationController {
     }
 
     /**
-     * 创建入职申请草稿。
+     * 查询入职申请状态统计。
+     *
+     * @param queryDTO 入职申请查询参数
+     * @return 入职申请状态统计
+     */
+    @GetMapping("/stats")
+    @Operation(summary = "入职申请状态统计")
+    public Result<EntryApplicationStatsVO> statsEntryApplications(EntryApplicationQueryDTO queryDTO) {
+        return Result.success(entryApplicationService.statsEntryApplications(queryDTO));
+    }
+
+    /**
+     * 查询入职申请详情。
+     *
+     * @param id 入职申请ID
+     * @return 入职申请详情
+     */
+    @GetMapping("/{id}")
+    @Operation(summary = "入职申请详情")
+    public Result<EntryApplicationPageVO> getEntryApplication(@PathVariable Long id) {
+        return Result.success(entryApplicationService.getEntryApplication(id));
+    }
+
+    /**
+     * 创建入职申请。
      *
      * @param requestDTO 入职申请创建参数
      * @return 入职申请记录
@@ -58,7 +83,7 @@ public class EntryApplicationController {
     }
 
     /**
-     * 更新入职申请草稿。
+     * 更新入职申请。
      *
      * @param id 入职申请ID
      * @param requestDTO 入职申请更新参数
@@ -66,10 +91,9 @@ public class EntryApplicationController {
      */
     @PutMapping("/{id}")
     @Operation(summary = "更新入职申请")
-    public Result<Void> updateEntryApplication(@PathVariable Long id,
-                                               @Valid @RequestBody EntryApplicationCreateOrUpdateRequestDTO requestDTO) {
-        entryApplicationService.updateEntryApplication(id, requestDTO);
-        return Result.success();
+    public Result<EntryApplicationPageVO> updateEntryApplication(@PathVariable Long id,
+                                                                 @Valid @RequestBody EntryApplicationCreateOrUpdateRequestDTO requestDTO) {
+        return Result.success(entryApplicationService.updateEntryApplication(id, requestDTO));
     }
 
     /**
@@ -94,8 +118,7 @@ public class EntryApplicationController {
     @PostMapping("/{id}/confirm")
     @Operation(summary = "确认入职")
     public Result<EntryApplicationConfirmVO> confirmEntryApplication(@PathVariable Long id,
-                                                                    @Valid @RequestBody EntryApplicationConfirmRequestDTO requestDTO) {
+                                                                     @Valid @RequestBody EntryApplicationConfirmRequestDTO requestDTO) {
         return Result.success(entryApplicationService.confirmEntryApplication(id, requestDTO));
     }
-
 }

@@ -1,7 +1,7 @@
 package com.hrms.business.personnel.convert;
 
 import com.hrms.business.personnel.entity.EntryApplicationEntity;
-import com.hrms.business.personnel.enums.ApplicationStatusEnum;
+import com.hrms.business.personnel.common.enums.ApplicationStatusEnum;
 import com.hrms.business.personnel.dto.EntryApplicationCreateOrUpdateRequestDTO;
 import com.hrms.business.personnel.vo.EntryApplicationPageVO;
 
@@ -65,11 +65,16 @@ public final class EntryApplicationConvert {
                 .gender(entity.getGender())
                 .phone(entity.getPhone())
                 .email(entity.getEmail())
+                .idCardNo(entity.getIdCardNo())
                 .deptId(entity.getDeptId())
                 .deptName(tempResolveDeptName(entity.getDeptId()))
                 .postId(entity.getPostId())
                 .postName(tempResolvePostName(entity.getPostId()))
+                .hireType(entity.getHireType())
+                .probationMonth(entity.getProbationMonth())
+                .probationSalaryRatio(entity.getProbationSalaryRatio())
                 .expectedHireDate(entity.getExpectedHireDate())
+                .leaderId(entity.getLeaderId())
                 .approvalStatus(entity.getApprovalStatus())
                 .approvalStatusDesc(ApplicationStatusEnum.getDescByCode(entity.getApprovalStatus()))
                 .approvalInstanceId(entity.getApprovalInstanceId())

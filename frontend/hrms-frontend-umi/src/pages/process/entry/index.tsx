@@ -7,20 +7,27 @@ import {
   ApprovalStatus,
   confirmEntryApplication,
   createEntryApplication,
+  getEntryApplication,
   getEntryApplicationList,
+  getEntryApplicationStats,
   submitEntryApplication,
   updateEntryApplication,
 } from '@/services/process';
 import type {
   EntryApplication,
   EntryApplicationFormValues,
+  EntryApplicationQuery,
+  EntryApplicationStats,
 } from '@/services/process';
+import { getEmployeeList } from '@/services/employee';
+import { getDeptDetail, getDeptList, getPostList } from '@/services/organization';
 import {
   CheckCircleOutlined,
   EditOutlined,
   PlusOutlined,
   SendOutlined,
 } from '@ant-design/icons';
+import { formatProcessDateTime } from '../utils';
 import {
   DrawerForm,
   PageContainer,
@@ -49,8 +56,8 @@ import {
   Typography,
   message,
 } from 'antd';
-import type { Dayjs } from 'dayjs';
-import React, { useMemo, useRef, useState } from 'react';
+import dayjs, { type Dayjs } from 'dayjs';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 const { Text } = Typography;
 
@@ -61,29 +68,6 @@ const statusMeta: Record<number, { text: string; color: string }> = {
   [ApprovalStatus.REJECTED]: { text: '已拒绝', color: 'red' },
   [ApprovalStatus.ENTERED]: { text: '已入职', color: 'green' },
 };
-
-const departmentOptions = [
-  { label: '人力资源部', value: 1 },
-  { label: '技术部', value: 2 },
-  { label: '产品部', value: 3 },
-  { label: '财务部', value: 4 },
-  { label: '运营部', value: 5 },
-];
-
-const postOptions = [
-  { label: 'HR 专员', value: 101 },
-  { label: 'Java 开发工程师', value: 102 },
-  { label: '前端开发工程师', value: 103 },
-  { label: '产品经理', value: 104 },
-  { label: '薪资专员', value: 105 },
-  { label: '运营专员', value: 106 },
-];
-
-const leaderOptions = [
-  { label: '王敏', value: 1001 },
-  { label: '李强', value: 1002 },
-  { label: '赵琳', value: 1003 },
-];
 
 const hireTypeOptions = [
   { label: '全职', value: 1 },
@@ -100,14 +84,39 @@ const statusTabs = [
   { key: String(ApprovalStatus.ENTERED), label: '已入职' },
 ];
 
-function formatDateValue(value?: string | Dayjs): string | undefined {
+function parseFormDateValue(
+  value?: string | number[] | Dayjs,
+): Dayjs | undefined {
   if (!value) {
     return undefined;
   }
-  if (typeof value === 'string') {
+  if (dayjs.isDayjs(value)) {
     return value;
   }
-  return value.format('YYYY-MM-DD');
+  if (Array.isArray(value)) {
+    const [year, month, day] = value;
+    if (!year || !month || !day) {
+      return undefined;
+    }
+    const parsedDate = dayjs(new Date(year, month - 1, day));
+    return parsedDate.isValid() ? parsedDate : undefined;
+  }
+  const parsedDate = dayjs(value);
+  return parsedDate.isValid() ? parsedDate : undefined;
+}
+
+function formatDateValue(value?: string | number[] | Dayjs): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  if (dayjs.isDayjs(value)) {
+    return value.format('YYYY-MM-DD');
+  }
+  if (Array.isArray(value)) {
+    return parseFormDateValue(value)?.format('YYYY-MM-DD');
+  }
+  const parsedDate = dayjs(value);
+  return parsedDate.isValid() ? parsedDate.format('YYYY-MM-DD') : value;
 }
 
 function buildFormValues(values: EntryApplicationFormValues) {
@@ -117,8 +126,45 @@ function buildFormValues(values: EntryApplicationFormValues) {
   };
 }
 
+function buildEntryFormInitialValues(record?: EntryApplication): Partial<EntryApplicationFormValues> {
+  return {
+    candidateName: record?.candidateName,
+    gender: record?.gender,
+    phone: record?.phone,
+    email: record?.email,
+    idCardNo: record?.idCardNo,
+    deptId: record?.deptId,
+    postId: record?.postId,
+    hireType: record?.hireType || 1,
+    probationMonth: record?.probationMonth ?? 3,
+    probationSalaryRatio: record?.probationSalaryRatio ?? 80,
+    expectedHireDate: parseFormDateValue(record?.expectedHireDate),
+    leaderId: record?.leaderId,
+    remark: record?.remark,
+  };
+}
+
 function getInitial(name?: string) {
   return name?.slice(0, 1) || '人';
+}
+
+function buildLeaderRoleLabel(
+  employeeId: number,
+  leaderIds: Set<number>,
+  postName?: string,
+) {
+  const isLeader = leaderIds.has(employeeId);
+  const isHr = /hr|人力/i.test(postName || '');
+  if (isLeader && isHr) {
+    return 'Leader / HR';
+  }
+  if (isLeader) {
+    return 'Leader';
+  }
+  if (isHr) {
+    return 'HR';
+  }
+  return '';
 }
 
 const EntryPage: React.FC = () => {
@@ -127,36 +173,56 @@ const EntryPage: React.FC = () => {
   const [editingRecord, setEditingRecord] = useState<EntryApplication>();
   const [confirmRecord, setConfirmRecord] = useState<EntryApplication>();
   const [confirmLoading, setConfirmLoading] = useState(false);
+  const [editingLoadingId, setEditingLoadingId] = useState<number>();
   const [activeStatus, setActiveStatus] = useState<string>('all');
-  const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
+  const [statusCounts, setStatusCounts] = useState<EntryApplicationStats>({
+    all: 0,
+    draft: 0,
+    approving: 0,
+    approved: 0,
+    rejected: 0,
+    entered: 0,
+  });
+  const [realDepartmentOptions, setRealDepartmentOptions] = useState<
+    { label: string; value: number }[]
+  >([]);
+  const [realPostOptions, setRealPostOptions] = useState<
+    { label: string; value: number }[]
+  >([]);
+  const [realLeaderOptions, setRealLeaderOptions] = useState<
+    { label: string; value: number }[]
+  >([]);
+  const [leaderLoading, setLeaderLoading] = useState(false);
   const [confirmForm] = Form.useForm<{ actualHireDate: Dayjs }>();
+  const [entryForm] = Form.useForm<EntryApplicationFormValues>();
+  const selectedDeptId = Form.useWatch('deptId', entryForm);
 
   const statisticCards = useMemo(
     () => [
       {
         label: '草稿',
-        value: statusCounts[String(ApprovalStatus.DRAFT)] || 0,
+        value: statusCounts.draft || 0,
         color: '#6b7280',
         border: '#e5e7eb',
         background: '#ffffff',
       },
       {
         label: '审批中',
-        value: statusCounts[String(ApprovalStatus.APPROVING)] || 0,
+        value: statusCounts.approving || 0,
         color: '#b7791f',
         border: '#fde68a',
         background: '#fffbeb',
       },
       {
         label: '待入职',
-        value: statusCounts[String(ApprovalStatus.APPROVED)] || 0,
+        value: statusCounts.approved || 0,
         color: '#2563eb',
         border: '#bfdbfe',
         background: '#eff6ff',
       },
       {
         label: '已入职',
-        value: statusCounts[String(ApprovalStatus.ENTERED)] || 0,
+        value: statusCounts.entered || 0,
         color: '#16a34a',
         border: '#bbf7d0',
         background: '#f0fdf4',
@@ -165,12 +231,35 @@ const EntryPage: React.FC = () => {
     [statusCounts],
   );
 
+  const latestBaseQueryRef = useRef<
+    Omit<EntryApplicationQuery, 'pageNum' | 'pageSize' | 'approvalStatus'>
+  >({});
+
+  const loadStatusCounts = async (
+    query: Omit<EntryApplicationQuery, 'pageNum' | 'pageSize' | 'approvalStatus'>,
+  ) => {
+    const stats = await getEntryApplicationStats(query);
+    setStatusCounts(stats);
+  };
+
   const reloadTable = () => actionRef.current?.reload();
 
   const handleSubmitApproval = async (record: EntryApplication) => {
     await submitEntryApplication(record.id);
     message.success('已提交入职审批');
+    await loadStatusCounts(latestBaseQueryRef.current);
     reloadTable();
+  };
+
+  const handleEditRecord = async (recordId: number) => {
+    setEditingLoadingId(recordId);
+    try {
+      const detail = await getEntryApplication(recordId);
+      setEditingRecord(detail);
+      setDrawerOpen(true);
+    } finally {
+      setEditingLoadingId(undefined);
+    }
   };
 
   const handleConfirmEntry = async () => {
@@ -186,11 +275,126 @@ const EntryPage: React.FC = () => {
       message.success(`已确认入职，工号：${result.employeeNo}`);
       setConfirmRecord(undefined);
       confirmForm.resetFields();
+      await loadStatusCounts(latestBaseQueryRef.current);
       reloadTable();
     } finally {
       setConfirmLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!drawerOpen) {
+      return;
+    }
+    if (editingRecord) {
+      entryForm.setFieldsValue(buildEntryFormInitialValues(editingRecord));
+      return;
+    }
+    entryForm.resetFields();
+    entryForm.setFieldsValue(buildEntryFormInitialValues());
+  }, [drawerOpen, editingRecord, entryForm]);
+
+  useEffect(() => {
+    const loadOrganizationOptions = async () => {
+      try {
+        const [departments, posts] = await Promise.all([
+          getDeptList(),
+          getPostList({ pageNum: 1, pageSize: 200 }),
+        ]);
+        setRealDepartmentOptions(
+          (departments || []).map((item) => ({
+            label: item.deptName,
+            value: item.id,
+          })),
+        );
+        setRealPostOptions(
+          (posts.records || []).map((item) => ({
+            label: item.postName,
+            value: item.id,
+          })),
+        );
+      } catch (error) {
+        message.error('部门或职位数据加载失败，请刷新后重试');
+      }
+    };
+    loadOrganizationOptions();
+  }, []);
+
+  useEffect(() => {
+    const loadLeaderOptions = async () => {
+      if (!drawerOpen || !selectedDeptId) {
+        setRealLeaderOptions([]);
+        setLeaderLoading(false);
+        if (!selectedDeptId) {
+          entryForm.setFieldsValue({ leaderId: undefined });
+        }
+        return;
+      }
+      setLeaderLoading(true);
+      try {
+        const currentDept = await getDeptDetail(selectedDeptId);
+        const parentDept =
+          currentDept.parentId && currentDept.parentId > 0
+            ? await getDeptDetail(currentDept.parentId)
+            : undefined;
+        const targetDeptIds = [
+          currentDept.id,
+          ...(parentDept?.id ? [parentDept.id] : []),
+        ];
+        const leaderIds = new Set<number>(
+          [currentDept.leaderEmployeeId, parentDept?.leaderEmployeeId].filter(
+            (item): item is number => typeof item === 'number' && item > 0,
+          ),
+        );
+        const employeePage = await getEmployeeList({
+          deptIds: targetDeptIds,
+          pageNum: 1,
+          pageSize: 200,
+        });
+        const options = (employeePage.records || [])
+          .filter((employee) => {
+            const isLeader = leaderIds.has(employee.id);
+            const isHr = /hr|人力/i.test(employee.postName || '');
+            return isLeader || isHr;
+          })
+          .map((employee) => {
+            const roleLabel = buildLeaderRoleLabel(
+              employee.id,
+              leaderIds,
+              employee.postName,
+            );
+            return {
+              label: roleLabel
+                ? `${employee.employeeName}（${employee.deptName} · ${roleLabel}）`
+                : `${employee.employeeName}（${employee.deptName}）`,
+              value: employee.id,
+            };
+          })
+          .filter(
+            (option, index, array) =>
+              array.findIndex((item) => item.value === option.value) === index,
+          );
+        setRealLeaderOptions(options);
+        const currentLeaderId = entryForm.getFieldValue('leaderId');
+        if (
+          currentLeaderId &&
+          !options.some((option) => option.value === currentLeaderId)
+        ) {
+          entryForm.setFieldsValue({ leaderId: undefined });
+        }
+      } catch (error) {
+        message.error('直接汇报人候选加载失败，请重新选择部门后重试');
+        setRealLeaderOptions([]);
+      } finally {
+        setLeaderLoading(false);
+      }
+    };
+    loadLeaderOptions();
+  }, [drawerOpen, selectedDeptId, entryForm]);
+
+  useEffect(() => {
+    loadStatusCounts({});
+  }, []);
 
   const columns: ProColumns<EntryApplication>[] = [
     {
@@ -204,7 +408,16 @@ const EntryPage: React.FC = () => {
       dataIndex: 'departmentId',
       hideInTable: true,
       valueType: 'select',
-      fieldProps: { options: departmentOptions, allowClear: true },
+      fieldProps: {
+        options: realDepartmentOptions,
+        allowClear: true,
+        showSearch: true,
+        optionFilterProp: 'label',
+        filterOption: (input: string, option?: { label?: string | number }) =>
+          String(option?.label || '')
+            .toLowerCase()
+            .includes(input.trim().toLowerCase()),
+      },
     },
     {
       title: '申请日期',
@@ -238,14 +451,14 @@ const EntryPage: React.FC = () => {
       dataIndex: 'deptName',
       width: 130,
       search: false,
-      renderText: (_, record) => record.deptName || `部门 ${record.deptId}`,
+      renderText: (_, record) => record.deptName || '--',
     },
     {
       title: '职位',
       dataIndex: 'postName',
       width: 150,
       search: false,
-      renderText: (_, record) => record.postName || `职位 ${record.postId}`,
+      renderText: (_, record) => record.postName || '--',
     },
     {
       title: '录用类型',
@@ -281,9 +494,9 @@ const EntryPage: React.FC = () => {
     {
       title: '申请时间',
       dataIndex: 'createTime',
-      valueType: 'dateTime',
       width: 170,
       search: false,
+      render: (_, record) => formatProcessDateTime(record.createTime),
     },
     {
       title: '操作',
@@ -296,10 +509,8 @@ const EntryPage: React.FC = () => {
             <Button
               size="small"
               icon={<EditOutlined />}
-              onClick={() => {
-                setEditingRecord(record);
-                setDrawerOpen(true);
-              }}
+              loading={editingLoadingId === record.id}
+              onClick={() => handleEditRecord(record.id)}
             >
               编辑
             </Button>
@@ -367,12 +578,24 @@ const EntryPage: React.FC = () => {
           activeKey={activeStatus}
           onChange={(key) => {
             setActiveStatus(key);
-            setTimeout(() => reloadTable(), 0);
+            setTimeout(() => actionRef.current?.reloadAndRest?.(), 0);
           }}
           items={statusTabs.map((item) => ({
             key: item.key,
             label: `${item.label} ${
-              item.key === 'all' ? statusCounts.all || 0 : statusCounts[item.key] || 0
+              item.key === 'all'
+                ? statusCounts.all || 0
+                : statusCounts[
+                    item.key === String(ApprovalStatus.DRAFT)
+                      ? 'draft'
+                      : item.key === String(ApprovalStatus.APPROVING)
+                        ? 'approving'
+                        : item.key === String(ApprovalStatus.APPROVED)
+                          ? 'approved'
+                          : item.key === String(ApprovalStatus.REJECTED)
+                            ? 'rejected'
+                            : 'entered'
+                  ] || 0
             }`,
           }))}
         />
@@ -383,25 +606,25 @@ const EntryPage: React.FC = () => {
           columns={columns}
           scroll={{ x: 1180 }}
           request={async (params) => {
-            const result = await getEntryApplicationList({
-              pageNum: params.current || 1,
-              pageSize: params.pageSize || 20,
+            const baseQuery = {
               keyword: params.keyword as string,
-              approvalStatus:
-                activeStatus === 'all' ? undefined : Number(activeStatus),
               departmentId: params.departmentId as number,
               dateStart: params.dateStart as string,
               dateEnd: params.dateEnd as string,
+            };
+            const baseQueryKey = JSON.stringify(baseQuery);
+            const previousBaseQueryKey = JSON.stringify(latestBaseQueryRef.current);
+            if (baseQueryKey !== previousBaseQueryKey) {
+              latestBaseQueryRef.current = baseQuery;
+              await loadStatusCounts(baseQuery);
+            }
+            const result = await getEntryApplicationList({
+              pageNum: params.current || 1,
+              pageSize: params.pageSize || 20,
+              ...baseQuery,
+              approvalStatus:
+                activeStatus === 'all' ? undefined : Number(activeStatus),
             });
-            const counts = (result.records || []).reduce<Record<string, number>>(
-              (map, item) => {
-                const key = String(item.approvalStatus);
-                map[key] = (map[key] || 0) + 1;
-                return map;
-              },
-              { all: result.total || 0 },
-            );
-            setStatusCounts(counts);
             return {
               data: result.records || [],
               total: result.total || 0,
@@ -409,7 +632,14 @@ const EntryPage: React.FC = () => {
             };
           }}
           pagination={{ defaultPageSize: 20, showSizeChanger: true }}
-          search={{ labelWidth: 88, span: 8 }}
+          search={{
+            labelWidth: 88,
+            span: 8,
+            onReset: async () => {
+              latestBaseQueryRef.current = {};
+              await loadStatusCounts({});
+            },
+          }}
           toolbar={{
             title: '入职申请列表',
             actions: [
@@ -419,6 +649,7 @@ const EntryPage: React.FC = () => {
                 icon={<PlusOutlined />}
                 onClick={() => {
                   setEditingRecord(undefined);
+                  entryForm.resetFields();
                   setDrawerOpen(true);
                 }}
               >
@@ -430,6 +661,7 @@ const EntryPage: React.FC = () => {
       </Card>
 
       <DrawerForm<EntryApplicationFormValues>
+        form={entryForm}
         title={editingRecord ? '编辑入职申请' : '新建入职申请'}
         width={760}
         open={drawerOpen}
@@ -437,27 +669,18 @@ const EntryPage: React.FC = () => {
           setDrawerOpen(open);
           if (!open) {
             setEditingRecord(undefined);
+            entryForm.resetFields();
           }
         }}
         drawerProps={{ destroyOnClose: true }}
-        initialValues={{
-          candidateName: editingRecord?.candidateName,
-          gender: editingRecord?.gender,
-          phone: editingRecord?.phone,
-          email: editingRecord?.email,
-          idCardNo: editingRecord?.idCardNo,
-          deptId: editingRecord?.deptId,
-          postId: editingRecord?.postId,
-          hireType: editingRecord?.hireType || 1,
-          probationMonth: editingRecord?.probationMonth ?? 3,
-          probationSalaryRatio: editingRecord?.probationSalaryRatio ?? 80,
-          expectedHireDate: editingRecord?.expectedHireDate,
-          leaderId: editingRecord?.leaderId,
-          remark: editingRecord?.remark,
-        }}
+        initialValues={buildEntryFormInitialValues(editingRecord)}
         submitter={{ searchConfig: { submitText: '保存草稿' } }}
+        onFinishFailed={() => {
+          message.warning('请先补全必填项后再保存');
+        }}
         onFinish={async (values) => {
-          const payload = buildFormValues(values);
+          try {
+            const payload = buildFormValues(values);
           if (editingRecord) {
             await updateEntryApplication(editingRecord.id, payload);
             message.success('入职申请已更新');
@@ -465,9 +688,18 @@ const EntryPage: React.FC = () => {
             await createEntryApplication(payload);
             message.success('入职申请已保存为草稿');
           }
-          setDrawerOpen(false);
-          reloadTable();
-          return true;
+            await loadStatusCounts(latestBaseQueryRef.current);
+            setDrawerOpen(false);
+            reloadTable();
+            return true;
+          } catch (error) {
+            if (error instanceof Error && error.message) {
+              message.error(error.message);
+            } else {
+              message.error('保存失败，请检查表单后重试');
+            }
+            return false;
+          }
         }}
       >
         <ProFormGroup title="候选人基本信息">
@@ -511,21 +743,30 @@ const EntryPage: React.FC = () => {
             name="deptId"
             label="所属部门"
             width="md"
-            options={departmentOptions}
+            options={realDepartmentOptions}
             rules={[{ required: true, message: '请选择所属部门' }]}
           />
           <ProFormSelect
             name="postId"
             label="职位"
             width="md"
-            options={postOptions}
+            options={realPostOptions}
             rules={[{ required: true, message: '请选择职位' }]}
           />
           <ProFormSelect
             name="leaderId"
             label="直接汇报人"
             width="md"
-            options={leaderOptions}
+            options={realLeaderOptions}
+            fieldProps={{
+              disabled: !selectedDeptId,
+              loading: leaderLoading,
+              placeholder: selectedDeptId
+                ? '请选择直接汇报人'
+                : '请先选择所属部门',
+              showSearch: true,
+              optionFilterProp: 'label',
+            }}
           />
         </ProFormGroup>
 

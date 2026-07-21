@@ -75,4 +75,14 @@ public class PostController {
         return Result.success();
     }
 
+    /**
+     * 统计各序列职位数量
+     */
+    @GetMapping("/stats/sequence")
+    @Operation(summary = "职位序列统计", description = "统计各序列(M/P/S)的职位数量")
+    public Result<java.util.Map<String, Long>> countBySequence() {
+        java.util.Map<String, Long> stats = postService.countBySequence();
+        return Result.success(stats);
+    }
+
 }

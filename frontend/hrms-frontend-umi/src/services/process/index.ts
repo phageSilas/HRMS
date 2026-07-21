@@ -5,6 +5,7 @@
 
 import type { PageQuery, PageResult } from '@/types/api';
 import request from '@/utils/request';
+import type { Dayjs } from 'dayjs';
 
 export const ApprovalStatus = {
   DRAFT: 0,
@@ -32,13 +33,13 @@ export interface EntryApplication {
   hireType?: number;
   probationMonth?: number;
   probationSalaryRatio?: number;
-  expectedHireDate: string;
+  expectedHireDate: string | number[];
   leaderId?: number;
   remark?: string;
   approvalStatus: ApprovalStatusValue;
   approvalStatusDesc?: string;
   approvalInstanceId?: number | null;
-  createTime?: string;
+  createTime?: string | number[];
 }
 
 export interface EntryApplicationQuery extends PageQuery {
@@ -60,7 +61,7 @@ export interface EntryApplicationFormValues {
   hireType: number;
   probationMonth: number;
   probationSalaryRatio?: number;
-  expectedHireDate: string;
+  expectedHireDate: string | number[] | Dayjs;
   leaderId?: number;
   remark?: string;
 }
@@ -79,6 +80,15 @@ export interface EntryApplicationConfirmResult {
   employeeNo: string;
 }
 
+export interface EntryApplicationStats {
+  all: number;
+  draft: number;
+  approving: number;
+  approved: number;
+  rejected: number;
+  entered: number;
+}
+
 export interface RegularApplication {
   id?: number;
   employeeId: number;
@@ -94,7 +104,7 @@ export interface RegularApplication {
   evaluationStatus?: 'pending' | 'evaluated';
   approvalStatus?: number;
   approvalStatusDesc?: string;
-  createTime?: string;
+  createTime?: string | number[];
 }
 
 export interface RegularApplicationQuery extends PageQuery {
@@ -128,7 +138,7 @@ export interface TransferApplication {
   reason?: string;
   approvalStatus?: number;
   approvalStatusDesc?: string;
-  createTime?: string;
+  createTime?: string | number[];
 }
 
 export interface TransferApplicationQuery extends PageQuery {
@@ -166,7 +176,7 @@ export interface LeaveApplication {
   reason?: string;
   approvalStatus?: number;
   approvalStatusDesc?: string;
-  createTime?: string;
+  createTime?: string | number[];
 }
 
 export interface LeaveApplicationQuery extends PageQuery {
@@ -195,6 +205,18 @@ export async function getEntryApplicationList(
   return request.get('/api/v1/entry-applications', { params });
 }
 
+export async function getEntryApplication(
+  id: number,
+): Promise<EntryApplication> {
+  return request.get(`/api/v1/entry-applications/${id}`);
+}
+
+export async function getEntryApplicationStats(
+  params: Omit<EntryApplicationQuery, 'pageNum' | 'pageSize' | 'approvalStatus'>,
+): Promise<EntryApplicationStats> {
+  return request.get('/api/v1/entry-applications/stats', { params });
+}
+
 export async function createEntryApplication(
   data: EntryApplicationFormValues,
 ): Promise<EntryApplication> {
@@ -204,7 +226,7 @@ export async function createEntryApplication(
 export async function updateEntryApplication(
   id: number,
   data: EntryApplicationFormValues,
-): Promise<void> {
+): Promise<EntryApplication> {
   return request.put(`/api/v1/entry-applications/${id}`, data);
 }
 

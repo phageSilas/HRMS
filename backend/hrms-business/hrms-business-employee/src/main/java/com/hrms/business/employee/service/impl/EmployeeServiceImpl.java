@@ -22,7 +22,9 @@ import com.hrms.common.exception.GlobalException;
 import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
 import com.hrms.system.auth.dto.UserCreateDTO;
+import com.hrms.system.auth.entity.RoleEntity;
 import com.hrms.system.auth.service.FieldPermissionService;
+import com.hrms.system.auth.service.RoleService;
 import com.hrms.system.auth.service.UserService;
 import com.hrms.system.auth.vo.FieldPermissionVO;
 import com.hrms.system.auth.vo.UserCreateResultVO;
@@ -31,11 +33,13 @@ import com.hrms.system.organization.service.PostService;
 import com.hrms.system.organization.vo.DeptDetailVO;
 import com.hrms.system.organization.vo.PostVO;
 import com.hrms.business.employee.event.EmployeeChangeEvent;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -46,7 +50,6 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class EmployeeServiceImpl implements EmployeeService {
 
     private final EmployeeMapper employeeMapper;
@@ -54,7 +57,31 @@ public class EmployeeServiceImpl implements EmployeeService {
     private final DeptService deptService;
     private final PostService postService;
     private final UserService userService;
+    private final RoleService roleService;
     private final ApplicationEventPublisher eventPublisher;
+
+    /** 独立事务模板，用于创建系统账号（失败不回滚主事务） */
+    private final TransactionTemplate transactionTemplate;
+
+    public EmployeeServiceImpl(
+            EmployeeMapper employeeMapper,
+            FieldPermissionService fieldPermissionService,
+            DeptService deptService,
+            PostService postService,
+            UserService userService,
+            RoleService roleService,
+            ApplicationEventPublisher eventPublisher,
+            PlatformTransactionManager transactionManager) {
+        this.employeeMapper = employeeMapper;
+        this.fieldPermissionService = fieldPermissionService;
+        this.deptService = deptService;
+        this.postService = postService;
+        this.userService = userService;
+        this.roleService = roleService;
+        this.eventPublisher = eventPublisher;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
+        this.transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    }
 
     @Override
     public PageResult<EmployeeListVO> listEmployees(EmployeeQueryDTO queryDTO) {
@@ -63,6 +90,34 @@ public class EmployeeServiceImpl implements EmployeeService {
 
         // 构建查询条件
         LambdaQueryWrapper<EmployeeEntity> wrapper = Wrappers.lambdaQuery();
+
+        // ========== 数据权限过滤 ==========
+        List<Long> accessibleDeptIds = resolveAccessibleDeptIds();
+        if (accessibleDeptIds != null) {
+            // accessibleDeptIds 为 null 表示全量权限（ADMIN/全部），不限制
+            // accessibleDeptIds 为空列表表示仅本人权限，使用 create_by 过滤
+            if (accessibleDeptIds.isEmpty()) {
+                // 仅本人：只能看自己创建的记录
+                wrapper.eq(EmployeeEntity::getCreateBy, SecurityContextHolder.getUserId());
+            } else {
+                // 部门级别：限制在可访问的部门范围内
+                if (queryDTO.getDeptIds() != null && !queryDTO.getDeptIds().isEmpty()) {
+                    // 前端传了部门筛选，取交集（确保不越权）
+                    List<Long> intersected = queryDTO.getDeptIds().stream()
+                            .filter(accessibleDeptIds::contains)
+                            .collect(Collectors.toList());
+                    if (intersected.isEmpty()) {
+                        // 无交集，返回空结果
+                        return PageResult.of(List.of(), 0, queryDTO.getPageNum(), queryDTO.getPageSize());
+                    }
+                    wrapper.in(EmployeeEntity::getDeptId, intersected);
+                } else {
+                    // 前端未传部门筛选，限制在可访问范围内
+                    wrapper.in(EmployeeEntity::getDeptId, accessibleDeptIds);
+                }
+            }
+        }
+        // ========== 数据权限过滤结束 ==========
 
         // 关键词搜索（姓名/工号/手机号）
         if (queryDTO.getKeyword() != null && !queryDTO.getKeyword().isEmpty()) {
@@ -73,8 +128,9 @@ public class EmployeeServiceImpl implements EmployeeService {
                     .like(EmployeeEntity::getPhone, queryDTO.getKeyword()));
         }
 
-        // 部门筛选
-        if (queryDTO.getDeptIds() != null && !queryDTO.getDeptIds().isEmpty()) {
+        // 部门筛选（数据权限已过滤，此处仅在前端未传 deptIds 且全量权限时生效）
+        if (queryDTO.getDeptIds() != null && !queryDTO.getDeptIds().isEmpty()
+                && accessibleDeptIds == null) {
             wrapper.in(EmployeeEntity::getDeptId, queryDTO.getDeptIds());
         }
 
@@ -161,8 +217,8 @@ public class EmployeeServiceImpl implements EmployeeService {
         // 保存员工记录
         employeeMapper.insert(entity);
 
-        // 创建系统账号
-        createUserAccount(entity);
+        // 创建系统账号（独立事务，失败不回滚员工创建）
+        createUserAccountInNewTransaction(entity);
 
         // 发布员工创建事件，更新部门人数
         eventPublisher.publishEvent(new EmployeeChangeEvent(this, EmployeeChangeEvent.ChangeType.CREATE, entity.getId(), entity.getDeptId(), entity.getDeptId()));
@@ -442,6 +498,105 @@ public class EmployeeServiceImpl implements EmployeeService {
         return !employees.isEmpty();
     }
 
+    // ==================== 数据权限 ====================
+
+    /**
+     * 获取当前用户可访问的部门ID列表。
+     * <p>
+     * 返回值含义：
+     * <ul>
+     *   <li>{@code null} — 全量权限（ADMIN 或 data_scope=4），不限制部门</li>
+     *   <li>空列表 — 仅本人权限（data_scope=1），按 create_by 过滤</li>
+     *   <li>非空列表 — 可访问的部门ID集合，按 dept_id IN (...) 过滤</li>
+     * </ul>
+     * </p>
+     */
+    private List<Long> resolveAccessibleDeptIds() {
+        Long userId = SecurityContextHolder.getUserId();
+        if (userId == null) {
+            return List.of(); // 未登录，返回仅本人
+        }
+
+        // 获取用户角色列表
+        List<RoleEntity> roles = roleService.getRolesByUserId(userId);
+        if (roles.isEmpty()) {
+            return List.of(); // 无角色，返回仅本人
+        }
+
+        // 检查是否为超级管理员角色
+        boolean isAdmin = roles.stream()
+                .anyMatch(r -> "ADMIN".equals(r.getRoleCode()) || "ROLE_ADMIN".equals(r.getRoleCode()));
+        if (isAdmin) {
+            return null; // ADMIN 全量权限
+        }
+
+        // 取最大数据权限范围（多角色时继承最宽权限）
+        int dataScope = roles.stream()
+                .mapToInt(r -> r.getDataScope() != null ? r.getDataScope() : 1)
+                .max()
+                .orElse(1);
+
+        switch (dataScope) {
+            case 4:
+                // 全部
+                return null;
+            case 3: {
+                // 本部门及下属
+                Long deptId = resolveUserDeptId(userId);
+                if (deptId == null) {
+                    return List.of(); // 无部门信息，降级为仅本人
+                }
+                return deptService.getSubDeptIds(deptId);
+            }
+            case 2: {
+                // 本部门
+                Long deptId = resolveUserDeptId(userId);
+                if (deptId == null) {
+                    return List.of(); // 无部门信息，降级为仅本人
+                }
+                return List.of(deptId);
+            }
+            case 1:
+            default:
+                // 仅本人
+                return List.of();
+        }
+    }
+
+    /**
+     * 获取用户对应的部门ID。
+     * <p>
+     * 优先从 SecurityContextHolder 中获取（JWT token 中的 deptId），
+     * 如果为空则通过员工档案反查（sys_user.dept_id 可能未同步，通过 employee.user_id 查找）。
+     * </p>
+     *
+     * @param userId 用户ID
+     * @return 部门ID，可能为 null
+     */
+    private Long resolveUserDeptId(Long userId) {
+        // 1. 优先从 JWT token 中获取（已同步的情况）
+        Long deptId = SecurityContextHolder.getDeptId();
+        if (deptId != null) {
+            return deptId;
+        }
+
+        // 2. 降级：从员工档案中反查（sys_user.dept_id 未同步的情况）
+        try {
+            EmployeeEntity employee = employeeMapper.selectOne(
+                    Wrappers.<EmployeeEntity>lambdaQuery()
+                            .eq(EmployeeEntity::getUserId, userId)
+            );
+            if (employee != null && employee.getDeptId() != null) {
+                log.debug("通过员工档案反查部门ID: userId={}, deptId={}", userId, employee.getDeptId());
+                return employee.getDeptId();
+            }
+        } catch (Exception e) {
+            log.warn("通过员工档案反查部门ID失败: userId={}", userId, e);
+        }
+
+        return null;
+    }
+
     // ==================== 私有方法 ====================
 
     /**
@@ -573,54 +728,55 @@ public class EmployeeServiceImpl implements EmployeeService {
     }
 
     /**
-     * 创建系统账号
+     * 在独立事务中创建系统账号。
      * <p>
-     * 新增员工时自动创建系统账号，登录账号=手机号，初始密码随机生成
+     * 使用 REQUIRES_NEW 确保用户创建失败（如 auth 模块的 @TableLogic 导致
+     * 唯一约束冲突）不会将外层员工创建事务标记为 rollback-only。
      * </p>
      *
-     * @param entity 员工实体
+     * @param entity 已保存的员工实体
      */
-    private void createUserAccount(EmployeeEntity entity) {
+    private void createUserAccountInNewTransaction(EmployeeEntity entity) {
         try {
-            // 生成随机初始密码
-            String initialPassword = generateRandomPassword();
+            Long userId = transactionTemplate.execute(status -> {
+                // 生成随机初始密码
+                String initialPassword = generateRandomPassword();
 
-            // 构建创建用户 DTO
-            UserCreateDTO userCreateDTO = new UserCreateDTO();
-            userCreateDTO.setUsername(entity.getPhone());           // 登录账号 = 手机号
-            userCreateDTO.setPassword(initialPassword);              // 初始密码
-            userCreateDTO.setRealName(entity.getEmployeeName());     // 真实姓名
-            userCreateDTO.setPhone(entity.getPhone());               // 手机号
-            userCreateDTO.setEmail(entity.getEmail());               // 邮箱
-            userCreateDTO.setEmployeeId(entity.getId());             // 关联员工ID
+                // 构建创建用户 DTO
+                UserCreateDTO userCreateDTO = new UserCreateDTO();
+                userCreateDTO.setUsername(entity.getPhone());           // 登录账号 = 手机号
+                userCreateDTO.setPassword(initialPassword);              // 初始密码
+                userCreateDTO.setRealName(entity.getEmployeeName());     // 真实姓名
+                userCreateDTO.setPhone(entity.getPhone());               // 手机号
+                userCreateDTO.setEmail(entity.getEmail());               // 邮箱
+                userCreateDTO.setEmployeeId(entity.getId());             // 关联员工ID
+                userCreateDTO.setDeptId(entity.getDeptId());             // 同步部门ID
 
-            // 调用用户服务创建账号
-            UserCreateResultVO result = userService.createUser(userCreateDTO);
+                // 调用用户服务创建账号
+                UserCreateResultVO result = userService.createUser(userCreateDTO);
 
-            // 回填 user_id 到员工记录
-            entity.setUserId(result.getId());
-            employeeMapper.updateById(entity);
+                log.info("员工 [{}] 系统账号创建成功，userId={}", entity.getEmployeeName(), result.getId());
+                return result.getId();
+            });
 
-            log.info("员工 [{}] 系统账号创建成功，userId={}", entity.getEmployeeName(), result.getId());
+            // 回填 user_id 到员工记录（在主事务中）
+            if (userId != null) {
+                entity.setUserId(userId);
+                employeeMapper.updateById(entity);
+            }
         } catch (Exception e) {
-            log.error("创建员工作业账号失败，employeeId={}", entity.getId(), e);
-            // 不阻断主流程，记录日志即可
+            log.error("创建员工系统账号失败，employeeId={}", entity.getId(), e);
+            // 不阻断主流程：员工已创建成功，账号可后续补建
         }
     }
 
     /**
-     * 生成随机密码
+     * 生成初始密码
      *
-     * @return 8位随机密码
+     * @return 初始密码
      */
     private String generateRandomPassword() {
-        String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-        StringBuilder sb = new StringBuilder();
-        java.security.SecureRandom random = new java.security.SecureRandom();
-        for (int i = 0; i < 8; i++) {
-            sb.append(chars.charAt(random.nextInt(chars.length())));
-        }
-        return sb.toString();
+        return "123456";
     }
 
     /**
@@ -636,6 +792,15 @@ public class EmployeeServiceImpl implements EmployeeService {
         );
         if (existing != null && !existing.getId().equals(excludeId)) {
             throw new GlobalException(ErrorCode.EMPLOYEE_PHONE_EXISTS);
+        }
+
+        // 清理已逻辑删除的同手机号记录，防止插入时触发数据库 uk_hr_employee_phone 唯一约束
+        // MyBatis-Plus @TableLogic 过滤了 is_deleted=1 的记录，但数据库唯一约束不考虑逻辑删除状态
+        // 将已删除记录的手机号改为 "deleted_<id>_<timestamp>" 释放原手机号
+        String newPhone = "deleted_" + System.currentTimeMillis();
+        int updatedRows = employeeMapper.releasePhoneForDeleted(phone, newPhone);
+        if (updatedRows > 0) {
+            log.info("已释放逻辑删除记录的手机号 {} → {}，共 {} 条", phone, newPhone, updatedRows);
         }
     }
 

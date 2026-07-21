@@ -1,6 +1,6 @@
 /**
  * 部门管理页面
- * 功能：部门树展示、新增、编辑、删除部门
+ * 功能：左侧部门树，右侧显示选中部门的详细信息
  */
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -16,9 +16,11 @@ import {
   Modal,
   Popconfirm,
   Row,
-  Space,
-  Table,
   Tree,
+  Descriptions,
+  Tag,
+  Space,
+  Empty,
 } from 'antd';
 import {
   PlusOutlined,
@@ -26,6 +28,7 @@ import {
   DeleteOutlined,
   TeamOutlined,
   ApartmentOutlined,
+  UserOutlined,
 } from '@ant-design/icons';
 import {
   getDeptTree,
@@ -34,6 +37,7 @@ import {
   updateDept,
   deleteDept,
 } from '@/services/organization';
+import { hasEmployeesInDept } from '@/services/employee';
 import type { DeptTreeNode, DeptDetail } from '@/services/organization';
 
 const { TextArea } = Input;
@@ -41,11 +45,12 @@ const { TextArea } = Input;
 const DeptPage: React.FC = () => {
   const [treeData, setTreeData] = useState<DeptTreeNode[]>([]);
   const [loading, setLoading] = useState(false);
-  const [detailVisible, setDetailVisible] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('新增部门');
   const [currentDept, setCurrentDept] = useState<DeptDetail | null>(null);
   const [selectedDeptId, setSelectedDeptId] = useState<number | null>(null);
+  const [selectedDeptName, setSelectedDeptName] = useState<string>('');
   const [form] = Form.useForm();
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
 
@@ -55,6 +60,10 @@ const DeptPage: React.FC = () => {
     try {
       const data = await getDeptTree();
       setTreeData(data || []);
+      // 默认展开第一级
+      if (data && data.length > 0) {
+        setExpandedKeys(data.map(node => node.id));
+      }
     } catch (error: any) {
       message.error(error.message || '获取部门树失败');
     } finally {
@@ -66,32 +75,43 @@ const DeptPage: React.FC = () => {
     fetchDeptTree();
   }, []);
 
-  // 查看部门详情
-  const handleViewDetail = async (id: number) => {
+  // 选中部门节点，加载详情
+  const handleSelectDept = async (deptId: number, deptName: string) => {
+    setSelectedDeptId(deptId);
+    setSelectedDeptName(deptName);
+    setDetailLoading(true);
     try {
-      const detail = await getDeptDetail(id);
+      const detail = await getDeptDetail(deptId);
       setCurrentDept(detail);
-      setDetailVisible(true);
     } catch (error: any) {
       message.error(error.message || '获取部门详情失败');
+      setCurrentDept(null);
+    } finally {
+      setDetailLoading(false);
     }
   };
 
   // 打开新增弹窗
-  const handleAdd = (parentId?: number) => {
+  const handleAdd = (parentId?: number, parentName?: string) => {
     setModalTitle('新增部门');
     setCurrentDept(null);
     form.resetFields();
     if (parentId) {
-      form.setFieldsValue({ parentId });
+      form.setFieldsValue({ parentId, parentName });
+    } else {
+      form.setFieldsValue({ parentId: 0, parentName: '根部门' });
     }
     setModalVisible(true);
   };
 
   // 打开编辑弹窗
-  const handleEdit = async (id: number) => {
+  const handleEdit = async () => {
+    if (!selectedDeptId) {
+      message.warning('请先选择一个部门');
+      return;
+    }
     try {
-      const detail = await getDeptDetail(id);
+      const detail = await getDeptDetail(selectedDeptId);
       setCurrentDept(detail);
       setModalTitle('编辑部门');
       form.setFieldsValue({
@@ -114,6 +134,8 @@ const DeptPage: React.FC = () => {
         // 编辑
         await updateDept(currentDept.id, values);
         message.success('更新成功');
+        // 刷新详情
+        handleSelectDept(currentDept.id, values.deptName);
       } else {
         // 新增
         await createDept(values);
@@ -130,8 +152,20 @@ const DeptPage: React.FC = () => {
   // 删除部门
   const handleDelete = async (id: number) => {
     try {
+      // 1. 检查部门下是否有在职员工
+      const hasEmployees = await hasEmployeesInDept(id);
+      if (hasEmployees) {
+        message.error('该部门下有在职员工，无法删除');
+        return;
+      }
+
+      // 2. 调用删除接口（后端会检查子部门）
       await deleteDept(id);
       message.success('删除成功');
+      // 清空选中状态
+      setSelectedDeptId(null);
+      setSelectedDeptName('');
+      setCurrentDept(null);
       fetchDeptTree();
     } catch (error: any) {
       message.error(error.message || '删除失败');
@@ -140,57 +174,21 @@ const DeptPage: React.FC = () => {
 
   // 渲染树节点标题
   const renderTreeTitle = (node: DeptTreeNode) => (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        width: '100%',
+        paddingRight: 8,
+      }}
+    >
       <span>
         <ApartmentOutlined style={{ marginRight: 8, color: '#1890ff' }} />
         {node.deptName}
-        <span style={{ marginLeft: 8, color: '#999', fontSize: 12 }}>
-          ({node.employeeCount || 0}人)
-        </span>
       </span>
-      <span style={{ marginLeft: 16 }}>
-        <Button
-          type="link"
-          size="small"
-          icon={<PlusOutlined />}
-          onClick={(e) => {
-            e.stopPropagation();
-            handleAdd(node.id);
-          }}
-        >
-          新增子部门
-        </Button>
-        <Button
-          type="link"
-          size="small"
-          icon={<EditOutlined />}
-          onClick={(e) => {
-            e.stopPropagation();
-            handleEdit(node.id);
-          }}
-        >
-          编辑
-        </Button>
-        <Popconfirm
-          title="确认删除"
-          description={`确定要删除部门 "${node.deptName}" 吗？`}
-          onConfirm={(e) => {
-            e?.stopPropagation();
-            handleDelete(node.id);
-          }}
-          okText="确定"
-          cancelText="取消"
-        >
-          <Button
-            type="link"
-            danger
-            size="small"
-            icon={<DeleteOutlined />}
-            onClick={(e) => e.stopPropagation()}
-          >
-            删除
-          </Button>
-        </Popconfirm>
+      <span style={{ marginLeft: 8, color: '#999', fontSize: 12 }}>
+        ({node.employeeCount || 0}人)
       </span>
     </div>
   );
@@ -206,9 +204,9 @@ const DeptPage: React.FC = () => {
 
   return (
     <PageContainer title="部门管理">
-      <Row gutter={16}>
+      <Row gutter={16} style={{ minHeight: 'calc(100vh - 200px)' }}>
         {/* 左侧部门树 */}
-        <Col span={8}>
+        <Col span={6}>
           <Card
             title={
               <span>
@@ -217,65 +215,148 @@ const DeptPage: React.FC = () => {
               </span>
             }
             extra={
-              <Button type="primary" icon={<PlusOutlined />} onClick={() => handleAdd()}>
-                新增根部门
+              <Button
+                type="link"
+                icon={<PlusOutlined />}
+                onClick={() => handleAdd()}
+                style={{ padding: 0 }}
+              >
+                新增
               </Button>
             }
             loading={loading}
+            bodyStyle={{ padding: '12px 0' }}
           >
             {treeData.length > 0 ? (
               <Tree
                 treeData={convertTreeData(treeData)}
                 expandedKeys={expandedKeys}
                 onExpand={(keys) => setExpandedKeys(keys)}
-                defaultExpandAll
-                selectable={false}
+                selectedKeys={selectedDeptId ? [selectedDeptId] : []}
+                onSelect={(selectedKeys, info: any) => {
+                  if (selectedKeys.length > 0) {
+                    const node = info.node;
+                    const deptId = selectedKeys[0] as number;
+                    // 从 treeData 中找到对应的节点名称
+                    const findNodeName = (nodes: DeptTreeNode[]): string => {
+                      for (const n of nodes) {
+                        if (n.id === deptId) return n.deptName;
+                        if (n.children) {
+                          const name = findNodeName(n.children);
+                          if (name) return name;
+                        }
+                      }
+                      return '';
+                    };
+                    const deptName = findNodeName(treeData);
+                    handleSelectDept(deptId, deptName);
+                  }
+                }}
+                showLine={{ showLeafIcon: false }}
+                style={{ fontSize: 14 }}
               />
             ) : (
               <div style={{ textAlign: 'center', padding: '40px 0', color: '#999' }}>
-                暂无部门数据
+                <ApartmentOutlined style={{ fontSize: 48, marginBottom: 16, color: '#d9d9d9' }} />
+                <p>暂无部门数据</p>
+                <Button type="primary" icon={<PlusOutlined />} onClick={() => handleAdd()}>
+                  新增根部门
+                </Button>
               </div>
             )}
           </Card>
         </Col>
 
-        {/* 右侧部门详情/操作区 */}
-        <Col span={16}>
-          <Card title="部门信息概览">
-            {treeData.length > 0 ? (
-              <div>
-                <p style={{ marginBottom: 16 }}>
-                  <strong>部门总数：</strong>
-                  {(() => {
-                    let count = 0;
-                    const countDepts = (nodes: DeptTreeNode[]) => {
-                      nodes.forEach((node) => {
-                        count++;
-                        if (node.children) {
-                          countDepts(node.children);
-                        }
-                      });
-                    };
-                    countDepts(treeData);
-                    return count;
-                  })()}
-                  个
-                </p>
-                <p style={{ marginBottom: 16 }}>
-                  <strong>最大层级：</strong>5级（根部门为第1级）
-                </p>
-                <p style={{ color: '#999', fontSize: 12 }}>
-                  提示：点击左侧部门可查看详情，右键或点击操作按钮可进行编辑、删除、新增子部门等操作。
-                </p>
-              </div>
+        {/* 右侧部门详情 */}
+        <Col span={18}>
+          <Card
+            title={
+              <span>
+                <ApartmentOutlined style={{ marginRight: 8 }} />
+                {selectedDeptName || '部门详情'}
+              </span>
+            }
+            extra={
+              selectedDeptId && (
+                <Space>
+                  <Button
+                    type="primary"
+                    icon={<EditOutlined />}
+                    onClick={handleEdit}
+                  >
+                    编辑
+                  </Button>
+                  <Button
+                    icon={<PlusOutlined />}
+                    onClick={() => handleAdd(selectedDeptId, selectedDeptName)}
+                  >
+                    新增子部门
+                  </Button>
+                  <Popconfirm
+                    title="确认删除"
+                    description={`确定要删除部门 "${selectedDeptName}" 吗？`}
+                    onConfirm={() => handleDelete(selectedDeptId)}
+                    okText="确定"
+                    cancelText="取消"
+                  >
+                    <Button danger icon={<DeleteOutlined />}>
+                      删除
+                    </Button>
+                  </Popconfirm>
+                </Space>
+              )
+            }
+            loading={detailLoading}
+          >
+            {currentDept ? (
+              <Descriptions
+                bordered
+                column={2}
+                labelStyle={{ width: 150, fontWeight: 500 }}
+              >
+                <Descriptions.Item label="部门名称" span={2}>
+                  <span style={{ fontSize: 16, fontWeight: 500 }}>{currentDept.deptName}</span>
+                </Descriptions.Item>
+                <Descriptions.Item label="部门编码">
+                  {currentDept.deptCode}
+                </Descriptions.Item>
+                <Descriptions.Item label="上级部门">
+                  {currentDept.parentName || '根部门'}
+                </Descriptions.Item>
+                <Descriptions.Item label="部门负责人">
+                  {currentDept.leaderName || (
+                    <span style={{ color: '#999' }}>未设置</span>
+                  )}
+                </Descriptions.Item>
+                <Descriptions.Item label="员工数量">
+                  <Tag color="blue" icon={<UserOutlined />}>
+                    {currentDept.employeeCount || 0} 人
+                  </Tag>
+                </Descriptions.Item>
+                <Descriptions.Item label="部门层级">
+                  第 {currentDept.deptLevel} 级
+                </Descriptions.Item>
+                <Descriptions.Item label="排序号">
+                  {currentDept.sortNo}
+                </Descriptions.Item>
+                <Descriptions.Item label="状态">
+                  <Tag color={currentDept.status === 1 ? 'success' : 'error'}>
+                    {currentDept.status === 1 ? '启用' : '禁用'}
+                  </Tag>
+                </Descriptions.Item>
+                <Descriptions.Item label="创建时间">
+                  {currentDept.createTime || '-'}
+                </Descriptions.Item>
+                <Descriptions.Item label="备注" span={2}>
+                  {currentDept.remark || <span style={{ color: '#999' }}>无</span>}
+                </Descriptions.Item>
+              </Descriptions>
             ) : (
-              <div style={{ textAlign: 'center', padding: '40px 0', color: '#999' }}>
-                <ApartmentOutlined style={{ fontSize: 48, marginBottom: 16, color: '#d9d9d9' }} />
-                <p>暂无部门数据，请先新增部门</p>
-                <Button type="primary" icon={<PlusOutlined />} onClick={() => handleAdd()}>
-                  新增根部门
-                </Button>
-              </div>
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="请从左侧选择一个部门查看详情"
+                style={{ padding: '80px 0' }}
+              />
             )}
           </Card>
         </Col>
@@ -291,6 +372,7 @@ const DeptPage: React.FC = () => {
           form.resetFields();
         }}
         width={600}
+        destroyOnClose
       >
         <Form
           form={form}
@@ -307,11 +389,13 @@ const DeptPage: React.FC = () => {
                 <Input placeholder="请输入部门编码，如：RD001" />
               </Form.Item>
               <Form.Item
-                name="parentId"
+                name="parentName"
                 label="上级部门"
-                initialValue={0}
               >
-                <InputNumber style={{ width: '100%' }} disabled placeholder="根部门" />
+                <Input disabled placeholder="上级部门" />
+              </Form.Item>
+              <Form.Item name="parentId" hidden>
+                <InputNumber />
               </Form.Item>
             </>
           )}
@@ -342,58 +426,6 @@ const DeptPage: React.FC = () => {
             <TextArea rows={3} placeholder="请输入备注" />
           </Form.Item>
         </Form>
-      </Modal>
-
-      {/* 部门详情弹窗 */}
-      <Modal
-        title="部门详情"
-        open={detailVisible}
-        onCancel={() => setDetailVisible(false)}
-        footer={
-          <Button onClick={() => setDetailVisible(false)}>关闭</Button>
-        }
-        width={600}
-      >
-        {currentDept && (
-          <div style={{ padding: '16px 0' }}>
-            <p>
-              <strong>部门名称：</strong>
-              {currentDept.deptName}
-            </p>
-            <p>
-              <strong>部门编码：</strong>
-              {currentDept.deptCode}
-            </p>
-            <p>
-              <strong>上级部门：</strong>
-              {currentDept.parentName || '根部门'}
-            </p>
-            <p>
-              <strong>部门层级：</strong>
-              第{currentDept.deptLevel}级
-            </p>
-            <p>
-              <strong>员工数量：</strong>
-              {currentDept.employeeCount || 0}人
-            </p>
-            <p>
-              <strong>排序号：</strong>
-              {currentDept.sortNo}
-            </p>
-            <p>
-              <strong>状态：</strong>
-              {currentDept.status === 1 ? '启用' : '禁用'}
-            </p>
-            <p>
-              <strong>备注：</strong>
-              {currentDept.remark || '-'}
-            </p>
-            <p>
-              <strong>创建时间：</strong>
-              {currentDept.createTime}
-            </p>
-          </div>
-        )}
       </Modal>
     </PageContainer>
   );

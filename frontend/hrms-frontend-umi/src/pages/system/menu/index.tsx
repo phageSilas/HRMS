@@ -17,7 +17,6 @@ import {
 import {
   Button,
   message,
-  Popconfirm,
   Tag,
   Space,
   Form,
@@ -29,12 +28,11 @@ import {
 import {
   PlusOutlined,
   EditOutlined,
-  DeleteOutlined,
   FolderOutlined,
   FileOutlined,
   BarsOutlined,
 } from '@ant-design/icons';
-import { getMenuList, createMenu, updateMenu, deleteMenu } from '@/services/system';
+import { getMenuList, createMenu, updateMenu } from '@/services/system';
 import type { MenuItem } from '@/types/system';
 
 const MenuPage: React.FC = () => {
@@ -65,11 +63,12 @@ const MenuPage: React.FC = () => {
   }, []);
 
   // 菜单类型标签
+  // menu_type: 1=目录, 2=菜单, 3=按钮
   const menuTypeTag = (type: number) => {
     const map: Record<number, { text: string; color: string; icon: React.ReactNode }> = {
-      0: { text: '目录', color: 'blue', icon: <FolderOutlined /> },
-      1: { text: '菜单', color: 'green', icon: <FileOutlined /> },
-      2: { text: '按钮', color: 'orange', icon: <BarsOutlined /> },
+      1: { text: '目录', color: 'blue', icon: <FolderOutlined /> },
+      2: { text: '菜单', color: 'green', icon: <FileOutlined /> },
+      3: { text: '按钮', color: 'orange', icon: <BarsOutlined /> },
     };
     const item = map[type] || { text: '未知', color: 'default', icon: null };
     return (
@@ -121,31 +120,31 @@ const MenuPage: React.FC = () => {
       search: false,
       ellipsis: true,
     },
-    {
-      title: '组件',
-      dataIndex: 'component',
-      width: 160,
-      search: false,
-      ellipsis: true,
-    },
-    {
-      title: '权限标识',
-      dataIndex: 'permission',
-      width: 140,
-      search: false,
-    },
+    // {
+    //   title: '组件',
+    //   dataIndex: 'component',
+    //   width: 160,
+    //   search: false,
+    //   ellipsis: true,
+    // },
+    // {
+    //   title: '权限标识',
+    //   dataIndex: 'permission',
+    //   width: 140,
+    //   search: false,
+    // },
     {
       title: '图标',
       dataIndex: 'icon',
       width: 80,
       search: false,
     },
-    {
-      title: '排序',
-      dataIndex: 'sortNo',
-      width: 60,
-      search: false,
-    },
+    // {
+    //   title: '排序',
+    //   dataIndex: 'sortNo',
+    //   width: 60,
+    //   search: false,
+    // },
     {
       title: '状态',
       dataIndex: 'status',
@@ -179,17 +178,25 @@ const MenuPage: React.FC = () => {
           >
             编辑
           </Button>
-          <Popconfirm
-            title="确认删除"
-            description={`确定要删除菜单 "${record.menuName}" 吗？删除后其下所有子菜单也将被删除。`}
-            onConfirm={() => handleDelete(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button type="link" danger size="small" icon={<DeleteOutlined />} style={{ padding: '0 2px' }}>
-              删除
+          {/* 启用/禁用按钮 */}
+          {record.status === 1 ? (
+            <Button
+              type="link"
+              size="small"
+              danger
+              onClick={() => handleToggleStatus(record)}
+            >
+              禁用
             </Button>
-          </Popconfirm>
+          ) : (
+            <Button
+              type="link"
+              size="small"
+              onClick={() => handleToggleStatus(record)}
+            >
+              启用
+            </Button>
+          )}
         </Space>
       ),
     },
@@ -214,15 +221,17 @@ const MenuPage: React.FC = () => {
     setEditModalVisible(true);
   };
 
-  // 删除菜单
-  const handleDelete = async (id: number) => {
+  // 切换菜单状态（启用/禁用）
+  const handleToggleStatus = async (record: MenuItem) => {
+    const newStatus = record.status === 1 ? 0 : 1;
+    const actionText = newStatus === 1 ? '启用' : '禁用';
     try {
-      await deleteMenu(id);
-      message.success('删除成功');
+      await updateMenu(record.id, { status: newStatus });
+      message.success(`${actionText}成功`);
       fetchMenuList();
       actionRef.current?.reload();
     } catch (error: any) {
-      message.error(error.message || '删除失败');
+      message.error(error.message || `${actionText}失败`);
     }
   };
 
@@ -389,11 +398,11 @@ const MenuPage: React.FC = () => {
         <ProFormSelect
           name="menuType"
           label="菜单类型"
-          initialValue={0}
+          initialValue={1}
           options={[
-            { label: '目录', value: 0 },
-            { label: '菜单', value: 1 },
-            { label: '按钮', value: 2 },
+            { label: '目录', value: 1 },
+            { label: '菜单', value: 2 },
+            { label: '按钮', value: 3 },
           ]}
           rules={[{ required: true, message: '请选择菜单类型' }]}
         />

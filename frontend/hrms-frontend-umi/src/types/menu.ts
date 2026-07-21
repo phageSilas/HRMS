@@ -1,22 +1,61 @@
 /**
- * 菜单配置类型定义
+ * 菜单相关类型定义
  */
 
 /**
- * 菜单项配置
+ * 菜单项（用于侧边栏渲染）
+ * ProLayout 菜单数据格式
  */
 export interface MenuItem {
-  key: string;          // 唯一标识
-  name: string;         // 显示名称
-  icon: string;         // 图标名称
-  path: string;         // 路由路径
-  access?: string;      // 权限标识（可选，无则所有人可见）
-  children?: MenuItem[]; // 子菜单
-  hideInMenu?: boolean; // 是否在菜单中隐藏
+  /** 菜单ID */
+  key?: string;
+  /** 菜单名称（用于显示） */
+  name: string;
+  /** 路由路径 */
+  path?: string;
+  /** 图标 */
+  icon?: string;
+  /** 子菜单列表 */
+  children?: MenuItem[];
+  /** 隐藏菜单 */
+  hideInMenu?: boolean;
+  /** 父级菜单路径（用于 ProLayout） */
+  parentPath?: string;
+  /** 重定向 */
+  redirect?: string;
 }
 
 /**
- * 菜单过滤结果
+ * 将后端菜单数据转换为 ProLayout 需要的格式
+ * 后端返回字段：id, name, title, path, icon, children
+ */
+export function transformMenus(menus: any[], parentPath?: string): MenuItem[] {
+  if (!menus || !Array.isArray(menus)) {
+    return [];
+  }
+
+  return menus.map(menu => {
+    const currentPath = menu.path || '';
+
+    const item: MenuItem = {
+      key: String(menu.id),
+      name: menu.title || menu.name,
+      path: currentPath,
+      icon: menu.icon,
+      parentPath,
+    };
+
+    // 递归处理子菜单
+    if (menu.children && menu.children.length > 0) {
+      item.children = transformMenus(menu.children, currentPath);
+    }
+
+    return item;
+  });
+}
+
+/**
+ * 菜单过滤结果（旧版兼容）
  */
 export interface MenuFilterResult {
   visibleMenus: MenuItem[];

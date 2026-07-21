@@ -183,7 +183,8 @@ public class UserServiceImpl implements UserService {
         user.setPhone(createDTO.getPhone());
         user.setEmail(createDTO.getEmail());
         user.setStatus(1); // 默认启用
-        user.setEmployeeId(null); // 系统账号不关联员工档案
+        user.setDeptId(createDTO.getDeptId()); // 同步部门ID
+        user.setEmployeeId(createDTO.getEmployeeId()); // 关联员工档案
         user.setNeedChangePassword(1); // 首次登录强制修改密码
         user.setPasswordUpdateTime(LocalDateTime.now());
 
@@ -318,11 +319,12 @@ public class UserServiceImpl implements UserService {
 
     /**
      * 校验用户名唯一性
+     * 注意：检查所有用户（包括已删除的），因为数据库唯一约束不区分 is_deleted
      */
     private void checkUsernameUnique(String username, Long excludeId) {
         LambdaQueryWrapper<UserEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(UserEntity::getUsername, username);
-        wrapper.eq(UserEntity::getIsDeleted, 0);
+        // 不限制 is_deleted，因为数据库唯一约束是全局的
         if (excludeId != null) {
             wrapper.ne(UserEntity::getId, excludeId);
         }
@@ -335,6 +337,7 @@ public class UserServiceImpl implements UserService {
 
     /**
      * 校验手机号唯一性
+     * 注意：检查所有用户（包括已删除的），因为数据库唯一约束不区分 is_deleted
      */
     private void checkPhoneUnique(String phone, Long excludeId) {
         if (!StringUtils.hasText(phone)) {
@@ -342,7 +345,7 @@ public class UserServiceImpl implements UserService {
         }
         LambdaQueryWrapper<UserEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(UserEntity::getPhone, phone);
-        wrapper.eq(UserEntity::getIsDeleted, 0);
+        // 不限制 is_deleted，因为数据库唯一约束是全局的
         if (excludeId != null) {
             wrapper.ne(UserEntity::getId, excludeId);
         }

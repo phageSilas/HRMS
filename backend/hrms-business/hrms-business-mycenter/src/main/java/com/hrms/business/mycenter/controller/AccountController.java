@@ -40,7 +40,7 @@ public class AccountController {
     }
 
     @PostMapping("/phone/bind")
-    @Operation(summary = "绑定手机", description = "绑定新手机号（需短信验证码）")
+    @Operation(summary = "绑定手机", description = "绑定/更换手机号（需当前登录密码验证）")
     public Result<Void> bindPhone(@Valid @RequestBody PhoneBindRequest request) {
         Long userId = SecurityContextHolder.getUserId();
         accountService.bindPhone(userId, request);

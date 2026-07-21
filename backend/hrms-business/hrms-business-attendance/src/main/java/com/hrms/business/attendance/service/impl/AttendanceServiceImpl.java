@@ -2,6 +2,7 @@ package com.hrms.business.attendance.service.impl;
 
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -11,10 +12,12 @@ import com.hrms.business.approval.dto.ApprovalDetailVO;
 import com.hrms.business.approval.service.ApprovalTaskService;
 import com.hrms.business.approval.service.ApprovalEngine;
 import com.hrms.business.attendance.cache.AttendanceCacheKeys;
+import com.hrms.business.attendance.convert.AttendanceCalendarSummaryEnricher;
 import com.hrms.business.attendance.convert.AttendanceGroupConvert;
 import com.hrms.business.attendance.dto.AttendanceClockRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceCorrectionCreateRequestDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupCreateOrUpdateRequestDTO;
+import com.hrms.business.attendance.dto.AttendanceGroupMemberRangeDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupQueryDTO;
 import com.hrms.business.attendance.dto.AttendanceGroupRecordQueryDTO;
 import com.hrms.business.attendance.dto.AttendanceLeaveManageQueryDTO;
@@ -28,7 +31,7 @@ import com.hrms.business.attendance.entity.EmployeeSnapshotEntity;
 import com.hrms.business.attendance.entity.LeaveBalanceEntity;
 import com.hrms.business.attendance.entity.LeaveRequestEntity;
 import com.hrms.business.attendance.entity.DictDataEntity;
-import com.hrms.business.attendance.enums.ClockPeriodEnum;
+import com.hrms.business.attendance.common.enums.ClockPeriodEnum;
 import com.hrms.business.attendance.mapper.AttendanceGroupMapper;
 import com.hrms.business.attendance.mapper.AttendanceCorrectionMapper;
 import com.hrms.business.attendance.mapper.AttendanceGroupMemberMapper;
@@ -42,6 +45,7 @@ import com.hrms.business.attendance.mq.event.AttendanceClockCreatedEvent;
 import com.hrms.business.attendance.mq.handler.AttendanceClockEventHandler;
 import com.hrms.business.attendance.mq.event.AttendanceMonthlyStatGenerateMessage;
 import com.hrms.business.attendance.mq.producer.AttendanceMonthlyStatGenerateProducer;
+import com.hrms.business.attendance.service.AttendanceCalendarConfigService;
 import com.hrms.business.attendance.service.AttendanceService;
 import com.hrms.business.attendance.vo.AttendanceClockVO;
 import com.hrms.business.attendance.vo.AttendanceCalendarDayVO;
@@ -67,7 +71,9 @@ import com.hrms.common.web.PageResult;
 import com.hrms.system.auth.entity.RoleEntity;
 import com.hrms.system.auth.service.RoleService;
 import com.hrms.system.organization.service.DeptService;
+import com.hrms.system.organization.service.PostService;
 import com.hrms.system.organization.vo.DeptDetailVO;
+import com.hrms.system.organization.vo.PostVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
@@ -91,11 +97,15 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.Collections;
 import java.math.RoundingMode;
+
+import static com.hrms.business.attendance.common.constant.AttendanceServiceConstant.*;
+import static com.hrms.business.attendance.common.enums.AttendanceServiceErrorEnum.*;
 
 /**
  * 考勤管理服务实现。
@@ -105,34 +115,11 @@ import java.math.RoundingMode;
 @Slf4j
 public class AttendanceServiceImpl implements AttendanceService {
 
-    private static final ErrorCode ATTENDANCE_GROUP_NOT_FOUND = new ErrorCode(40052, "考勤组不存在");
-
-    private static final ErrorCode ATTENDANCE_EMPLOYEE_NOT_FOUND = new ErrorCode(40053, "当前用户未关联员工档案");
-
-    private static final ErrorCode ATTENDANCE_CLOCK_DUPLICATE = new ErrorCode(40054, "当前时段已打卡");
-
-    private static final ErrorCode ATTENDANCE_CLOCK_RANGE_INVALID = new ErrorCode(40055, "不在允许的打卡范围内");
-
-    private static final ErrorCode ATTENDANCE_CORRECTION_DUPLICATE = new ErrorCode(40056, "当前日期和类型已有审批中的补卡申请");
-
-    private static final ErrorCode LEAVE_DAYS_INVALID = new ErrorCode(40057, "请假天数必须大于0且不超过30天");
-
-    private static final ErrorCode ATTENDANCE_GROUP_MEMBER_EXISTS = new ErrorCode(40058, "考勤组已关联成员，无法删除");
-
-    private static final ErrorCode ATTENDANCE_GROUP_RECORD_EXISTS = new ErrorCode(40059, "考勤组已产生打卡记录，无法删除");
-
-    private static final long GROUP_RECORD_MAX_DAYS = 31L;
-
-    private static final int DASHBOARD_RANKING_LIMIT = 10;
-
-    private static final Set<String> DASHBOARD_FULL_SCOPE_ROLE_CODES = Set.of("HR", "HR_TEST", "ADMIN", "ROLE_ADMIN");
-
-    private static final Set<String> LEAVE_MANAGE_FULL_SCOPE_ROLE_CODES = Set.of("HR", "HR_TEST", "ADMIN", "ROLE_ADMIN");
-
-    private static final String LEAVE_MANAGE_MANAGER_ROLE_CODE = "MANAGER";
-
+    // 考勤日历配置服务
+    private final AttendanceCalendarConfigService attendanceCalendarConfigService;
+    // 考勤组Mapper
     private final AttendanceGroupMapper attendanceGroupMapper;
-
+    // 考勤组成员Mapper
     private final AttendanceGroupMemberMapper attendanceGroupMemberMapper;
 
     private final AttendanceRecordMapper attendanceRecordMapper;
@@ -148,25 +135,25 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final AttendanceDictDataMapper dictDataMapper;
 
     private final StringRedisTemplate stringRedisTemplate;
-
+    // 打卡成功生产者
     private final AttendanceClockCreatedProducer attendanceClockCreatedProducer;
-
+    //月度考勤生产者
     private final AttendanceMonthlyStatGenerateProducer attendanceMonthlyStatGenerateProducer;
 
-    private final AttendanceClockEventHandler attendanceClockEventHandler;
-
     private final ApprovalEngine approvalEngine;
-
+    // 审批任务
     private final ApprovalTaskService approvalTaskService;
 
     private final DeptService deptService;
+
+    private final PostService postService;
 
     private final RoleService roleService;
 
     /**
      * 分页查询考勤组。
      * @param queryDTO 查询参数
-     * @return
+     * @return 分页结果
      */
     @Override
     public PageResult<AttendanceGroupPageVO> pageAttendanceGroups(AttendanceGroupQueryDTO queryDTO) {
@@ -179,6 +166,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         Page<AttendanceGroupEntity> resultPage = attendanceGroupMapper.selectPage(page, wrapper);
         List<AttendanceGroupPageVO> records = resultPage.getRecords().stream()
                 .map(AttendanceGroupConvert::toPageVO)
+                .map(this::fillAttendanceGroupScope)
                 .toList();
         return PageResult.of(records, resultPage.getTotal(), queryDTO.getPageNum(), queryDTO.getPageSize());
     }
@@ -186,14 +174,17 @@ public class AttendanceServiceImpl implements AttendanceService {
     /**
      * 创建考勤组。
      * @param requestDTO 创建参数
-     * @return
+     * @return 创建后的考勤组
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public AttendanceGroupPageVO createAttendanceGroup(AttendanceGroupCreateOrUpdateRequestDTO requestDTO) {
         AttendanceGroupEntity entity = AttendanceGroupConvert.toEntity(requestDTO);
+        fillGroupScope(entity, requestDTO.getMemberRange());
         attendanceGroupMapper.insert(entity);
+        rebuildGroupMembers(entity.getId(), requestDTO.getMemberRange());
         evictGroupRuleCache(entity.getId());
-        return AttendanceGroupConvert.toPageVO(entity);
+        return fillAttendanceGroupScope(AttendanceGroupConvert.toPageVO(entity));
 
     }
 
@@ -205,22 +196,22 @@ public class AttendanceServiceImpl implements AttendanceService {
      */
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public AttendanceGroupPageVO updateAttendanceGroup(Long id, AttendanceGroupCreateOrUpdateRequestDTO requestDTO) {
         AttendanceGroupEntity entity = getRequiredAttendanceGroup(id);
+        String previousScopeType = entity.getScopeType();
+        String previousScopeValue = entity.getScopeValue();
         AttendanceGroupConvert.fillEntity(entity, requestDTO);
+        fillGroupScope(entity, requestDTO.getMemberRange());
         attendanceGroupMapper.updateById(entity);
+        if (isGroupScopeChanged(previousScopeType, previousScopeValue, entity.getScopeType(), entity.getScopeValue())) {
+            rebuildGroupMembers(id, requestDTO.getMemberRange());
+        }
         evictGroupRuleCache(id);
-        return AttendanceGroupConvert.toPageVO(entity);
+        return fillAttendanceGroupScope(AttendanceGroupConvert.toPageVO(entity));
     }
 
-    /**
-     * 分页查询考勤组打卡记录。
-     *
-     * @param groupId  考勤组ID
-     * @param queryDTO 查询参数
-     * @return 考勤组打卡记录分页结果
-     * 本方法使用的工具类: PageResult(hrms-common),ChronoUnit(JDK),StrUtil(hutool)
-     */
+
     /**
      * 逻辑删除考勤组。
      *
@@ -244,6 +235,14 @@ public class AttendanceServiceImpl implements AttendanceService {
         evictGroupRuleCache(id);
     }
 
+    /**
+     * 分页查询考勤组打卡记录。
+     *
+     * @param groupId  考勤组ID
+     * @param queryDTO 查询参数
+     * @return 考勤组打卡记录分页结果
+     * 本方法使用的工具类: PageResult(hrms-common),ChronoUnit(JDK),StrUtil(hutool)
+     */
     @Override
     public PageResult<AttendanceGroupRecordPageVO> pageGroupAttendanceRecords(Long groupId,
                                                                               AttendanceGroupRecordQueryDTO queryDTO) {
@@ -353,6 +352,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                                                                    Map<Long, String> deptNameCache,
                                                                    AttendanceDateRange dateRange,
                                                                    AttendanceGroupRecordQueryDTO queryDTO) {
+        LocalDate today = LocalDate.now();
         List<LocalDate> dates = IntStream.rangeClosed(0, (int) ChronoUnit.DAYS.between(dateRange.startDate(), dateRange.endDate()))
                 .mapToObj(dateRange.startDate()::plusDays)
                 .toList();
@@ -367,6 +367,9 @@ public class AttendanceServiceImpl implements AttendanceService {
                 continue;
             }
             for (LocalDate date : dates) {
+                if (date.isAfter(today)) {
+                    continue;
+                }
                 if (!isMemberEffectiveOnDate(members, employeeId, date)) {
                     continue;
                 }
@@ -739,9 +742,7 @@ public class AttendanceServiceImpl implements AttendanceService {
      * 本方法使用的工具类: Stream(JDK)
      */
     private List<LocalDate> listWorkdays(LocalDate startDate, LocalDate endDate) {
-        return startDate.datesUntil(endDate.plusDays(1))
-                .filter(date -> date.getDayOfWeek().getValue() <= 5)
-                .toList();
+        return attendanceCalendarConfigService.listWorkdays(startDate, endDate);
     }
 
     /**
@@ -841,11 +842,23 @@ public class AttendanceServiceImpl implements AttendanceService {
     private AttendanceSummaryDashboardVO buildDashboardVO(AttendanceDashboardAccumulator accumulator,
                                                           BigDecimal leaveCount,
                                                           Map<Long, String> deptNameCache) {
-        int expectedDays = accumulator.dailyStats.values().stream().mapToInt(stats -> stats.expectedDays).sum();
-        int actualDays = accumulator.dailyStats.values().stream().mapToInt(stats -> stats.actualDays).sum();
-        int lateCount = accumulator.dailyStats.values().stream().mapToInt(stats -> stats.lateCount).sum();
-        int earlyLeaveCount = accumulator.dailyStats.values().stream().mapToInt(stats -> stats.earlyLeaveCount).sum();
-        int absentCount = accumulator.dailyStats.values().stream().mapToInt(stats -> stats.absentCount).sum();
+        // 计算考勤统计看板数据
+        int expectedDays = accumulator.dailyStats.values().stream().
+                mapToInt(stats -> stats.expectedDays).sum();
+        // 计算实际出勤天数
+        int actualDays = accumulator.dailyStats.values().stream()
+                .mapToInt(stats -> stats.actualDays).sum();
+        // 计算迟到次数
+        int lateCount = accumulator.dailyStats.values().stream()
+                .mapToInt(stats -> stats.lateCount).sum();
+        //计算早退次数
+        int earlyLeaveCount = accumulator.dailyStats.values().stream()
+
+                .mapToInt(stats -> stats.earlyLeaveCount).sum();
+        // 计算缺勤次数
+        int absentCount = accumulator.dailyStats.values().stream()
+                .mapToInt(stats -> stats.absentCount).sum();
+        // 计算每日考勤趋势
         List<AttendanceTrendPointVO> dailyTrend = accumulator.dailyStats.entrySet().stream()
                 .map(entry -> AttendanceTrendPointVO.builder()
                         .date(entry.getKey())
@@ -854,6 +867,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                         .attendanceRate(calculateAttendanceRate(entry.getValue().actualDays, entry.getValue().expectedDays))
                         .build())
                 .toList();
+        // 计算部门考勤分布
         List<AttendanceDeptDistributionVO> deptDistribution = accumulator.deptStats.entrySet().stream()
                 .sorted(Comparator.comparing(entry -> entry.getKey() == null ? Long.MAX_VALUE : entry.getKey()))
                 .map(entry -> AttendanceDeptDistributionVO.builder()
@@ -864,6 +878,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                         .attendanceRate(calculateAttendanceRate(entry.getValue().actualDays, entry.getValue().expectedDays))
                         .build())
                 .toList();
+        // 计算员工考勤排名
         List<AttendanceEmployeeRankingVO> employeeRanking = accumulator.employeeStats.values().stream()
                 .filter(stats -> stats.abnormalCount() > 0)
                 .sorted(Comparator.comparingInt(DashboardEmployeeStats::abnormalCount).reversed()
@@ -903,6 +918,7 @@ public class AttendanceServiceImpl implements AttendanceService {
      * 本方法使用的工具类: AttendanceSummaryDashboardVO(本模块vo包)
      */
     private AttendanceSummaryDashboardVO emptyDashboard(List<LocalDate> workdays) {
+        // 计算每日考勤趋势
         List<AttendanceTrendPointVO> dailyTrend = workdays.stream()
                 .map(date -> AttendanceTrendPointVO.builder()
                         .date(date)
@@ -936,9 +952,20 @@ public class AttendanceServiceImpl implements AttendanceService {
      */
     private List<AttendanceExceptionPieVO> buildExceptionPie(int lateCount, int earlyLeaveCount, int absentCount) {
         return List.of(
-                AttendanceExceptionPieVO.builder().type("LATE").count(lateCount).build(),
-                AttendanceExceptionPieVO.builder().type("EARLY_LEAVE").count(earlyLeaveCount).build(),
-                AttendanceExceptionPieVO.builder().type("ABSENCE").count(absentCount).build()
+                //迟到
+                AttendanceExceptionPieVO.builder()
+                        .type("LATE")
+                        .count(lateCount)
+                        .build(),
+                //早退
+                AttendanceExceptionPieVO.builder()
+                        .type("EARLY_LEAVE")
+                        .count(earlyLeaveCount).build(),
+                //缺勤
+                AttendanceExceptionPieVO.builder()
+                        .type("ABSENCE")
+                        .count(absentCount)
+                        .build()
         );
     }
 
@@ -987,13 +1014,16 @@ public class AttendanceServiceImpl implements AttendanceService {
     private LeaveManageScope resolveLeaveManageScope(Long requestedDeptId) {
         Long currentUserId = SecurityContextHolder.getUserId();
         List<RoleEntity> roles = roleService.getRolesByUserId(currentUserId);
+        // 判断是否拥有请假管理全量权限
         if (hasLeaveManageFullScope(roles)) {
             return new LeaveManageScope(requestedDeptId == null ? null : Set.of(requestedDeptId));
         }
+        // 判断是否拥有请假管理主管权限
         if (!hasLeaveManageManagerScope(roles)) {
             throw new GlobalException(ErrorCode.FORBIDDEN, "无权查看请假管理列表");
         }
         Long currentDeptId = SecurityContextHolder.getDeptId();
+        // 尝试从当前用户快照中获取部门ID
         if (currentDeptId == null) {
             currentDeptId = getCurrentEmployeeSnapshot().getDeptId();
         }
@@ -1017,9 +1047,11 @@ public class AttendanceServiceImpl implements AttendanceService {
         if (roles == null || roles.isEmpty()) {
             return false;
         }
-        return roles.stream().anyMatch(role -> role != null
-                && StrUtil.isNotBlank(role.getRoleCode())
-                && LEAVE_MANAGE_FULL_SCOPE_ROLE_CODES.contains(role.getRoleCode().toUpperCase()));
+        return roles.stream()
+                .anyMatch(role -> role != null // 角色不为空
+                && StrUtil.isNotBlank(role.getRoleCode()) // 角色代码不为空
+                && LEAVE_MANAGE_FULL_SCOPE_ROLE_CODES.contains(role.getRoleCode().toUpperCase())// 角色代码在全量权限集合中
+                );
     }
 
     /**
@@ -1047,15 +1079,18 @@ public class AttendanceServiceImpl implements AttendanceService {
      * 本方法使用的工具类: LambdaQueryWrapper(mybatis-plus),StrUtil(hutool),Collections(JDK)
      */
     private List<EmployeeSnapshotEntity> listLeaveManageEmployees(Set<Long> targetDeptIds, String keyword) {
+        //若目标部门为空，则返回空列表
         if (targetDeptIds != null && targetDeptIds.isEmpty()) {
             return List.of();
         }
+        // 构建查询条件
         LambdaQueryWrapper<EmployeeSnapshotEntity> wrapper = new LambdaQueryWrapper<EmployeeSnapshotEntity>()
                 .ne(EmployeeSnapshotEntity::getEmploymentStatus, 4)
                 .and(StrUtil.isNotBlank(keyword), query -> query
                         .like(EmployeeSnapshotEntity::getEmployeeName, keyword.trim())
                         .or()
                         .like(EmployeeSnapshotEntity::getEmployeeNo, keyword.trim()));
+        // 添加部门过滤条件
         if (targetDeptIds != null) {
             wrapper.in(EmployeeSnapshotEntity::getDeptId, targetDeptIds);
         }
@@ -1099,8 +1134,10 @@ public class AttendanceServiceImpl implements AttendanceService {
                                                                Map<String, String> leaveTypeDescMap,
                                                                Map<Long, ApprovalBrief> approvalBriefCache,
                                                                Long currentUserId) {
+        //解析审批摘要
         ApprovalBrief approvalBrief = resolveApprovalBrief(leave.getApprovalInstanceId(), approvalBriefCache, currentUserId);
         Long deptId = employee == null ? null : employee.getDeptId();
+        //请假类型
         String leaveTypeDesc = leaveTypeDescMap.getOrDefault(leave.getLeaveType(), leave.getLeaveType());
         return AttendanceLeaveManageItemVO.builder()
                 .id(leave.getId())
@@ -1137,6 +1174,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         if (approvalInstanceId == null) {
             return ApprovalBrief.empty();
         }
+        //若
         if (cache.containsKey(approvalInstanceId)) {
             return cache.get(approvalInstanceId);
         }
@@ -1245,15 +1283,23 @@ public class AttendanceServiceImpl implements AttendanceService {
         LocalDateTime now = LocalDateTime.now();
         LocalDate recordDate = now.toLocalDate();
         AttendanceGroupEntity group = resolveEmployeeAttendanceGroup(employee.getId(), recordDate);
+        //验证打卡时间范围
         validateClockRange(group, requestDTO, clientIp);
 
         AttendanceRecordEntity existing = attendanceRecordMapper.selectByEmployeeAndDate(employee.getId(), recordDate);
+        //确定打卡周期
         ClockPeriodEnum period = resolveClockPeriod(requestDTO, existing);
+        //计算打卡状态
         String status = calculateClockStatus(group, period, now.toLocalTime());
+        //构建打卡记录
         AttendanceRecordEntity record = buildClockRecord(employee.getId(), group.getId(), recordDate, now, period, status, requestDTO, clientIp);
-
+        //持久化打卡记录
         persistClockRecord(existing, record, period);
+        //删除个人月历缓存
+        evictCalendarCache(employee.getId(), recordDate);
+        //构建打卡创建事件
         AttendanceClockCreatedEvent event = buildClockCreatedEvent(record, period, status, now, requestDTO.getDeviceInfo());
+        //发布打卡创建事件
         publishClockCreatedEvent(event);
         return buildClockVO(record, period, status, now);
     }
@@ -1266,13 +1312,25 @@ public class AttendanceServiceImpl implements AttendanceService {
     @Override
     public AttendanceCalendarVO getMyCalendar(String yearMonth) {
         EmployeeSnapshotEntity employee = getCurrentEmployeeSnapshot();
+        //解析年月
         YearMonth parsedMonth = YearMonth.parse(yearMonth);
+        //构建缓存键
         String cacheKey = AttendanceCacheKeys.monthCalendar(employee.getId(), parsedMonth.toString());
+        //从缓存获取日历数据
         String cached = stringRedisTemplate.opsForValue().get(cacheKey);
+        //如果缓存存在则返回缓存数据
+        AttendanceGroupEntity currentGroup = resolveCurrentAttendanceGroupOrNull(employee.getId(), LocalDate.now());
         if (StrUtil.isNotBlank(cached)) {
-            return JSONUtil.toBean(cached, AttendanceCalendarVO.class);
+            return AttendanceCalendarSummaryEnricher.enrich(
+                    JSONUtil.toBean(cached, AttendanceCalendarVO.class),
+                    currentGroup
+            );
         }
+
+        //构建日历数据
         AttendanceCalendarVO calendar = buildCalendarFromDatabase(employee.getId(), parsedMonth);
+        //增强VO
+        calendar = AttendanceCalendarSummaryEnricher.enrich(calendar, currentGroup);
         stringRedisTemplate.opsForValue().set(cacheKey, JSONUtil.toJsonStr(calendar), Duration.ofHours(6));
         return calendar;
     }
@@ -1294,11 +1352,13 @@ public class AttendanceServiceImpl implements AttendanceService {
         List<LocalDate> workdays = listWorkdays(startDate, endDate);
         Map<Long, String> deptNameCache = new HashMap<>();
         List<EmployeeSnapshotEntity> employees = listDashboardEmployees(scope.targetDeptIds());
+        //如果部门下没有员工则返回空看板
         if (employees.isEmpty()) {
             return emptyDashboard(workdays);
         }
         List<Long> employeeIds = employees.stream().map(EmployeeSnapshotEntity::getId).distinct().toList();
         List<AttendanceGroupMemberEntity> members = listDashboardMembers(employeeIds, startDate, endDate);
+        //如果部门下没有成员则返回空看板
         if (members.isEmpty()) {
             return emptyDashboard(workdays);
         }
@@ -1308,17 +1368,22 @@ public class AttendanceServiceImpl implements AttendanceService {
         List<EmployeeSnapshotEntity> statEmployees = employees.stream()
                 .filter(employee -> memberEmployeeIds.contains(employee.getId()))
                 .toList();
+        //如果成员中没有需要统计的员工则返回空看板
         if (statEmployees.isEmpty()) {
             return emptyDashboard(workdays);
         }
         List<Long> statEmployeeIds = statEmployees.stream().map(EmployeeSnapshotEntity::getId).distinct().toList();
+        //查询考勤统计打卡记录
         Map<String, AttendanceRecordEntity> recordMap = listDashboardRecords(statEmployeeIds, startDate, endDate);
+        //查询考勤统计请假记录
         List<LeaveRequestEntity> leaves = listDashboardLeaves(statEmployeeIds, startDate, endDate);
+        //构建请假日期键集合
         Set<String> leaveDateKeys = buildLeaveDateKeys(leaves, startDate, endDate);
         BigDecimal leaveCount = leaves.stream()
                 .map(LeaveRequestEntity::getTotalDays)
-                .filter(days -> days != null)
+                .filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        //构建考勤统计累加器
         AttendanceDashboardAccumulator accumulator = buildDashboardAccumulator(
                 statEmployees, members, recordMap, leaveDateKeys, workdays);
         return buildDashboardVO(accumulator, leaveCount, deptNameCache);
@@ -1333,19 +1398,29 @@ public class AttendanceServiceImpl implements AttendanceService {
      */
     @Override
     public PageResult<AttendanceLeaveManageItemVO> pageLeaveManageList(AttendanceLeaveManageQueryDTO queryDTO) {
+        //解析查询参数
         AttendanceLeaveManageQueryDTO safeQuery = queryDTO == null ? new AttendanceLeaveManageQueryDTO() : queryDTO;
+        //解析年月
         YearMonth yearMonth = parseLeaveManageYearMonth(safeQuery.getYearMonth());
+        //解析年月
         LocalDate monthStart = yearMonth.atDay(1);
+        //获取月结束日期
         LocalDate monthEnd = yearMonth.atEndOfMonth();
+        //解析部门ID
         LeaveManageScope scope = resolveLeaveManageScope(safeQuery.getDeptId());
+        //查询请假管理员工范围
         List<EmployeeSnapshotEntity> employees = listLeaveManageEmployees(scope.targetDeptIds(), safeQuery.getKeyword());
+        //解析页码
         int pageNum = normalizePageNum(safeQuery.getPageNum());
+        //解析每页大小
         int pageSize = normalizePageSize(safeQuery.getPageSize());
         if (employees.isEmpty()) {
             return PageResult.of(List.of(), 0, pageNum, pageSize);
         }
+        //构建员工ID到员工信息的映射
         Map<Long, EmployeeSnapshotEntity> employeeMap = employees.stream()
                 .collect(Collectors.toMap(EmployeeSnapshotEntity::getId, employee -> employee, (a, b) -> a));
+        //分页查询考勤管理列表
         Page<LeaveRequestEntity> page = Page.of(pageNum, pageSize);
         LambdaQueryWrapper<LeaveRequestEntity> wrapper = new LambdaQueryWrapper<LeaveRequestEntity>()
                 .in(LeaveRequestEntity::getEmployeeId, employeeMap.keySet())
@@ -1355,31 +1430,40 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .orderByDesc(LeaveRequestEntity::getCreateTime)
                 .orderByDesc(LeaveRequestEntity::getId);
         Page<LeaveRequestEntity> resultPage = leaveRequestMapper.selectPage(page, wrapper);
+        //构建请假管理列表VO
         Map<Long, String> deptNameCache = new HashMap<>();
+        //加载请假类型描述映射
         Map<String, String> leaveTypeDescMap = loadLeaveTypeDescMap();
+        //审批缓存
         Map<Long, ApprovalBrief> approvalBriefCache = new HashMap<>();
         Long currentUserId = SecurityContextHolder.getUserId();
+
         List<AttendanceLeaveManageItemVO> records = resultPage.getRecords().stream()
                 .map(leave -> buildLeaveManageItemVO(leave, employeeMap.get(leave.getEmployeeId()),
                         deptNameCache, leaveTypeDescMap, approvalBriefCache, currentUserId))
                 .toList();
         return PageResult.of(records, resultPage.getTotal(), pageNum, pageSize);
     }
+
+
     /**
      * 创建补卡申请。
      * @param requestDTO 创建参数
      * @return 补卡申请结果
      */
-
     @Override
     @Transactional(rollbackFor = Exception.class)
     public AttendanceCorrectionCreateVO createCorrection(AttendanceCorrectionCreateRequestDTO requestDTO) {
+        //获取当前员工离职信息
         EmployeeSnapshotEntity employee = getCurrentEmployeeSnapshot();
+        //解析补卡类型
         ClockPeriodEnum period = ClockPeriodEnum.parse(requestDTO.getClockType());
         if (period == null) {
             throw new GlobalException(ErrorCode.PARAM_FORMAT_ERROR, "补卡类型不正确");
         }
+        // 检查补卡记录是否重复
         checkCorrectionDuplicate(employee.getId(), requestDTO.getDate(), period);
+        // 获取或创建补卡记录
         AttendanceRecordEntity record = getOrCreateCorrectionRecord(employee.getId(), requestDTO.getDate());
 
         AttendanceCorrectionEntity correction = new AttendanceCorrectionEntity();
@@ -1391,7 +1475,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         correction.setApprovalStatus(1);
         attendanceCorrectionMapper.insert(correction);
 
-        // TODO 跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起补卡审批。
+        // 跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起补卡审批。
         Long approvalInstanceId = approvalEngine.startApproval(
                 ApprovalTypeEnum.CORRECTION.getCode(),
                 correction.getId(),
@@ -1403,6 +1487,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         correction.setApprovalInstanceId(approvalInstanceId);
         attendanceCorrectionMapper.updateById(correction);
         attendanceRecordMapper.updateCorrectionStatus(record.getId(), "PENDING");
+        //
         evictCalendarCache(employee.getId(), requestDTO.getDate());
         return buildCorrectionCreateVO(correction);
     }
@@ -1432,6 +1517,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     public List<LeaveBalanceVO> listLeaveBalances() {
         EmployeeSnapshotEntity employee = getCurrentEmployeeSnapshot();
         int currentYear = LocalDate.now().getYear();
+        //查询当前员工指定年份的假期余额
         List<LeaveBalanceEntity> balances = leaveBalanceMapper.selectList(new LambdaQueryWrapper<LeaveBalanceEntity>()
                 .eq(LeaveBalanceEntity::getEmployeeId, employee.getId())
                 .eq(LeaveBalanceEntity::getBalanceYear, currentYear)
@@ -1444,6 +1530,7 @@ public class AttendanceServiceImpl implements AttendanceService {
             LeaveBalanceVO vo = toLeaveBalanceVO(balance);
             balanceMap.putIfAbsent(vo.getLeaveType(), vo);
         }
+        // 为缺失的基础假期类型补默认 0 余额
         appendDefaultLeaveBalance(balanceMap, "annual", "年假");
         appendDefaultLeaveBalance(balanceMap, "sick", "病假");
         appendDefaultLeaveBalance(balanceMap, "personal", "事假");
@@ -1569,6 +1656,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         EmployeeSnapshotEntity employee = getCurrentEmployeeSnapshot();
         String leaveType = resolveLeaveType(requestDTO);
         BigDecimal totalDays = calculateLeaveDays(requestDTO);
+        // 验证请假天数
         if (totalDays.compareTo(BigDecimal.ZERO) <= 0 || totalDays.compareTo(BigDecimal.valueOf(30)) > 0) {
             throw new GlobalException(LEAVE_DAYS_INVALID);
         }
@@ -1584,7 +1672,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         entity.setApprovalStatus(1);
         leaveRequestMapper.insert(entity);
 
-        // TODO 跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起请假审批。
+        //  跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起请假审批。
         Long approvalInstanceId = approvalEngine.startApproval(
                 ApprovalTypeEnum.LEAVE_REQUEST.getCode(),
                 entity.getId(),
@@ -1595,6 +1683,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         );
         entity.setApprovalInstanceId(approvalInstanceId);
         leaveRequestMapper.updateById(entity);
+        // 删除个人月历缓存
         evictCalendarCache(employee.getId(), requestDTO.getStartDate());
         return buildLeaveCreateVO(entity);
     }
@@ -1786,9 +1875,7 @@ public class AttendanceServiceImpl implements AttendanceService {
      * 本方法使用的工具类: IntStream(JDK)
      */
     private int countWeekdays(LocalDate startDate, LocalDate endDate) {
-        return (int) startDate.datesUntil(endDate.plusDays(1))
-                .filter(date -> date.getDayOfWeek().getValue() <= 5)
-                .count();
+        return attendanceCalendarConfigService.countWorkdays(startDate, endDate);
     }
 
     /**
@@ -1977,8 +2064,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     /**
-     * 删除个人月历缓存。
-     *
+     * 删除个人月历缓存
      * @param employeeId 员工ID
      * @param date       日期
      * 本方法使用的工具类: AttendanceCacheKeys(本模块cache包),StringRedisTemplate(spring-data-redis)
@@ -2146,6 +2232,25 @@ public class AttendanceServiceImpl implements AttendanceService {
         return group;
     }
 
+    /**
+     * 解析员工当前生效考勤组，未配置时返回空。
+     *
+     * @param employeeId  员工ID
+     * @param targetDate 目标日期
+     * @return 当前生效考勤组，为空表示未配置
+     * 本方法使用的工具类: 无
+     */
+    private AttendanceGroupEntity resolveCurrentAttendanceGroupOrNull(Long employeeId, LocalDate targetDate) {
+        try {
+            return resolveEmployeeAttendanceGroup(employeeId, targetDate);
+        } catch (GlobalException ex) {
+            if (ATTENDANCE_GROUP_NOT_FOUND.getCode() == ex.getErrorCode().getCode()) {
+                return null;
+            }
+            throw ex;
+        }
+    }
+
 //    /**
 //     * 已停用：临时解析员工所属考勤组，仅作历史临时逻辑参考；当前已替换为 hr_attendance_group_member 生效关系表解析。
 //     *
@@ -2200,9 +2305,12 @@ public class AttendanceServiceImpl implements AttendanceService {
      */
     private boolean isGpsAllowed(String gpsScope, BigDecimal latitude, BigDecimal longitude) {
         try {
+            // 解析 JSON 配置
             JSONObject json = JSONUtil.parseObj(gpsScope);
+            // 获取中心点纬度和经度
             double centerLat = json.getDouble("latitude", json.getDouble("lat", 0D));
             double centerLng = json.getDouble("longitude", json.getDouble("lng", 0D));
+            // 获取半径
             double radius = json.getDouble("radius", 0D);
             if (radius <= 0) {
                 return true;
@@ -2266,10 +2374,12 @@ public class AttendanceServiceImpl implements AttendanceService {
      * 本方法使用的工具类: 无
      */
     private String calculateClockStatus(AttendanceGroupEntity group, ClockPeriodEnum period, LocalTime clockTime) {
+        // 如果是打卡，则判断是否迟到
         if (ClockPeriodEnum.CLOCK_IN.equals(period)) {
             LocalTime lateLine = group.getWorkStartTime().plusMinutes(group.getLateThresholdMinutes());
             return clockTime.isAfter(lateLine) ? "LATE" : "NORMAL";
         }
+        // 如果是退卡，则判断是否早退
         LocalTime earlyLine = group.getWorkEndTime().minusMinutes(group.getEarlyLeaveThresholdMinutes());
         return clockTime.isBefore(earlyLine) ? "EARLY_LEAVE" : "NORMAL";
     }
@@ -2347,12 +2457,15 @@ public class AttendanceServiceImpl implements AttendanceService {
                 return;
             }
             record.setId(existing.getId());
+            // 更新记录
             int updated = ClockPeriodEnum.CLOCK_IN.equals(period)
                     ? attendanceRecordMapper.updateClockIn(record)
                     : attendanceRecordMapper.updateClockOut(record);
+            // 如果更新行数为0，则抛出重复打卡异常
             if (updated == 0) {
                 throw new GlobalException(ATTENDANCE_CLOCK_DUPLICATE);
             }
+            // 如果更新行数为0，则抛出重复打卡异常
         } catch (DuplicateKeyException ex) {
             throw new GlobalException(ATTENDANCE_CLOCK_DUPLICATE);
         }
@@ -2437,6 +2550,440 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .clockGps(clockGps)
                 .clientIp(clientIp)
                 .build();
+    }
+
+    /**
+     * 填充考勤组适用范围存储字段。
+     *
+     * @param entity      考勤组实体
+     * @param memberRange 适用范围请求
+     * 本方法使用的工具类: JSONUtil(hutool),GlobalException(hrms-common)
+     */
+    private void fillGroupScope(AttendanceGroupEntity entity, AttendanceGroupMemberRangeDTO memberRange) {
+        if (memberRange == null || StrUtil.isBlank(memberRange.getScopeType())) {
+            entity.setScopeType(null);
+            entity.setScopeValue(null);
+            return;
+        }
+        String scopeType = memberRange.getScopeType().trim().toUpperCase();
+        JSONObject scopeValue = new JSONObject();
+        // 根据适用范围类型进行不同的处理
+        switch (scopeType) {
+            case GROUP_SCOPE_DEPT -> {
+                List<Long> deptIds = normalizeIds(memberRange.getDeptIds());
+                if (deptIds.isEmpty()) {
+                    throw new GlobalException(ErrorCode.PARAM_REQUIRED, "请选择适用部门");
+                }
+                scopeValue.set("deptIds", deptIds);
+            }
+            case GROUP_SCOPE_POST -> {
+                if (memberRange.getPostId() == null) {
+                    throw new GlobalException(ErrorCode.PARAM_REQUIRED, "请选择适用职位");
+                }
+                scopeValue.set("postId", memberRange.getPostId());
+            }
+            case GROUP_SCOPE_EMPLOYEE -> {
+                if (memberRange.getDeptId() == null) {
+                    throw new GlobalException(ErrorCode.PARAM_REQUIRED, "请选择员工所属部门");
+                }
+                List<Long> employeeIds = normalizeIds(memberRange.getEmployeeIds());
+                if (employeeIds.isEmpty()) {
+                    throw new GlobalException(ErrorCode.PARAM_REQUIRED, "请选择指定员工");
+                }
+                scopeValue.set("deptId", memberRange.getDeptId());
+                scopeValue.set("employeeIds", employeeIds);
+            }
+            default -> throw new GlobalException(ErrorCode.PARAM_FORMAT_ERROR, "适用范围类型不正确");
+        }
+        entity.setScopeType(scopeType);
+        entity.setScopeValue(JSONUtil.toJsonStr(scopeValue));
+    }
+
+    /**
+     * 重建考勤组成员关系。
+     *
+     * @param groupId     考勤组ID
+     * @param memberRange 适用范围请求
+     * 本方法使用的工具类: LambdaQueryWrapper(mybatis-plus),GlobalException(hrms-common)
+     */
+    private void rebuildGroupMembers(Long groupId, AttendanceGroupMemberRangeDTO memberRange) {
+        if (groupId == null) {
+            return;
+        }
+        logicDeleteGroupMembers(groupId);
+        if (memberRange == null || StrUtil.isBlank(memberRange.getScopeType())) {
+            return;
+        }
+        List<Long> employeeIds = resolveGroupMemberEmployeeIds(memberRange);
+        if (employeeIds.isEmpty()) {
+            throw new GlobalException(ErrorCode.NOT_FOUND, "适用范围内没有可用员工");
+        }
+        insertGroupMembers(groupId, employeeIds);
+    }
+
+    /**
+     * 解析适用范围内的员工ID。
+     *
+     * @param memberRange 适用范围请求
+     * @return 员工ID列表
+     * 本方法使用的工具类: LambdaQueryWrapper(mybatis-plus),GlobalException(hrms-common)
+     */
+    private List<Long> resolveGroupMemberEmployeeIds(AttendanceGroupMemberRangeDTO memberRange) {
+        String scopeType = memberRange.getScopeType().trim().toUpperCase();
+        return switch (scopeType) {
+            case GROUP_SCOPE_DEPT -> listEmployeesByDeptIds(normalizeIds(memberRange.getDeptIds())).stream()
+                    .map(EmployeeSnapshotEntity::getId)
+                    .distinct()
+                    .toList();
+            case GROUP_SCOPE_POST -> listEmployeesByPostId(memberRange.getPostId()).stream()
+                    .map(EmployeeSnapshotEntity::getId)
+                    .distinct()
+                    .toList();
+            case GROUP_SCOPE_EMPLOYEE -> listEmployeesByIds(normalizeIds(memberRange.getEmployeeIds())).stream()
+                    .filter(employee -> memberRange.getDeptId().equals(employee.getDeptId()))
+                    .map(EmployeeSnapshotEntity::getId)
+                    .distinct()
+                    .toList();
+            default -> throw new GlobalException(ErrorCode.PARAM_FORMAT_ERROR, "适用范围类型不正确");
+        };
+    }
+
+    /**
+     * 填充考勤组适用范围展示字段。
+     *
+     * @param vo 考勤组分页响应
+     * @return 填充后的考勤组分页响应
+     * 本方法使用的工具类: JSONUtil(hutool),Collectors(JDK)
+     */
+    private AttendanceGroupPageVO fillAttendanceGroupScope(AttendanceGroupPageVO vo) {
+        if (vo == null) {
+            return null;
+        }
+        JSONObject scopeValue = parseScopeValue(vo.getScopeValue());
+        if (GROUP_SCOPE_DEPT.equalsIgnoreCase(vo.getScopeType())) {
+            List<Long> deptIds = getLongList(scopeValue, "deptIds");
+            vo.setDeptIds(deptIds);
+            vo.setScopeName(buildDeptScopeName(deptIds));
+        } else if (GROUP_SCOPE_POST.equalsIgnoreCase(vo.getScopeType())) {
+            Long postId = scopeValue.getLong("postId");
+            vo.setPostId(postId);
+            vo.setScopeName(resolvePostName(postId));
+        } else if (GROUP_SCOPE_EMPLOYEE.equalsIgnoreCase(vo.getScopeType())) {
+            Long deptId = scopeValue.getLong("deptId");
+            List<Long> employeeIds = getLongList(scopeValue, "employeeIds");
+            vo.setDeptId(deptId);
+            vo.setEmployeeIds(employeeIds);
+            vo.setScopeName(buildEmployeeScopeName(deptId, employeeIds));
+        } else {
+            vo.setScopeName("暂未配置适用范围");
+        }
+        vo.setMemberCount(countCurrentGroupMembers(vo.getId()));
+        return vo;
+    }
+
+    /**
+     * 逻辑删除考勤组现有成员关系。
+     *
+     * @param groupId 考勤组ID
+     * 本方法使用的工具类: LambdaQueryWrapper(mybatis-plus)
+     */
+    private void logicDeleteGroupMembers(Long groupId) {
+        attendanceGroupMemberMapper.delete(new LambdaQueryWrapper<AttendanceGroupMemberEntity>()
+                .eq(AttendanceGroupMemberEntity::getGroupId, groupId)
+                .eq(AttendanceGroupMemberEntity::getIsDeleted, 0));
+    }
+
+    /**
+     * 判断考勤组适用范围是否发生变化。
+     *
+     * @param previousScopeType 变更前范围类型
+     * @param previousScopeValue 变更前范围值
+     * @param currentScopeType 变更后范围类型
+     * @param currentScopeValue 变更后范围值
+     * @return 是否发生变化
+     * 本方法使用的工具类: Objects(JDK),JSONUtil(hutool)
+     */
+    private boolean isGroupScopeChanged(String previousScopeType,
+                                        String previousScopeValue,
+                                        String currentScopeType,
+                                        String currentScopeValue) {
+        String normalizedPreviousScopeType = normalizeScopeType(previousScopeType);
+        String normalizedCurrentScopeType = normalizeScopeType(currentScopeType);
+        if (!Objects.equals(normalizedPreviousScopeType, normalizedCurrentScopeType)) {
+            return true;
+        }
+        if (normalizedPreviousScopeType == null) {
+            return false;
+        }
+        // 解析变更前范围值
+        JSONObject previousScopeJson = parseScopeValue(previousScopeValue);
+        // 解析当前范围值
+        JSONObject currentScopeJson = parseScopeValue(currentScopeValue);
+        return switch (normalizedPreviousScopeType) {
+            case GROUP_SCOPE_DEPT -> !Objects.equals(
+                    normalizeIds(getLongList(previousScopeJson, "deptIds")),
+                    normalizeIds(getLongList(currentScopeJson, "deptIds"))
+            );
+            case GROUP_SCOPE_POST -> !Objects.equals(
+                    previousScopeJson.getLong("postId"),
+                    currentScopeJson.getLong("postId")
+            );
+            case GROUP_SCOPE_EMPLOYEE -> !Objects.equals(
+                    previousScopeJson.getLong("deptId"),
+                    currentScopeJson.getLong("deptId")
+            ) || !Objects.equals(
+                    normalizeIds(getLongList(previousScopeJson, "employeeIds")),
+                    normalizeIds(getLongList(currentScopeJson, "employeeIds"))
+            );
+            default -> !Objects.equals(previousScopeJson.toString(), currentScopeJson.toString());
+        };
+    }
+
+    /**
+     * 插入考勤组成员关系。
+     *
+     * @param groupId     考勤组ID
+     * @param employeeIds 员工ID列表
+     * 本方法使用的工具类: LocalDate(JDK)
+     */
+    private void insertGroupMembers(Long groupId, List<Long> employeeIds) {
+        LocalDate effectiveStartDate = LocalDate.now();
+        for (Long employeeId : employeeIds) {
+            AttendanceGroupMemberEntity member = new AttendanceGroupMemberEntity();
+            member.setGroupId(groupId);
+            member.setEmployeeId(employeeId);
+            member.setEffectiveStartDate(effectiveStartDate);
+            member.setStatus(1);
+            member.setRemark("考勤组适用范围自动生成");
+            attendanceGroupMemberMapper.insert(member);
+        }
+    }
+
+    /**
+     * 按部门查询有效员工。
+     *
+     * @param deptIds 部门ID列表
+     * @return 员工快照列表
+     * 本方法使用的工具类: LambdaQueryWrapper(mybatis-plus)
+     */
+    private List<EmployeeSnapshotEntity> listEmployeesByDeptIds(List<Long> deptIds) {
+        if (deptIds == null || deptIds.isEmpty()) {
+            return List.of();
+        }
+        return listActiveEmployees(new LambdaQueryWrapper<EmployeeSnapshotEntity>()
+                .in(EmployeeSnapshotEntity::getDeptId, deptIds));
+    }
+
+    /**
+     * 按职位查询有效员工。
+     *
+     * @param postId 职位ID
+     * @return 员工快照列表
+     * 本方法使用的工具类: LambdaQueryWrapper(mybatis-plus)
+     */
+    private List<EmployeeSnapshotEntity> listEmployeesByPostId(Long postId) {
+        if (postId == null) {
+            return List.of();
+        }
+        return listActiveEmployees(new LambdaQueryWrapper<EmployeeSnapshotEntity>()
+                .eq(EmployeeSnapshotEntity::getPostId, postId));
+    }
+
+    /**
+     * 按员工ID查询有效员工。
+     *
+     * @param employeeIds 员工ID列表
+     * @return 员工快照列表
+     * 本方法使用的工具类: LambdaQueryWrapper(mybatis-plus)
+     */
+    private List<EmployeeSnapshotEntity> listEmployeesByIds(List<Long> employeeIds) {
+        if (employeeIds == null || employeeIds.isEmpty()) {
+            return List.of();
+        }
+        return listActiveEmployees(new LambdaQueryWrapper<EmployeeSnapshotEntity>()
+                .in(EmployeeSnapshotEntity::getId, employeeIds));
+    }
+
+    /**
+     * 查询有效员工。
+     *
+     * @param wrapper 查询条件
+     * @return 员工快照列表
+     * 本方法使用的工具类: LambdaQueryWrapper(mybatis-plus),Collections(JDK)
+     */
+    private List<EmployeeSnapshotEntity> listActiveEmployees(LambdaQueryWrapper<EmployeeSnapshotEntity> wrapper) {
+        wrapper.eq(EmployeeSnapshotEntity::getIsDeleted, 0)
+                .ne(EmployeeSnapshotEntity::getEmploymentStatus, 4)
+                .orderByAsc(EmployeeSnapshotEntity::getId);
+        List<EmployeeSnapshotEntity> employees = employeeSnapshotMapper.selectList(wrapper);
+        return employees == null ? Collections.emptyList() : employees;
+    }
+
+    /**
+     * 统计考勤组当前有效成员数量。
+     *
+     * @param groupId 考勤组ID
+     * @return 成员数量
+     * 本方法使用的工具类: LambdaQueryWrapper(mybatis-plus)
+     */
+    private Integer countCurrentGroupMembers(Long groupId) {
+        if (groupId == null) {
+            return 0;
+        }
+        Long count = attendanceGroupMemberMapper.selectCount(new LambdaQueryWrapper<AttendanceGroupMemberEntity>()
+                .eq(AttendanceGroupMemberEntity::getGroupId, groupId)
+                .eq(AttendanceGroupMemberEntity::getStatus, 1)
+                .eq(AttendanceGroupMemberEntity::getIsDeleted, 0));
+        return count == null ? 0 : count.intValue();
+    }
+
+    /**
+     * 解析适用范围 JSON。
+     *
+     * @param scopeValue 适用范围 JSON 字符串
+     * @return JSON 对象
+     * 本方法使用的工具类: JSONUtil(hutool)
+     */
+    private JSONObject parseScopeValue(String scopeValue) {
+        if (StrUtil.isBlank(scopeValue) || !JSONUtil.isTypeJSON(scopeValue)) {
+            return new JSONObject();
+        }
+        try {
+            return JSONUtil.parseObj(scopeValue);
+        } catch (Exception ex) {
+            log.warn("parse attendance group scope value failed, scopeValue={}", scopeValue, ex);
+            return new JSONObject();
+        }
+    }
+
+    /**
+     * 规范化适用范围类型。
+     *
+     * @param scopeType 范围类型
+     * @return 规范化后的范围类型
+     * 本方法使用的工具类: StrUtil(hutool)
+     */
+    private String normalizeScopeType(String scopeType) {
+        if (StrUtil.isBlank(scopeType)) {
+            return null;
+        }
+        return scopeType.trim().toUpperCase();
+    }
+
+    /**
+     * 从 JSON 中读取 Long 列表。
+     *
+     * @param json JSON 对象
+     * @param key  字段名
+     * @return Long 列表
+     * 本方法使用的工具类: JSONArray(hutool)
+     */
+    private List<Long> getLongList(JSONObject json, String key) {
+        JSONArray array = json.getJSONArray(key);
+        if (array == null || array.isEmpty()) {
+            return List.of();
+        }
+        return array.stream()
+                .map(value -> value == null ? null : Long.valueOf(String.valueOf(value)))
+                .filter(value -> value != null)
+                .distinct()
+                .toList();
+    }
+
+    /**
+     * 规范化 ID 列表。
+     *
+     * @param ids ID 列表
+     * @return 去重后的 ID 列表
+     * 本方法使用的工具类: 无
+     */
+    private List<Long> normalizeIds(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        return ids.stream()
+                .filter(id -> id != null && id > 0)
+                .distinct()
+                .toList();
+    }
+
+    /**
+     * 构建部门范围展示名称。
+     *
+     * @param deptIds 部门ID列表
+     * @return 展示名称
+     * 本方法使用的工具类: DeptService(hrms-system-organization),Collectors(JDK)
+     */
+    private String buildDeptScopeName(List<Long> deptIds) {
+        if (deptIds == null || deptIds.isEmpty()) {
+            return "暂未配置适用范围";
+        }
+        return deptIds.stream()
+                .map(this::resolveDeptNameWithoutCache)
+                .filter(StrUtil::isNotBlank)
+                .collect(Collectors.joining("、"));
+    }
+
+    /**
+     * 构建指定员工范围展示名称。
+     *
+     * @param deptId      部门ID
+     * @param employeeIds 员工ID列表
+     * @return 展示名称
+     * 本方法使用的工具类: DeptService(hrms-system-organization)
+     */
+    private String buildEmployeeScopeName(Long deptId, List<Long> employeeIds) {
+        String deptName = resolveDeptNameWithoutCache(deptId);
+        List<Long> normalizedEmployeeIds = normalizeIds(employeeIds);
+        List<String> employeeNames = listEmployeesByIds(normalizedEmployeeIds).stream()
+                .map(EmployeeSnapshotEntity::getEmployeeName)
+                .filter(StrUtil::isNotBlank)
+                .limit(3)
+                .toList();
+        String employeeSummary = employeeNames.isEmpty()
+                ? "指定员工"
+                : String.join("、", employeeNames) + (normalizedEmployeeIds.size() > employeeNames.size() ? "等" + normalizedEmployeeIds.size() + "人" : "");
+        return StrUtil.isBlank(deptName) ? employeeSummary : deptName + " / " + employeeSummary;
+    }
+
+    /**
+     * 解析部门名称。
+     *
+     * @param deptId 部门ID
+     * @return 部门名称
+     * 本方法使用的工具类: DeptService(hrms-system-organization)
+     */
+    private String resolveDeptNameWithoutCache(Long deptId) {
+        if (deptId == null) {
+            return null;
+        }
+        try {
+            DeptDetailVO dept = deptService.getDeptById(deptId);
+            return dept == null ? null : dept.getDeptName();
+        } catch (Exception ex) {
+            log.warn("resolve attendance group dept name failed, deptId={}", deptId, ex);
+            return null;
+        }
+    }
+
+    /**
+     * 解析职位名称。
+     *
+     * @param postId 职位ID
+     * @return 职位名称
+     * 本方法使用的工具类: PostService(hrms-system-organization)
+     */
+    private String resolvePostName(Long postId) {
+        if (postId == null) {
+            return "暂未配置适用范围";
+        }
+        try {
+            PostVO post = postService.getPostById(postId);
+            return post == null ? "职位 " + postId : post.getPostName();
+        } catch (Exception ex) {
+            log.warn("resolve attendance group post name failed, postId={}", postId, ex);
+            return "职位 " + postId;
+        }
     }
 
     /**

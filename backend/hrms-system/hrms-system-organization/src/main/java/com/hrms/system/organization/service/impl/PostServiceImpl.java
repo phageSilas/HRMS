@@ -6,20 +6,27 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
+import com.hrms.common.security.DataScopeUtils;
+import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
 import com.hrms.system.organization.dto.PostCreateDTO;
 import com.hrms.system.organization.dto.PostQueryDTO;
 import com.hrms.system.organization.dto.PostUpdateDTO;
+import com.hrms.system.organization.entity.DeptEntity;
 import com.hrms.system.organization.entity.PostEntity;
+import com.hrms.system.organization.mapper.DeptMapper;
 import com.hrms.system.organization.mapper.PostMapper;
 import com.hrms.system.organization.service.PostService;
 import com.hrms.system.organization.vo.PostVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -30,10 +37,25 @@ import java.util.stream.Collectors;
 public class PostServiceImpl implements PostService {
 
     private final PostMapper postMapper;
+    private final DeptMapper deptMapper;
 
     @Override
     public PageResult<PostVO> listPosts(PostQueryDTO queryDTO) {
         LambdaQueryWrapper<PostEntity> wrapper = Wrappers.lambdaQuery();
+
+        // 数据权限过滤
+        int dataScope = DataScopeUtils.getCurrentUserDataScope();
+        Long userDeptId = SecurityContextHolder.getDeptId();
+        Set<Long> visibleDeptIds = getVisibleDeptIds(dataScope, userDeptId);
+
+        if (visibleDeptIds != null) {
+            // 非全部权限，需要按部门过滤
+            if (visibleDeptIds.isEmpty()) {
+                // 仅本人权限，返回空结果（职位没有 create_by 字段，无法按创建人过滤）
+                return PageResult.of(Collections.emptyList(), 0, queryDTO.getPageNum(), queryDTO.getPageSize());
+            }
+            wrapper.in(PostEntity::getDeptId, visibleDeptIds);
+        }
 
         // 按部门筛选
         if (queryDTO.getDeptId() != null) {
@@ -160,6 +182,14 @@ public class PostServiceImpl implements PostService {
         // 设置序列名称
         vo.setSequenceName(getSequenceName(post.getSequenceCode()));
 
+        // 设置部门名称
+        if (post.getDeptId() != null) {
+            DeptEntity dept = deptMapper.selectById(post.getDeptId());
+            if (dept != null) {
+                vo.setDeptName(dept.getDeptName());
+            }
+        }
+
         return vo;
     }
 
@@ -176,6 +206,98 @@ public class PostServiceImpl implements PostService {
             case "S" -> "支持序列";
             default -> sequenceCode;
         };
+    }
+
+    @Override
+    public java.util.Map<String, Long> countBySequence() {
+        java.util.Map<String, Long> result = new java.util.HashMap<>();
+
+        // 初始化三个序列的计数
+        result.put("M", 0L);
+        result.put("P", 0L);
+        result.put("S", 0L);
+
+        // 数据权限过滤
+        int dataScope = DataScopeUtils.getCurrentUserDataScope();
+        Long userDeptId = SecurityContextHolder.getDeptId();
+        Set<Long> visibleDeptIds = getVisibleDeptIds(dataScope, userDeptId);
+
+        // 查询各序列职位数量（只统计启用的职位）
+        LambdaQueryWrapper<PostEntity> wrapper = Wrappers.lambdaQuery();
+        wrapper.eq(PostEntity::getStatus, 1);
+
+        if (visibleDeptIds != null) {
+            if (visibleDeptIds.isEmpty()) {
+                return result; // 仅本人权限，返回空统计
+            }
+            wrapper.in(PostEntity::getDeptId, visibleDeptIds);
+        }
+
+        List<PostEntity> posts = postMapper.selectList(wrapper);
+
+        // 统计各序列数量
+        for (PostEntity post : posts) {
+            String sequenceCode = post.getSequenceCode();
+            if (sequenceCode != null && result.containsKey(sequenceCode)) {
+                result.put(sequenceCode, result.get(sequenceCode) + 1);
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * 获取用户可见的部门ID集合
+     *
+     * @param dataScope  数据权限范围
+     * @param userDeptId 用户所属部门ID
+     * @return 可见的部门ID集合，null 表示全部权限
+     */
+    private Set<Long> getVisibleDeptIds(int dataScope, Long userDeptId) {
+        if (dataScope == DataScopeUtils.DATA_SCOPE_ALL) {
+            // 全部权限
+            return null;
+        }
+
+        if (userDeptId == null) {
+            // 没有部门信息，返回空集合
+            return Collections.emptySet();
+        }
+
+        if (dataScope == DataScopeUtils.DATA_SCOPE_SELF || dataScope == DataScopeUtils.DATA_SCOPE_DEPT) {
+            // 仅本人或本部门：只返回用户所属部门
+            return Collections.singleton(userDeptId);
+        }
+
+        if (dataScope == DataScopeUtils.DATA_SCOPE_DEPT_AND_SUB) {
+            // 本部门及下属：返回用户所属部门及其所有子部门
+            List<DeptEntity> allDepts = deptMapper.selectList(
+                    Wrappers.<DeptEntity>lambdaQuery()
+                            .eq(DeptEntity::getStatus, 1)
+                            .eq(DeptEntity::getIsDeleted, 0)
+            );
+            return getSubDeptIds(userDeptId, allDepts).stream().collect(Collectors.toSet());
+        }
+
+        return Collections.emptySet();
+    }
+
+    /**
+     * 递归获取子部门ID列表（含自身）
+     */
+    private List<Long> getSubDeptIds(Long deptId, List<DeptEntity> allDepts) {
+        List<Long> result = new java.util.ArrayList<>();
+        result.add(deptId);
+
+        List<DeptEntity> children = allDepts.stream()
+                .filter(dept -> deptId.equals(dept.getParentId()))
+                .collect(Collectors.toList());
+
+        for (DeptEntity child : children) {
+            result.addAll(getSubDeptIds(child.getId(), allDepts));
+        }
+
+        return result;
     }
 
 }

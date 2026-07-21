@@ -3,7 +3,9 @@ package com.hrms.business.salary.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hrms.business.salary.dto.SalaryManagePayslipQueryDTO;
+import com.hrms.business.salary.dto.SalaryPayslipPageQueryDTO;
 import com.hrms.business.salary.entity.SalaryBatchItemEntity;
+import com.hrms.business.salary.vo.SalaryPayslipListVO;
 import com.hrms.business.salary.vo.SalaryManagePayslipPageVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -16,6 +18,43 @@ import java.util.Set;
  */
 @Mapper
 public interface SalaryBatchItemMapper extends BaseMapper<SalaryBatchItemEntity> {
+
+    /**
+     * 分页查询当前员工工资条列表。
+     *
+     * @param page            分页参数
+     * @param employeeId      员工ID
+     * @param query           查询参数
+     * @param visibleStatuses 员工端可见的批次状态
+     * @return 工资条分页记录
+     * 本方法使用的工具类: Page(MyBatis-Plus)
+     */
+    @Select("""
+            <script>
+            SELECT
+                item.id AS id,
+                batch.salary_month AS salaryMonth,
+                item.gross_salary AS grossSalary,
+                item.deduction_total AS deductionTotal,
+                item.net_salary AS netSalary,
+                batch.batch_status AS batchStatus
+            FROM hr_salary_batch_item item
+            INNER JOIN hr_salary_batch batch ON batch.id = item.batch_id AND batch.is_deleted = 0
+            WHERE item.employee_id = #{employeeId}
+              AND batch.batch_status IN
+              <foreach collection="visibleStatuses" item="status" open="(" separator="," close=")">
+                  #{status}
+              </foreach>
+              <if test="query.month != null and query.month != ''">
+                  AND batch.salary_month = #{query.month}
+              </if>
+            ORDER BY batch.salary_month DESC, item.id DESC
+            </script>
+            """)
+    Page<SalaryPayslipListVO> selectEmployeePayslipPage(Page<SalaryPayslipListVO> page,
+                                                        @Param("employeeId") Long employeeId,
+                                                        @Param("query") SalaryPayslipPageQueryDTO query,
+                                                        @Param("visibleStatuses") Set<String> visibleStatuses);
 
     /**
      * 分页查询管理端工资条列表。

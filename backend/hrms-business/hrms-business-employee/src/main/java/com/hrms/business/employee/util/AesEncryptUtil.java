@@ -108,7 +108,7 @@ public class AesEncryptUtil {
      * 解密
      *
      * @param ciphertext 密文（Base64 编码，包含 IV）
-     * @return 明文
+     * @return 明文，解密失败时返回原始值（兼容明文种子数据）
      */
     public static String decrypt(String ciphertext) {
         if (ciphertext == null || ciphertext.isEmpty()) {
@@ -132,8 +132,9 @@ public class AesEncryptUtil {
             byte[] decrypted = cipher.doFinal(encrypted);
             return new String(decrypted, StandardCharsets.UTF_8);
         } catch (Exception e) {
-            log.error("AES 解密失败", e);
-            throw new RuntimeException("解密失败", e);
+            // 解密失败时返回原始值，兼容数据库中的明文种子数据
+            log.warn("AES 解密失败，返回原始值: {}", e.getMessage());
+            return ciphertext;
         }
     }
 }

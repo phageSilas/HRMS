@@ -217,12 +217,36 @@ const SalaryPayslipManagePage: React.FC = () => {
     }
   };
 
+  const markPayslipViewed = (payslipId: number) => {
+    setPayslipPageData((previous) => {
+      if (!previous?.records?.length) {
+        return previous;
+      }
+      const nextRecords = previous.records
+        .map((record) =>
+          record.id === payslipId ? { ...record, viewStatus: 'VIEWED' as const } : record,
+        )
+        .filter((record) =>
+          query.viewStatus === 'UNVIEWED' ? record.id !== payslipId : true,
+        );
+      return {
+        ...previous,
+        records: nextRecords,
+        total:
+          query.viewStatus === 'UNVIEWED'
+            ? Math.max((previous.total || 0) - 1, 0)
+            : previous.total,
+      };
+    });
+  };
+
   const openPayslipDetail = async (id: number) => {
     setDetailLoading(true);
     try {
       const detail = await getManagePayslipDetail(id);
       setDetailData(detail);
       setDetailModalOpen(true);
+      markPayslipViewed(id);
     } catch (error) {
       const messageText = error instanceof Error ? error.message : '工资条详情加载失败';
       message.error(messageText);
@@ -300,7 +324,6 @@ const SalaryPayslipManagePage: React.FC = () => {
       await verifyManagePayslip({ password: values.password });
       message.success('验证通过');
       setVerifyModalOpen(false);
-      await loadManagePayslips(query);
       await openPayslipDetail(pendingViewRecord.id);
     } catch (error) {
       if (error instanceof Error) {

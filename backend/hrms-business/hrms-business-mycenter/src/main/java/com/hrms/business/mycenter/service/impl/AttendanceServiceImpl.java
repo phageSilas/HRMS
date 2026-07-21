@@ -9,9 +9,11 @@ import com.hrms.business.mycenter.dto.MakeupRequest;
 import com.hrms.business.mycenter.dto.OvertimeRecordVO;
 import com.hrms.business.mycenter.dto.OvertimeRequest;
 import com.hrms.business.mycenter.entity.AttendanceCorrectionEntity;
+import com.hrms.business.mycenter.entity.LeaveRequestEntity;
 import com.hrms.business.mycenter.entity.MyAttendanceRecordEntity;
 import com.hrms.business.mycenter.mapper.AttendanceOvertimeMapper;
 import com.hrms.business.mycenter.mapper.MyCenterAttendanceCorrectionMapper;
+import com.hrms.business.mycenter.mapper.MyCenterLeaveRequestMapper;
 import com.hrms.business.mycenter.mapper.MyAttendanceRecordMapper;
 import com.hrms.business.approval.service.ApprovalService;
 import com.hrms.business.mycenter.service.AttendanceService;
@@ -35,6 +37,11 @@ import java.util.stream.IntStream;
 
 /**
  * 个人考勤服务实现
+ * <p>
+ * 提供考勤日历、上下班打卡、补卡申请、加班申请、考勤统计等核心功能。
+ * 请假、补卡、加班等流程通过 {@link com.hrms.business.approval.service.ApprovalService} 发起审批。
+ * 考勤状态判定优先级：请假 > 旷工 > 缺卡 > 迟到 > 早退 > 正常。
+ * </p>
  */
 @Slf4j
 @Service("myCenterAttendanceServiceImpl")
@@ -44,8 +51,21 @@ public class AttendanceServiceImpl implements AttendanceService {
     private final MyAttendanceRecordMapper attendanceRecordMapper;
     private final MyCenterAttendanceCorrectionMapper correctionMapper;
     private final AttendanceOvertimeMapper overtimeMapper;
+    private final MyCenterLeaveRequestMapper leaveRequestMapper;
     private final ApprovalService approvalService;
 
+    /**
+     * 获取考勤日历
+     * <p>
+     * 按月查询考勤记录和请假记录，逐日构建日历数据。
+     * 每日状态判定优先级：休息日 > 请假 > 打卡记录 > 缺卡。
+     * 请假优先于打卡记录，即使当天有打卡也显示为请假。
+     * </p>
+     *
+     * @param employeeId 员工 ID
+     * @param yearMonth  年月（格式：yyyy-MM）
+     * @return 考勤日历 VO
+     */
     @Override
     public AttendanceCalendarVO getCalendar(Long employeeId, String yearMonth) {
         YearMonth ym = YearMonth.parse(yearMonth, DateTimeFormatter.ofPattern("yyyy-MM"));
@@ -63,6 +83,18 @@ public class AttendanceServiceImpl implements AttendanceService {
         Map<LocalDate, MyAttendanceRecordEntity> recordMap = records.stream()
                 .collect(Collectors.toMap(MyAttendanceRecordEntity::getRecordDate, r -> r, (a, b) -> b));
 
+        // 查询该月请假记录（已通过或审批中）
+        List<LeaveRequestEntity> leaves = leaveRequestMapper.selectList(
+                new LambdaQueryWrapper<LeaveRequestEntity>()
+                        .eq(LeaveRequestEntity::getEmployeeId, employeeId)
+                        .in(LeaveRequestEntity::getApprovalStatus, 1, 2)
+                        .and(w -> w
+                                .between(LeaveRequestEntity::getStartTime, firstDay.atStartOfDay(), lastDay.atTime(23, 59, 59))
+                                .or(w2 -> w2
+                                        .between(LeaveRequestEntity::getEndTime, firstDay.atStartOfDay(), lastDay.atTime(23, 59, 59)))
+                        )
+        );
+
         // 构建每日日历
         List<AttendanceCalendarVO.AttendanceDayVO> days = new ArrayList<>();
         for (LocalDate date = firstDay; !date.isAfter(lastDay); date = date.plusDays(1)) {
@@ -73,11 +105,28 @@ public class AttendanceServiceImpl implements AttendanceService {
             boolean isWeekend = date.getDayOfWeek() == DayOfWeek.SATURDAY
                     || date.getDayOfWeek() == DayOfWeek.SUNDAY;
 
+            // 判断是否在请假范围内
+            LeaveRequestEntity matchedLeave = null;
+            for (LeaveRequestEntity leave : leaves) {
+                LocalDate leaveStart = leave.getStartTime().toLocalDate();
+                LocalDate leaveEnd = leave.getEndTime().toLocalDate();
+                if (!date.isBefore(leaveStart) && !date.isAfter(leaveEnd)) {
+                    matchedLeave = leave;
+                    break;
+                }
+            }
+
             MyAttendanceRecordEntity record = recordMap.get(date);
 
             if (isWeekend) {
                 day.setStatus("HOLIDAY");
                 day.setStatusDesc("休息日");
+            } else if (matchedLeave != null) {
+                // 请假优先：即使当天有打卡记录也显示为请假
+                day.setStatus("LEAVE");
+                day.setStatusDesc("请假");
+                day.setLeaveType(matchedLeave.getLeaveType());
+                day.setLeaveTypeDesc(getLeaveTypeDesc(matchedLeave.getLeaveType()));
             } else if (record != null) {
                 // 设置打卡时间
                 if (record.getClockInTime() != null) {
@@ -85,6 +134,11 @@ public class AttendanceServiceImpl implements AttendanceService {
                 }
                 if (record.getClockOutTime() != null) {
                     day.setClockOutTime(record.getClockOutTime().format(DateTimeFormatter.ofPattern("HH:mm")));
+                }
+
+                // 补卡状态
+                if (record.getCorrectionStatus() != null) {
+                    day.setCorrectionStatus(record.getCorrectionStatus());
                 }
 
                 // 综合状态判定
@@ -105,6 +159,35 @@ public class AttendanceServiceImpl implements AttendanceService {
         return result;
     }
 
+    /**
+     * 请假类型 → 中文描述
+     */
+    private String getLeaveTypeDesc(String type) {
+        if (type == null) return "";
+        return switch (type) {
+            case "ANNUAL" -> "年假";
+            case "COMPASSIONATE" -> "调休";
+            case "SICK" -> "病假";
+            case "PERSONAL" -> "事假";
+            case "MARRIAGE" -> "婚假";
+            case "MATERNITY" -> "产假";
+            case "FUNERAL" -> "丧假";
+            default -> type;
+        };
+    }
+
+    /**
+     * 上下班打卡
+     * <p>
+     * type=1 为上班打卡，type=2 为下班打卡。
+     * 上班打卡时创建新的考勤记录，下班打卡时更新已有记录。
+     * 同一天不可重复打卡同一类型。
+     * </p>
+     *
+     * @param employeeId 员工 ID
+     * @param type       打卡类型（1=上班，2=下班）
+     * @throws GlobalException 未找到考勤组、重复打卡或先打下班卡时抛出
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void clockIn(Long employeeId, Integer type) {
@@ -155,6 +238,17 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
     }
 
+    /**
+     * 提交补卡申请
+     * <p>
+     * 创建补卡记录后通过 {@link ApprovalService#startApproval} 发起 CORRECTION 类型审批。
+     * 同一天同一类型不可重复提交补卡申请。
+     * </p>
+     *
+     * @param employeeId 员工 ID
+     * @param request    补卡申请请求
+     * @throws GlobalException 重复申请或发起审批失败时抛出
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void createMakeup(Long employeeId, MakeupRequest request) {
@@ -230,6 +324,12 @@ public class AttendanceServiceImpl implements AttendanceService {
                     .replace("\t", "\\t");
     }
 
+    /**
+     * 查询补卡记录列表
+     *
+     * @param employeeId 员工 ID
+     * @return 补卡记录列表
+     */
     @Override
     public List<MakeupRecordVO> listMakeupRecords(Long employeeId) {
         List<AttendanceCorrectionEntity> list = correctionMapper.selectList(
@@ -253,6 +353,17 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     // ==================== 加班申请 ====================
 
+    /**
+     * 提交加班申请
+     * <p>
+     * 创建加班记录后通过 {@link ApprovalService#startApproval} 发起 OVERTIME 类型审批。
+     * 发起成功后回填审批实例 ID 并更新状态为"审批中"。
+     * </p>
+     *
+     * @param employeeId 员工 ID
+     * @param request    加班申请请求
+     * @throws GlobalException 发起审批失败时抛出
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void createOvertime(Long employeeId, OvertimeRequest request) {
@@ -297,6 +408,12 @@ public class AttendanceServiceImpl implements AttendanceService {
         return json.toString();
     }
 
+    /**
+     * 查询加班记录列表
+     *
+     * @param employeeId 员工 ID
+     * @return 加班记录列表（含状态描述）
+     */
     @Override
     public List<OvertimeRecordVO> listOvertimeRecords(Long employeeId) {
         List<AttendanceOvertimeEntity> list = overtimeMapper.selectList(
@@ -329,6 +446,16 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     // ==================== 考勤统计 ====================
 
+    /**
+     * 获取考勤统计
+     * <p>
+     * 统计指定月份应出勤天数（周一到周五）、实际出勤天数、迟到、早退、缺卡、请假次数。
+     * </p>
+     *
+     * @param employeeId 员工 ID
+     * @param yearMonth  年月（格式：yyyy-MM）
+     * @return 考勤统计 VO
+     */
     @Override
     public AttendanceStatisticsVO getStatistics(Long employeeId, String yearMonth) {
         YearMonth ym = YearMonth.parse(yearMonth, DateTimeFormatter.ofPattern("yyyy-MM"));
@@ -375,27 +502,62 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     /**
      * 根据上下班状态判定最终考勤状态
+     * 优先级：ABSENCE(请假) > MISSING(缺卡) > LATE(迟到) > EARLY_LEAVE(早退) > NORMAL(正常)
      */
     private String determineStatus(MyAttendanceRecordEntity record) {
         String inStatus = record.getClockInStatus();
         String outStatus = record.getClockOutStatus();
 
-        if ("LATE".equals(inStatus) && "NORMAL".equals(outStatus)) {
-            return "LATE";
-        }
-        if ("NORMAL".equals(inStatus) && "EARLY_LEAVE".equals(outStatus)) {
-            return "EARLY_LEAVE";
-        }
+        // 任意一方为 ABSENCE → 请假
         if ("ABSENCE".equals(inStatus) || "ABSENCE".equals(outStatus)) {
             return "LEAVE";
         }
-        if (inStatus == null && outStatus == null) {
+
+        // 双方都无记录 → 旷工
+        if (isBlank(inStatus) && isBlank(outStatus)) {
             return "ABSENT";
         }
-        if (inStatus == null || outStatus == null) {
+
+        // 双方至少一方为 MISSING（指该时段应打卡但未打卡）
+        boolean inMissing = isBlank(inStatus) || "MISSING".equals(inStatus);
+        boolean outMissing = isBlank(outStatus) || "MISSING".equals(outStatus);
+        if (inMissing && outMissing) {
             return "MISSED";
         }
+
+        // 迟到 + 正常下班 → 迟到
+        if ("LATE".equals(inStatus) && "NORMAL".equals(outStatus)) {
+            return "LATE";
+        }
+
+        // 正常上班 + 早退 → 早退
+        if ("NORMAL".equals(inStatus) && "EARLY_LEAVE".equals(outStatus)) {
+            return "EARLY_LEAVE";
+        }
+
+        // 迟到 + 早退 → 以迟到计
+        if ("LATE".equals(inStatus) && "EARLY_LEAVE".equals(outStatus)) {
+            return "LATE";
+        }
+
+        // 上班已打卡但下班未打卡
+        if (isBlank(outStatus) || "MISSING".equals(outStatus)) {
+            return "MISSED";
+        }
+
+        // 下班已打卡但上班未打卡
+        if (isBlank(inStatus) || "MISSING".equals(inStatus)) {
+            return "MISSED";
+        }
+
         return "NORMAL";
+    }
+
+    /**
+     * 判断字符串是否为空或空白
+     */
+    private boolean isBlank(String str) {
+        return str == null || str.trim().isEmpty();
     }
 
     private String getStatusDesc(String status) {

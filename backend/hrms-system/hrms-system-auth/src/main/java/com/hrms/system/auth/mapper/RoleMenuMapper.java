@@ -3,6 +3,8 @@ package com.hrms.system.auth.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.hrms.system.auth.entity.RoleMenuEntity;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 
@@ -27,5 +29,14 @@ public interface RoleMenuMapper extends BaseMapper<RoleMenuEntity> {
      * @return 角色菜单关联列表
      */
     List<RoleMenuEntity> selectAllByRoleId(Long roleId);
+
+    /**
+     * 恢复已删除的角色菜单关联（绕过逻辑删除）
+     *
+     * @param id 记录 ID
+     * @return 影响行数
+     */
+    @Update("UPDATE sys_role_menu SET is_deleted = 0, update_by = #{updateBy}, update_time = NOW(), version = version + 1 WHERE id = #{id}")
+    int restoreById(@Param("id") Long id, @Param("updateBy") Long updateBy);
 
 }

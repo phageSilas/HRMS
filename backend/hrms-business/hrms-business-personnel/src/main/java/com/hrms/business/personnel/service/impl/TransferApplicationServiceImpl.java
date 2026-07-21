@@ -1,7 +1,6 @@
 package com.hrms.business.personnel.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -17,9 +16,10 @@ import com.hrms.business.personnel.dto.TransferApplicationCreateRequestDTO;
 import com.hrms.business.personnel.dto.TransferApplicationQueryDTO;
 import com.hrms.business.personnel.entity.EmployeeSnapshotEntity;
 import com.hrms.business.personnel.entity.TransferApplicationEntity;
-import com.hrms.business.personnel.enums.ApplicationStatusEnum;
+import com.hrms.business.personnel.common.enums.ApplicationStatusEnum;
 import com.hrms.business.personnel.mapper.EmployeeSnapshotMapper;
 import com.hrms.business.personnel.mapper.TransferApplicationMapper;
+import com.hrms.business.personnel.convert.PersonnelDisplayEnricher;
 import com.hrms.business.personnel.service.TransferApplicationService;
 import com.hrms.business.personnel.vo.TransferApplicationCreateVO;
 import com.hrms.business.personnel.vo.TransferApplicationPageVO;
@@ -27,15 +27,24 @@ import com.hrms.common.exception.ErrorCode;
 import com.hrms.common.exception.GlobalException;
 import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.web.PageResult;
+import com.hrms.system.organization.service.DeptService;
+import com.hrms.system.organization.service.PostService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import static com.hrms.business.personnel.common.constant.TransferApplicationConstant.*;
+import static com.hrms.business.personnel.common.enums.ServiceErrorCodeEnum.EMPLOYEE_NOT_FOUND;
+import static com.hrms.business.personnel.common.enums.ServiceErrorCodeEnum.TRANSFER_APPLICATION_DUPLICATE;
 
 /**
  * 调岗申请服务实现
@@ -43,26 +52,16 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class TransferApplicationServiceImpl implements TransferApplicationService {
-
-    private static final ErrorCode EMPLOYEE_NOT_FOUND = new ErrorCode(40060, "员工不存在");
-
-    private static final ErrorCode TRANSFER_APPLICATION_DUPLICATE = new ErrorCode(40071, "员工已有进行中的调岗申请");
-
-    private static final Long IMPOSSIBLE_EMPLOYEE_ID = -1L;
-
-    private static final int DEFAULT_PAGE_NUM = 1;
-
-    private static final int DEFAULT_PAGE_SIZE = 20;
-
-    private static final int MAX_PAGE_SIZE = 200;
-
+    // 调岗申请Mapper
     private final TransferApplicationMapper transferApplicationMapper;
-
-    private final EmployeeSnapshotMapper employeeSnapshotMapper;
-
+    // 员工服务
     private final EmployeeService employeeService;
-
+    // 审批引擎
     private final ApprovalEngine approvalEngine;
+    // 部门服务
+    private final DeptService deptService;
+    // 岗位服务
+    private final PostService postService;
 
     /**
      * 分页查询调岗申请。
@@ -73,6 +72,9 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
     public PageResult<TransferApplicationPageVO> pageTransferApplications(TransferApplicationQueryDTO queryDTO) {
         int pageNum = normalizePageNum(queryDTO.getPageNum());
         int pageSize = normalizePageSize(queryDTO.getPageSize());
+        // 类型转换
+        PersonnelDisplayEnricher displayEnricher = new PersonnelDisplayEnricher(deptService, postService);
+
         Page<TransferApplicationEntity> page = transferApplicationMapper.selectPage(
                 Page.of(pageNum, pageSize),
                 buildTransferApplicationWrapper(queryDTO)
@@ -81,7 +83,13 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
                 page.getRecords().stream().map(TransferApplicationEntity::getEmployeeId).toList()
         );
         List<TransferApplicationPageVO> records = page.getRecords().stream()
-                .map(entity -> TransferApplicationConvert.toPageVO(entity, employeeSnapshotMap.get(entity.getEmployeeId())))
+                // 转换为调岗申请分页列表
+                .map(entity -> displayEnricher.enrichTransferApplication(
+                        TransferApplicationConvert.toPageVO(entity, employeeSnapshotMap.get(entity.getEmployeeId())),
+                        entity.getFromDeptId(),
+                        entity.getFromPostId(),
+                        entity.getToDeptId(),
+                        entity.getToPostId()))
                 .toList();
         return PageResult.of(records, page.getTotal(), pageNum, pageSize);
     }
@@ -96,7 +104,9 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
     @Override
     @Transactional(rollbackFor = Exception.class)
     public TransferApplicationCreateVO createTransferApplication(TransferApplicationCreateRequestDTO requestDTO) {
+        //查询必须存在的员工快照。
         EmployeeSnapshotEntity employeeSnapshot = getRequiredEmployeeSnapshot(requestDTO.getEmployeeId());
+        // 确保员工没有进行中的调岗申请
         assertNoProcessingTransferApplication(requestDTO.getEmployeeId());
 
         TransferApplicationEntity entity = new TransferApplicationEntity();
@@ -115,7 +125,7 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
         entity.setApprovalStatus(ApplicationStatusEnum.APPROVING.getCode());
         transferApplicationMapper.insert(entity);
 
-        // TODO 跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起调岗审批。
+        //  跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起调岗审批。
         Long approvalInstanceId = approvalEngine.startApproval(
                 ApprovalTypeEnum.TRANSFER.getCode(),
                 entity.getId(),
@@ -124,6 +134,7 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
                 employeeSnapshot.getDeptId(),
                 requestDTO.getEmployeeId()
         );
+        // 更新调岗申请的审批实例ID
         entity.setApprovalInstanceId(approvalInstanceId);
         transferApplicationMapper.updateById(entity);
 
@@ -152,7 +163,7 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
      * 本方法使用的工具类: 无
      */
     private EmployeeSnapshotEntity getRequiredEmployeeSnapshot(Long employeeId) {
-        // TODO 跨模块调用已完成：当前调用 EmployeeService#getEmployeeBrief(employeeId) 获取员工简要信息。
+        // 跨模块调用已完成：当前调用 EmployeeService#getEmployeeBrief(employeeId) 获取员工简要信息。
         EmployeeEntity employee = employeeService.getEmployeeBrief(employeeId);
         if (employee == null) {
             throw new GlobalException(EMPLOYEE_NOT_FOUND);
@@ -207,16 +218,40 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
      * 本方法使用的工具类: 无
      */
     private LambdaQueryWrapper<TransferApplicationEntity> buildTransferApplicationWrapper(TransferApplicationQueryDTO queryDTO) {
+        //解析部门树范围ID，包含所选部门自身及全部子孙部门
+        List<Long> targetDeptIds = resolveTargetDeptIds(queryDTO.getDepartmentId());
         LambdaQueryWrapper<TransferApplicationEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(queryDTO.getDepartmentId() != null, TransferApplicationEntity::getFromDeptId, queryDTO.getDepartmentId());
+        //筛选部门树范围
+        wrapper.in(CollUtil.isNotEmpty(targetDeptIds), TransferApplicationEntity::getFromDeptId, targetDeptIds);
+        //筛选审批状态
         wrapper.eq(queryDTO.getApprovalStatus() != null, TransferApplicationEntity::getApprovalStatus, queryDTO.getApprovalStatus());
         if (StrUtil.isNotBlank(queryDTO.getKeyword())) {
             List<Long> employeeIds = listEmployeeIdsByKeyword(queryDTO.getKeyword());
+            //筛选员工ID
             wrapper.in(CollUtil.isNotEmpty(employeeIds), TransferApplicationEntity::getEmployeeId, employeeIds);
+            //如果无匹配员工，则筛选无员工ID
             wrapper.eq(CollUtil.isEmpty(employeeIds), TransferApplicationEntity::getEmployeeId, IMPOSSIBLE_EMPLOYEE_ID);
         }
+        //按创建时间降序排序
         wrapper.orderByDesc(TransferApplicationEntity::getCreateTime);
         return wrapper;
+    }
+
+    /**
+     * 解析部门树范围ID，包含所选部门自身及全部子孙部门。
+     *
+     * @param departmentId 所选部门ID
+     * @return 部门树范围ID列表
+     */
+    private List<Long> resolveTargetDeptIds(Long departmentId) {
+        if (departmentId == null) {
+            return List.of();
+        }
+        List<Long> deptIds = deptService.getSubDeptIds(departmentId);
+        if (CollUtil.isEmpty(deptIds)) {
+            return List.of(departmentId);
+        }
+        return new ArrayList<>(Set.copyOf(deptIds));
     }
 
     /**
@@ -230,14 +265,14 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
         if (StrUtil.isBlank(keyword)) {
             return Collections.emptyList();
         }
-        // TODO 跨模块调用已完成：当前调用 EmployeeService#listEmployees(queryDTO) 按关键词查询员工列表。
+        //  跨模块调用已完成：当前调用 EmployeeService#listEmployees(queryDTO) 按关键词查询员工列表。
         EmployeeQueryDTO queryDTO = new EmployeeQueryDTO();
         queryDTO.setKeyword(keyword);
         queryDTO.setPageNum(1);
         queryDTO.setPageSize(MAX_PAGE_SIZE);
         return employeeService.listEmployees(queryDTO).getRecords().stream()
                 .map(EmployeeListVO::getId)
-                .filter(id -> id != null)
+                .filter(Objects::nonNull)
                 .toList();
     }
 
@@ -249,13 +284,14 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
      * 本方法使用的工具类: CollUtil(hutool)
      */
     private Map<Long, EmployeeSnapshotEntity> listEmployeeSnapshotMap(List<Long> employeeIds) {
+        //
         if (CollUtil.isEmpty(employeeIds)) {
             return Collections.emptyMap();
         }
-        // TODO 跨模块调用已完成：当前员工模块暂无批量快照接口，暂用 EmployeeService#getEmployeeBrief(employeeId) 循环补全。
+        //  跨模块调用已完成：当前员工模块暂无批量快照接口，暂用 EmployeeService#getEmployeeBrief(employeeId) 循环补全。
         return employeeIds.stream()
                 .map(employeeService::getEmployeeBrief)
-                .filter(employee -> employee != null)
+                .filter(Objects::nonNull)
                 .map(this::toEmployeeSnapshot)
                 .collect(Collectors.toMap(EmployeeSnapshotEntity::getId, Function.identity(), (left, right) -> left));
     }

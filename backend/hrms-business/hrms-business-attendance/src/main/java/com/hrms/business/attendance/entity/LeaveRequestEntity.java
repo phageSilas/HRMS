@@ -2,6 +2,7 @@ package com.hrms.business.attendance.entity;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.hrms.common.entity.BaseEntity;
+import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 

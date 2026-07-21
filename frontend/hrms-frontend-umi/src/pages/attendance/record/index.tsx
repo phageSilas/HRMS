@@ -17,7 +17,6 @@ import {
   SearchOutlined,
 } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
-import { history } from '@umijs/max';
 import type { PageResult } from '@/types/api';
 import {
   Button,
@@ -83,7 +82,7 @@ const RECORD_QUERY_STORAGE_PREFIX = 'attendance-record-query';
 const DEPARTMENT_PAGE_SIZE = 200;
 
 function parseUrlGroupId() {
-  const groupId = new URLSearchParams(history.location.search).get('groupId');
+  const groupId = new URLSearchParams(window.location.search).get('groupId');
   const parsed = Number(groupId);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
@@ -440,9 +439,6 @@ const AttendanceRecordPage: React.FC = () => {
             面向 HR、部门主管和管理员，按考勤组查询员工每日打卡明细
           </Text>
         </div>
-        <Button type="primary" onClick={() => history.push('/profile/attendance')}>
-          申请补卡
-        </Button>
       </div>
 
       <Card bordered={false} className={styles.statusCard}>
@@ -501,6 +497,7 @@ const AttendanceRecordPage: React.FC = () => {
               loading={departmentLoading}
               placeholder="请选择部门"
               optionFilterProp="label"
+              className={styles.departmentSelect}
               options={departmentOptions}
             />
           </Form.Item>

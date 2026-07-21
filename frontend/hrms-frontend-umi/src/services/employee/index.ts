@@ -98,9 +98,12 @@ export interface EmployeeCreateRequest {
 
 /** 字段权限 */
 export interface FieldPermissions {
+  /** 可查看字段列表，["*"] 表示全部 */
+  viewableFields: string[];
+  /** 可编辑字段列表，["*"] 表示全部 */
   editableFields: string[];
-  flowFields: string[];
-  hiddenFields: string[];
+  /** 流程必填字段列表（需走审批流程，不可直接编辑） */
+  flowRequiredFields: string[];
 }
 
 /** 合同信息（字段与后端 EmployeeContractVO 对齐） */
@@ -239,7 +242,9 @@ export async function getEmployeesByDepartment(departmentId: number) {
  * 获取字段权限
  */
 export async function getFieldPermissions() {
-  return request.get<FieldPermissions>('/api/v1/permissions/field');
+  return request.get<FieldPermissions>('/api/v1/permissions/field', {
+    params: { bizType: 'employee' },
+  });
 }
 
 /**
@@ -292,5 +297,27 @@ export async function getContractList(params: {
   // 后端无全局合同分页接口，如果需要全局列表请调用 /api/v1/employees 后按员工查询
   return request.get<PageResult<Contract>>('/api/v1/employee-contracts/list', {
     params,
+  });
+}
+
+/**
+ * 检查部门下是否有在职员工
+ * @param deptId 部门ID
+ * @returns true-有在职员工，false-无在职员工
+ */
+export async function hasEmployeesInDept(deptId: number) {
+  return request.get<boolean>('/api/v1/employees/check-dept', {
+    params: { deptId },
+  });
+}
+
+/**
+ * 检查职位下是否有在职员工
+ * @param postId 职位ID
+ * @returns true-有在职员工，false-无在职员工
+ */
+export async function hasEmployeesInPost(postId: number) {
+  return request.get<boolean>('/api/v1/employees/check-post', {
+    params: { postId },
   });
 }

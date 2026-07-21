@@ -12,7 +12,8 @@ export default defineConfig({
   // Mock 配置（已关闭，请求直接通过 proxy 转发到后端）
   mock: false,
   // 代理配置：仅保留 /api/v1/* 统一前缀，删除各模块独立规则
-  // 所有后端 Controller 均已注册在 /api/v1/* 下，独立规则会拦截 SPA 路由（如 /approval/workspace）
+  // 所有后端 Controller 均已注册在 /api/v1/* 下，独立规则会拦截 SPA 路由（如 /approval/workspace），
+  // 导致 F5 刷新时请求被转发到后端，因无 JWT Token 返回 401
   proxy: {
     '/api/v1': {
       target: 'http://localhost:8080',
@@ -20,26 +21,6 @@ export default defineConfig({
     },
     // Swagger UI 代理
     '/swagger-ui': {
-      target: 'http://localhost:8080',
-      changeOrigin: true,
-    },
-    '/employees': {
-      target: 'http://localhost:8080',
-      changeOrigin: true,
-    },
-    '/departments': {
-      target: 'http://localhost:8080',
-      changeOrigin: true,
-    },
-    '/leave-requests': {
-      target: 'http://localhost:8080',
-      changeOrigin: true,
-    },
-    '/approval': {
-      target: 'http://localhost:8080',
-      changeOrigin: true,
-    },
-    '/my': {
       target: 'http://localhost:8080',
       changeOrigin: true,
     },
@@ -310,7 +291,7 @@ export default defineConfig({
         {
           path: '/profile/leave',
           name: '我的请假',
-          redirect: '/attendance/leave',
+          component: '@/pages/profile/leave',
         },
         {
           path: '/profile/salary',

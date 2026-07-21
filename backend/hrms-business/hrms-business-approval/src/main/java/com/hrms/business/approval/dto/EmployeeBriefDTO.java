@@ -32,4 +32,9 @@ public class EmployeeBriefDTO {
      * 所属部门ID
      */
     private Long deptId;
+
+    /**
+     * 职位名称
+     */
+    private String postName;
 }

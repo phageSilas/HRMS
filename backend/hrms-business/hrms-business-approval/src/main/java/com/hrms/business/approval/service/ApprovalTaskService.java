@@ -64,4 +64,29 @@ public interface ApprovalTaskService {
      * @return 待审批任务数
      */
     Integer getPendingCount(Long userId);
+
+    /**
+     * 按筛选类型查询任务列表（支持待审批/今日已审批/已逾期）
+     *
+     * @param userId 当前用户ID
+     * @param query  查询参数（含 filterType）
+     * @return 分页任务列表
+     */
+    PageResult<PendingTaskVO> findFilteredTasks(Long userId, PendingTaskQuery query);
+
+    /**
+     * 获取今日已审批数量
+     *
+     * @param userId 用户ID
+     * @return 今日已审批任务数
+     */
+    Integer getTodayApprovedCount(Long userId);
+
+    /**
+     * 获取已逾期数量
+     *
+     * @param userId 用户ID
+     * @return 逾期的待办任务数
+     */
+    Integer getOverdueCount(Long userId);
 }
