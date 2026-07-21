@@ -106,6 +106,7 @@ public class EmployeeServiceImpl implements EmployeeService {
         }
 
         int pageNum = queryDTO.getPageNum() != null ? queryDTO.getPageNum() : 1;
+        int pageSize = queryDTO.getPageSize() != null ? queryDTO.getPageSize() : 20;
 
         // ?10???? Redis ??
         if (pageNum <= CACHE_MAX_PAGES && stringRedisTemplate != null) {
@@ -113,15 +114,20 @@ public class EmployeeServiceImpl implements EmployeeService {
             String cached = stringRedisTemplate.opsForValue().get(cacheKey);
             if (cached != null) {
                 if (EMPTY_MARKER.equals(cached)) {
-                    return PageResult.of(List.of(), 0, pageNum, queryDTO.getPageSize());
+                    return PageResult.of(List.of(), 0, pageNum, pageSize);
                 }
                 return JSONUtil.toBean(cached, PageResult.class);
+            }
+
+            // ?1?????????????10????????
+            if (pageNum == 1) {
+                return prefetchAndCachePages(queryDTO, pageSize);
             }
         }
 
         PageResult<EmployeeListVO> result = listEmployeesByOffset(queryDTO);
 
-        // ????
+        // ????????
         if (pageNum <= CACHE_MAX_PAGES && stringRedisTemplate != null) {
             String cacheKey = buildListCacheKey(queryDTO, pageNum);
             if (result.getRecords() == null || result.getRecords().isEmpty()) {
@@ -135,42 +141,46 @@ public class EmployeeServiceImpl implements EmployeeService {
     }
 
     /**
-     * ????????????
+     * 传统偏移分页查询员工列表
      */
     private PageResult<EmployeeListVO> listEmployeesByOffset(EmployeeQueryDTO queryDTO) {
-        // 构建分页参数
         Page<EmployeeEntity> page = new Page<>(queryDTO.getPageNum(), queryDTO.getPageSize());
+        LambdaQueryWrapper<EmployeeEntity> wrapper = buildEmployeeWrapper(queryDTO);
+        if (wrapper == null) {
+            return PageResult.of(List.of(), 0, queryDTO.getPageNum(), queryDTO.getPageSize());
+        }
+        Page<EmployeeEntity> resultPage = employeeMapper.selectPage(page, wrapper);
+        return buildPageResult(resultPage, queryDTO.getPageNum(), queryDTO.getPageSize());
+    }
 
-        // 构建查询条件
+    /**
+     * 构建员工分页查询的 QueryWrapper（含数据权限和业务过滤）
+     *
+     * @param queryDTO 查询参数
+     * @return QueryWrapper，返回 null 表示数据权限无交集，应返回空结果
+     */
+    private LambdaQueryWrapper<EmployeeEntity> buildEmployeeWrapper(EmployeeQueryDTO queryDTO) {
         LambdaQueryWrapper<EmployeeEntity> wrapper = Wrappers.lambdaQuery();
 
         // ========== 数据权限过滤 ==========
         List<Long> accessibleDeptIds = resolveAccessibleDeptIds();
         if (accessibleDeptIds != null) {
-            // accessibleDeptIds 为 null 表示全量权限（ADMIN/全部），不限制
-            // accessibleDeptIds 为空列表表示仅本人权限，使用 create_by 过滤
             if (accessibleDeptIds.isEmpty()) {
-                // 仅本人：只能看自己创建的记录
                 wrapper.eq(EmployeeEntity::getCreateBy, SecurityContextHolder.getUserId());
             } else {
-                // 部门级别：限制在可访问的部门范围内
                 if (queryDTO.getDeptIds() != null && !queryDTO.getDeptIds().isEmpty()) {
-                    // 前端传了部门筛选，取交集（确保不越权）
                     List<Long> intersected = queryDTO.getDeptIds().stream()
                             .filter(accessibleDeptIds::contains)
                             .collect(Collectors.toList());
                     if (intersected.isEmpty()) {
-                        // 无交集，返回空结果
-                        return PageResult.of(List.of(), 0, queryDTO.getPageNum(), queryDTO.getPageSize());
+                        return null;
                     }
                     wrapper.in(EmployeeEntity::getDeptId, intersected);
                 } else {
-                    // 前端未传部门筛选，限制在可访问范围内
                     wrapper.in(EmployeeEntity::getDeptId, accessibleDeptIds);
                 }
             }
         }
-        // ========== 数据权限过滤结束 ==========
 
         // 关键词搜索（姓名/工号/手机号）
         if (queryDTO.getKeyword() != null && !queryDTO.getKeyword().isEmpty()) {
@@ -181,7 +191,7 @@ public class EmployeeServiceImpl implements EmployeeService {
                     .like(EmployeeEntity::getPhone, queryDTO.getKeyword()));
         }
 
-        // 部门筛选（数据权限已过滤，此处仅在前端未传 deptIds 且全量权限时生效）
+        // 部门筛选（全量权限且前端传了 deptIds 时生效）
         if (queryDTO.getDeptIds() != null && !queryDTO.getDeptIds().isEmpty()
                 && accessibleDeptIds == null) {
             wrapper.in(EmployeeEntity::getDeptId, queryDTO.getDeptIds());
@@ -205,10 +215,18 @@ public class EmployeeServiceImpl implements EmployeeService {
             wrapper.le(EmployeeEntity::getHireDate, queryDTO.getHireDateEnd());
         }
 
-        // 执行查询
-        Page<EmployeeEntity> resultPage = employeeMapper.selectPage(page, wrapper);
+        return wrapper;
+    }
 
-        // 转换为 VO
+    /**
+     * 构建分页结果（从 MyBatis-Plus Page 转换为 PageResult）
+     *
+     * @param resultPage MyBatis-Plus 分页结果
+     * @param pageNum    页码
+     * @param pageSize   每页条数
+     * @return PageResult
+     */
+    private PageResult<EmployeeListVO> buildPageResult(Page<EmployeeEntity> resultPage, int pageNum, int pageSize) {
         List<EmployeeListVO> records = resultPage.getRecords().stream()
                 .map(this::convertToListVO)
                 .collect(Collectors.toList());
@@ -216,16 +234,79 @@ public class EmployeeServiceImpl implements EmployeeService {
         PageResult<EmployeeListVO> pageResult = new PageResult<>();
         pageResult.setRecords(records);
         pageResult.setTotal(resultPage.getTotal());
-        pageResult.setPageNum((int) resultPage.getCurrent());
-        pageResult.setPageSize((int) resultPage.getSize());
+        pageResult.setPageNum(pageNum);
+        pageResult.setPageSize(pageSize);
         pageResult.setPages((int) resultPage.getPages());
-
         return pageResult;
     }
 
     /**
-     * ???????????????ID???O(1)???
+     * 预取前10页数据并全部缓存到 Redis
+     * 一次数据库查询获取 pageSize * 10 条记录，在内存中拆分后分别缓存每个页
+     *
+     * @param queryDTO 查询参数
+     * @param pageSize 每页条数
+     * @return 第1页结果
+     * 本方法使用的工具类：StringRedisTemplate(spring-data-redis), JSONUtil(hutool)
      */
+    private PageResult<EmployeeListVO> prefetchAndCachePages(EmployeeQueryDTO queryDTO, int pageSize) {
+        LambdaQueryWrapper<EmployeeEntity> wrapper = buildEmployeeWrapper(queryDTO);
+        if (wrapper == null) {
+            for (int i = 1; i <= CACHE_MAX_PAGES; i++) {
+                stringRedisTemplate.opsForValue().set(
+                        buildListCacheKey(queryDTO, i), EMPTY_MARKER, EMPTY_TTL_MINUTES, TimeUnit.MINUTES);
+            }
+            return PageResult.of(List.of(), 0, 1, pageSize);
+        }
+
+        int bulkSize = pageSize * CACHE_MAX_PAGES;
+        Page<EmployeeEntity> bulkPage = new Page<>(1, bulkSize);
+        Page<EmployeeEntity> resultPage = employeeMapper.selectPage(bulkPage, wrapper);
+
+        List<EmployeeListVO> allRecords = resultPage.getRecords().stream()
+                .map(this::convertToListVO)
+                .collect(Collectors.toList());
+
+        long total = resultPage.getTotal();
+        int totalPages = (int) Math.ceil((double) total / pageSize);
+        int pagesToCache = Math.min(CACHE_MAX_PAGES, Math.max(1, totalPages));
+
+        for (int i = 0; i < pagesToCache; i++) {
+            int fromIndex = i * pageSize;
+            int toIndex = Math.min(fromIndex + pageSize, allRecords.size());
+            List<EmployeeListVO> pageRecords;
+            if (fromIndex >= allRecords.size()) {
+                pageRecords = List.of();
+            } else {
+                pageRecords = new java.util.ArrayList<>(allRecords.subList(fromIndex, toIndex));
+            }
+
+            PageResult<EmployeeListVO> pageResult = new PageResult<>();
+            pageResult.setRecords(pageRecords);
+            pageResult.setTotal(total);
+            pageResult.setPageNum(i + 1);
+            pageResult.setPageSize(pageSize);
+            pageResult.setPages(totalPages);
+
+            String cacheKey = buildListCacheKey(queryDTO, i + 1);
+            if (pageRecords.isEmpty()) {
+                stringRedisTemplate.opsForValue().set(cacheKey, EMPTY_MARKER, EMPTY_TTL_MINUTES, TimeUnit.MINUTES);
+            } else {
+                stringRedisTemplate.opsForValue().set(cacheKey, JSONUtil.toJsonStr(pageResult), CACHE_TTL_MINUTES, TimeUnit.MINUTES);
+            }
+        }
+
+        PageResult<EmployeeListVO> page1 = new PageResult<>();
+        page1.setRecords(allRecords.isEmpty() ? List.of()
+                : new java.util.ArrayList<>(allRecords.subList(0, Math.min(pageSize, allRecords.size()))));
+        page1.setTotal(total);
+        page1.setPageNum(1);
+        page1.setPageSize(pageSize);
+        page1.setPages(totalPages);
+        return page1;
+    }
+
+
     private PageResult<EmployeeListVO> listEmployeesByCursor(EmployeeQueryDTO queryDTO) {
         int pageSize = Math.min(queryDTO.getPageSize(), 100);
         Long lastId = queryDTO.getLastId();
