@@ -1,5 +1,7 @@
 /**
  * 流程状态管理
+ *
+ * 负责为入职、转正、调岗、离职等历史 Dva 引用提供基础状态容器。
  * 负责人：成员 B
  */
 
@@ -44,6 +46,7 @@ const ProcessModel: ProcessModelType = {
   effects: {},
 
   reducers: {
+    /** 重置流程模块的列表与分页状态，便于页面切换后回到初始视图。 */
     resetState() {
       return {
         entryList: [],

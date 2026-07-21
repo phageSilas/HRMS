@@ -6,6 +6,10 @@
 import React from 'react';
 import { PageContainer } from '@ant-design/pro-components';
 
+/**
+ * 入转调离流程首页组件。
+ * 当前用于承载流程模块入口占位内容，后续可扩展为统一导航页。
+ */
 const ProcessPage: React.FC = () => {
   return (
     <PageContainer>

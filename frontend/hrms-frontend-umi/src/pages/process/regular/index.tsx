@@ -44,10 +44,12 @@ const statusMeta: Record<number, { text: string; color: string }> = {
   5: { text: '已入职', color: 'blue' },
 };
 
+/** 获取员工姓名首字，用于列表头像展示。 */
 function getInitial(name?: string) {
   return name?.slice(0, 1) || '员';
 }
 
+/** 渲染试用期剩余天数标签，用于快速识别超期与临近到期员工。 */
 function renderRemainingDays(days?: number) {
   if (days === undefined || days === null) {
     return <Tag>未计算</Tag>;
@@ -61,6 +63,10 @@ function renderRemainingDays(days?: number) {
   return <Tag color="green">剩余 {days} 天</Tag>;
 }
 
+/**
+ * 转正管理页面组件。
+ * 负责待转正员工查询、转正评估发起和已评估记录查看。
+ */
 const RegularPage: React.FC = () => {
   const actionRef = useRef<ActionType>();
   const [activeTab, setActiveTab] = useState<'pending' | 'evaluated'>('pending');

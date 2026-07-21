@@ -71,6 +71,7 @@ type TransferFormValues = TransferApplicationCreateRequest & {
   fromLeaderId?: number;
 };
 
+/** 生成候选汇报人角色标签，区分 Leader、HR 或二者兼具。 */
 function buildLeaderRoleLabel(
   employeeId: number,
   leaderIds: Set<number>,
@@ -90,6 +91,7 @@ function buildLeaderRoleLabel(
   return '';
 }
 
+/** 根据岗位职级区间构造可选职级列表，供新岗位职级自动提示和校验。 */
 function buildJobLevelOptions(post?: PostItem): JobLevelOption[] {
   const minLevel = post?.jobLevelMin?.trim();
   const maxLevel = post?.jobLevelMax?.trim();
@@ -131,6 +133,10 @@ function buildJobLevelOptions(post?: PostItem): JobLevelOption[] {
   }));
 }
 
+/**
+ * 调岗申请页面组件。
+ * 负责调岗申请列表查询、员工原岗位回填和目标岗位审批提交。
+ */
 const TransferPage: React.FC = () => {
   const actionRef = useRef<ActionType>();
   const [modalOpen, setModalOpen] = useState(false);
@@ -218,6 +224,7 @@ const TransferPage: React.FC = () => {
     return `可选: ${jobLevelOptions.map((item) => item.value).join(' / ')}`;
   }, [jobLevelOptions, selectedToPostId]);
 
+  /** 重置员工关联信息，供员工未命中或关闭弹窗时统一清理表单状态。 */
   const resetEmployeeRelatedFields = () => {
     form.setFieldsValue({
       employeeName: undefined,
@@ -230,6 +237,7 @@ const TransferPage: React.FC = () => {
     setCurrentEmployeeDetail(undefined);
   };
 
+  /** 加载员工基础信息，内部调用 `resetEmployeeRelatedFields` 处理无效员工场景。 */
   const handleEmployeeLookup = async (rawEmployeeId?: number | string | null) => {
     const employeeId = Number(rawEmployeeId);
     if (!employeeId || employeeId < 1) {
@@ -257,6 +265,7 @@ const TransferPage: React.FC = () => {
     }
   };
 
+  /** 触发员工信息查询，内部调用 `handleEmployeeLookup` 按表单员工 ID 回填原岗位信息。 */
   const triggerEmployeeLookup = () => {
     void handleEmployeeLookup(form.getFieldValue('employeeId'));
   };

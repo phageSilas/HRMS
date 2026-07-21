@@ -16,6 +16,7 @@ export const ApprovalStatus = {
   ENTERED: 5,
 } as const;
 
+/** 审批状态值联合类型，供页面渲染审批状态标签时复用。 */
 export type ApprovalStatusValue =
   (typeof ApprovalStatus)[keyof typeof ApprovalStatus];
 
@@ -199,30 +200,38 @@ export interface LeaveApplicationCreateResult {
   id: number;
 }
 
+/**
+ * 查询入职申请分页列表。
+ * 供入职管理页列表筛选与统计联动使用。
+ */
 export async function getEntryApplicationList(
   params: EntryApplicationQuery,
 ): Promise<PageResult<EntryApplication>> {
   return request.get('/api/v1/entry-applications', { params });
 }
 
+/** 查询单条入职申请详情，供编辑草稿和补全表单初始值使用。 */
 export async function getEntryApplication(
   id: number,
 ): Promise<EntryApplication> {
   return request.get(`/api/v1/entry-applications/${id}`);
 }
 
+/** 查询入职申请状态统计，供入职管理页顶部统计卡片展示。 */
 export async function getEntryApplicationStats(
   params: Omit<EntryApplicationQuery, 'pageNum' | 'pageSize' | 'approvalStatus'>,
 ): Promise<EntryApplicationStats> {
   return request.get('/api/v1/entry-applications/stats', { params });
 }
 
+/** 创建入职申请草稿，供入职表单首次保存时调用。 */
 export async function createEntryApplication(
   data: EntryApplicationFormValues,
 ): Promise<EntryApplication> {
   return request.post('/api/v1/entry-applications', data);
 }
 
+/** 更新已有入职申请草稿，供入职表单编辑保存时调用。 */
 export async function updateEntryApplication(
   id: number,
   data: EntryApplicationFormValues,
@@ -230,12 +239,14 @@ export async function updateEntryApplication(
   return request.put(`/api/v1/entry-applications/${id}`, data);
 }
 
+/** 提交入职申请进入审批流程，供入职列表“提交审批”按钮调用。 */
 export async function submitEntryApplication(
   id: number,
 ): Promise<EntryApplicationSubmitResult> {
   return request.post(`/api/v1/entry-applications/${id}/submit`);
 }
 
+/** 确认员工实际入职，用于审批通过后的正式入职落库。 */
 export async function confirmEntryApplication(
   id: number,
   data: EntryApplicationConfirmRequest,
@@ -243,12 +254,14 @@ export async function confirmEntryApplication(
   return request.post(`/api/v1/entry-applications/${id}/confirm`, data);
 }
 
+/** 查询转正申请分页列表，供待转正/已评估标签页共用。 */
 export async function getRegularApplicationList(
   params: RegularApplicationQuery,
 ): Promise<PageResult<RegularApplication>> {
   return request.get('/api/v1/regular-applications', { params });
 }
 
+/** 发起转正评估审批，供转正管理抽屉表单提交使用。 */
 export async function applyRegularApplication(
   employeeId: number,
   data: RegularApplicationApplyRequest,
@@ -256,24 +269,28 @@ export async function applyRegularApplication(
   return request.post(`/api/v1/regular-applications/${employeeId}/apply`, data);
 }
 
+/** 查询调岗申请分页列表，供调岗管理页筛选和展示。 */
 export async function getTransferApplicationList(
   params: TransferApplicationQuery,
 ): Promise<PageResult<TransferApplication>> {
   return request.get('/api/v1/transfer-applications', { params });
 }
 
+/** 创建调岗申请并进入审批流程，供调岗表单提交使用。 */
 export async function createTransferApplication(
   data: TransferApplicationCreateRequest,
 ): Promise<TransferApplicationCreateResult> {
   return request.post('/api/v1/transfer-applications', data);
 }
 
+/** 查询离职申请分页列表，供离职管理页筛选和展示。 */
 export async function getLeaveApplicationList(
   params: LeaveApplicationQuery,
 ): Promise<PageResult<LeaveApplication>> {
   return request.get('/api/v1/leave-applications', { params });
 }
 
+/** 创建离职申请并进入审批流程，供离职表单提交使用。 */
 export async function createLeaveApplication(
   data: LeaveApplicationCreateRequest,
 ): Promise<LeaveApplicationCreateResult> {
