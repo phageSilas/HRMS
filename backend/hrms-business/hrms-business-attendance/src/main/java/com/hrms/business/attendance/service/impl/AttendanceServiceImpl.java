@@ -179,6 +179,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public AttendanceGroupPageVO createAttendanceGroup(AttendanceGroupCreateOrUpdateRequestDTO requestDTO) {
+        validateCreateMemberRange(requestDTO.getMemberRange());
         AttendanceGroupEntity entity = AttendanceGroupConvert.toEntity(requestDTO);
         fillGroupScope(entity, requestDTO.getMemberRange());
         attendanceGroupMapper.insert(entity);
@@ -2587,9 +2588,6 @@ public class AttendanceServiceImpl implements AttendanceService {
                     throw new GlobalException(ErrorCode.PARAM_REQUIRED, "请选择员工所属部门");
                 }
                 List<Long> employeeIds = normalizeIds(memberRange.getEmployeeIds());
-                if (employeeIds.isEmpty()) {
-                    throw new GlobalException(ErrorCode.PARAM_REQUIRED, "请选择指定员工");
-                }
                 scopeValue.set("deptId", memberRange.getDeptId());
                 scopeValue.set("employeeIds", employeeIds);
             }
@@ -2616,9 +2614,25 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
         List<Long> employeeIds = resolveGroupMemberEmployeeIds(memberRange);
         if (employeeIds.isEmpty()) {
-            throw new GlobalException(ErrorCode.NOT_FOUND, "适用范围内没有可用员工");
+            return;
         }
         insertGroupMembers(groupId, employeeIds);
+    }
+
+    /**
+     * 校验新建考勤组的成员范围。
+     *
+     * @param memberRange 适用范围请求
+     * 本方法使用的工具类: StrUtil(hutool),GlobalException(hrms-common)
+     */
+    private void validateCreateMemberRange(AttendanceGroupMemberRangeDTO memberRange) {
+        if (memberRange == null || StrUtil.isBlank(memberRange.getScopeType())) {
+            return;
+        }
+        String scopeType = memberRange.getScopeType().trim().toUpperCase();
+        if (GROUP_SCOPE_EMPLOYEE.equals(scopeType) && normalizeIds(memberRange.getEmployeeIds()).isEmpty()) {
+            throw new GlobalException(ErrorCode.PARAM_REQUIRED, "请选择指定员工");
+        }
     }
 
     /**

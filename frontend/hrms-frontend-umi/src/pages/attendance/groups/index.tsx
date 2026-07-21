@@ -966,7 +966,16 @@ const AttendanceGroupsPage: React.FC = () => {
                       <Form.Item
                         label="指定员工"
                         name="employeeIds"
-                        rules={[{ required: true, message: '请选择指定员工' }]}
+                        rules={[
+                          {
+                            validator: (_, value?: number[]) => {
+                              if (editingGroup || (value && value.length > 0)) {
+                                return Promise.resolve();
+                              }
+                              return Promise.reject(new Error('请选择指定员工'));
+                            },
+                          },
+                        ]}
                       >
                         <Select
                           mode="multiple"
