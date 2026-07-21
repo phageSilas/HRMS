@@ -1,0 +1,52 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.hrms.business.employee.mapper.EmployeeMapper">
+
+    <!--
+        游标分页查询员工列表（基于主键ID，性能O(1)）
+        本方法使用的工具类：foreach(MyBatis XML)
+    -->
+    <select id="selectPageByCursor" resultType="com.hrms.business.employee.entity.EmployeeEntity">
+        SELECT
+            id, employee_no, user_id, dept_id, post_id, leader_id,
+            employee_name, gender, phone, email, job_level,
+            employment_status, hire_date, create_time, update_time
+        FROM hr_employee
+        WHERE is_deleted = 0
+        <if test="lastId != null">
+            AND id &gt; #{lastId}
+        </if>
+        <if test="deptIds != null and deptIds.size() > 0">
+            AND dept_id IN
+            <foreach collection="deptIds" item="deptId" open="(" separator="," close=")">
+                #{deptId}
+            </foreach>
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (employee_name LIKE CONCAT('%', #{keyword}, '%')
+                 OR employee_no LIKE CONCAT('%', #{keyword}, '%')
+                 OR phone LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        <if test="employmentStatus != null and employmentStatus.size() > 0">
+            AND employment_status IN
+            <foreach collection="employmentStatus" item="status" open="(" separator="," close=")">
+                #{status}
+            </foreach>
+        </if>
+        <if test="jobLevel != null and jobLevel != ''">
+            AND job_level = #{jobLevel}
+        </if>
+        <if test="hireDateStart != null">
+            AND hire_date &gt;= #{hireDateStart}
+        </if>
+        <if test="hireDateEnd != null">
+            AND hire_date &lt;= #{hireDateEnd}
+        </if>
+        <if test="createBy != null">
+            AND create_by = #{createBy}
+        </if>
+        ORDER BY id ASC
+        LIMIT #{pageSize}
+    </select>
+
+</mapper>

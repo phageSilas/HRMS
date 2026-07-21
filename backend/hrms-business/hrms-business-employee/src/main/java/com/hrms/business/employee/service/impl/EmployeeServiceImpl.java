@@ -87,6 +87,18 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     @Override
     public PageResult<EmployeeListVO> listEmployees(EmployeeQueryDTO queryDTO) {
+        // ???????lastId ????????????????O(1) ???
+        if (queryDTO.getLastId() != null) {
+            return listEmployeesByCursor(queryDTO);
+        }
+        // ????????
+        return listEmployeesByOffset(queryDTO);
+    }
+
+    /**
+     * ????????????
+     */
+    private PageResult<EmployeeListVO> listEmployeesByOffset(EmployeeQueryDTO queryDTO) {
         // 构建分页参数
         Page<EmployeeEntity> page = new Page<>(queryDTO.getPageNum(), queryDTO.getPageSize());
 
@@ -170,6 +182,56 @@ public class EmployeeServiceImpl implements EmployeeService {
         pageResult.setPages((int) resultPage.getPages());
 
         return pageResult;
+    }
+
+    /**
+     * ???????????????ID???O(1)???
+     */
+    private PageResult<EmployeeListVO> listEmployeesByCursor(EmployeeQueryDTO queryDTO) {
+        int pageSize = Math.min(queryDTO.getPageSize(), 100);
+        Long lastId = queryDTO.getLastId();
+
+        List<Long> deptIds = queryDTO.getDeptIds();
+        Long createBy = null;
+        List<Long> accessibleDeptIds = resolveAccessibleDeptIds();
+        if (accessibleDeptIds != null) {
+            if (accessibleDeptIds.isEmpty()) {
+                createBy = SecurityContextHolder.getUserId();
+            } else {
+                if (deptIds != null && !deptIds.isEmpty()) {
+                    deptIds = deptIds.stream().filter(accessibleDeptIds::contains).collect(Collectors.toList());
+                    if (deptIds.isEmpty()) {
+                        return PageResult.of(List.of(), 0, 1, pageSize);
+                    }
+                } else {
+                    deptIds = accessibleDeptIds;
+                }
+            }
+        }
+
+        // ????????????
+        List<EmployeeEntity> entities = employeeMapper.selectPageByCursor(
+                lastId, pageSize + 1, queryDTO.getKeyword(), deptIds,
+                queryDTO.getEmploymentStatus(), queryDTO.getJobLevel(),
+                queryDTO.getHireDateStart(), queryDTO.getHireDateEnd(), createBy);
+
+        boolean hasMore = entities.size() > pageSize;
+        if (hasMore) {
+            entities = entities.subList(0, pageSize);
+        }
+
+        List<EmployeeListVO> records = entities.stream()
+                .map(this::convertToListVO)
+                .collect(Collectors.toList());
+
+        Long nextLastId = records.isEmpty() ? null : records.get(records.size() - 1).getId();
+
+        PageResult<EmployeeListVO> result = new PageResult<>();
+        result.setRecords(records);
+        result.setTotal(hasMore ? -1 : entities.size());
+        result.setPageSize(pageSize);
+        result.setPages(hasMore ? -1 : 1);
+        return result;
     }
 
     @Override
