@@ -2,6 +2,8 @@
  * 合同管理页面
  *
  * 功能：按员工查询合同、合同 CRUD、合同到期状态标识
+ * - admin用户可以查看所有合同
+ * - 其他用户需要先选择员工才能查看合同
  *
  * 路由：/employee/contract
  */
@@ -11,12 +13,15 @@ import {
   deleteContract,
   getContractsByEmployee,
   getContractDetail,
+  getContractList,
   updateContract,
   type Contract,
   type ContractCreateRequest,
   type ContractUpdateRequest,
 } from '@/services/employee';
 import { getEmployeeList, type EmployeeBrief } from '@/services/employee';
+import { RoleCode } from '@/types/user';
+import { useModel } from '@umijs/max';
 import {
   DeleteOutlined,
   EditOutlined,
@@ -38,7 +43,6 @@ import {
   Select,
   Space,
   Tag,
-  Tooltip,
 } from 'antd';
 import dayjs from 'dayjs';
 import React, { useEffect, useRef, useState } from 'react';
@@ -79,6 +83,10 @@ function getContractStatus(endDate?: string): {
 
 const ContractPage: React.FC = () => {
   const actionRef = useRef<any>();
+  const { initialState } = useModel('@@initialState');
+  const { currentUser } = initialState || {};
+  const isAdmin = currentUser?.roleCode === RoleCode.ADMIN;
+
   const [employees, setEmployees] = useState<EmployeeBrief[]>([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<
     number | undefined
@@ -116,6 +124,19 @@ const ContractPage: React.FC = () => {
       dataIndex: 'employeeName',
       width: 120,
       fixed: 'left',
+      hideInTable: !isAdmin && !selectedEmployeeId,
+    },
+    {
+      title: '工号',
+      dataIndex: 'employeeNo',
+      width: 100,
+      hideInTable: !isAdmin,
+    },
+    {
+      title: '部门',
+      dataIndex: 'deptName',
+      width: 120,
+      hideInTable: !isAdmin,
     },
     {
       title: '合同编号',
@@ -254,7 +275,7 @@ const ContractPage: React.FC = () => {
 
   return (
     <PageContainer>
-      {/* 顶部：选择员工 */}
+      {/* 顶部：选择员工（非admin用户必须选择） */}
       <div
         style={{
           marginBottom: 16,
@@ -268,7 +289,7 @@ const ContractPage: React.FC = () => {
         </span>
         <Select
           showSearch
-          placeholder="请选择员工查看其合同"
+          placeholder="姓名 / 工号 / 手机号"
           style={{ width: 320 }}
           value={selectedEmployeeId}
           filterOption={false}
@@ -279,10 +300,19 @@ const ContractPage: React.FC = () => {
         >
           {employees.map((emp) => (
             <Option key={emp.id} value={emp.id}>
-              {emp.employeeName} ({emp.employeeNo}) — {emp.deptName}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontWeight: 500 }}>{emp.employeeName}</span>
+                <span style={{ color: '#999', fontSize: 12 }}>{emp.employeeNo}</span>
+                <span style={{ color: '#666', fontSize: 12 }}>{emp.deptName}</span>
+              </div>
             </Option>
           ))}
         </Select>
+        {isAdmin && (
+          <span style={{ color: '#999', fontSize: 12 }}>
+            管理员可不选择员工直接查看所有合同
+          </span>
+        )}
       </div>
 
       {/* 合同列表表格 */}
@@ -293,7 +323,25 @@ const ContractPage: React.FC = () => {
         search={false}
         columns={columns}
         params={{ employeeId: selectedEmployeeId }}
-        request={async () => {
+        request={async (params) => {
+          // admin用户可以查看所有合同
+          if (isAdmin && !selectedEmployeeId) {
+            try {
+              const result = await getContractList({
+                pageNum: params.current,
+                pageSize: params.pageSize,
+              });
+              return {
+                data: result?.records || [],
+                total: result?.total || 0,
+                success: true,
+              };
+            } catch {
+              return { data: [], total: 0, success: true };
+            }
+          }
+
+          // 非admin用户或已选择员工
           if (!selectedEmployeeId) {
             return { data: [], total: 0, success: true };
           }
@@ -313,9 +361,9 @@ const ContractPage: React.FC = () => {
             key="add"
             type="primary"
             icon={<PlusOutlined />}
-            disabled={!selectedEmployeeId}
+            disabled={!isAdmin && !selectedEmployeeId}
             onClick={() => {
-              if (!selectedEmployeeId) {
+              if (!isAdmin && !selectedEmployeeId) {
                 message.warning('请先选择员工');
                 return;
               }
@@ -337,7 +385,9 @@ const ContractPage: React.FC = () => {
         locale={{
           emptyText: selectedEmployeeId
             ? '该员工暂无合同记录'
-            : '请先选择员工查看合同',
+            : isAdmin
+              ? '暂无合同记录'
+              : '请先选择员工查看合同',
         }}
       />
 

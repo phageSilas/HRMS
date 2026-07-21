@@ -1,8 +1,13 @@
 /**
- * 离职申请页面。
- * 对接离职申请分页和创建接口。
+ * 离职申请页面。对接离职申请分页和创建接口。
  */
 
+import {
+  getEmployeeDetail,
+  getEmployeeList,
+  type Employee,
+  type EmployeeBrief,
+} from '@/services/employee';
 import { getDeptList } from '@/services/organization';
 import {
   ApprovalStatus,
@@ -26,11 +31,22 @@ import {
   ProTable,
 } from '@ant-design/pro-components';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
-import { Avatar, Button, Card, Space, Tag, Typography, message } from 'antd';
+import { Avatar, Button, Card, Form, Space, Tag, Typography, message } from 'antd';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { formatProcessDateTime } from '../utils';
 
 const { Text } = Typography;
+
+type SelectOption = {
+  label: string;
+  value: number;
+};
+
+type LeaveFormValues = LeaveApplicationCreateRequest & {
+  employeeName?: string;
+  departmentName?: string;
+  positionName?: string;
+};
 
 const statusMeta: Record<number, { text: string; color: string }> = {
   [ApprovalStatus.DRAFT]: { text: '草稿', color: 'default' },
@@ -48,18 +64,6 @@ const leaveTypeOptions = [
   { label: '合同到期', value: 'contract_end' },
 ];
 
-const handoverOptions = [
-  { label: '王敏（1001）', value: 1001 },
-  { label: '李强（1002）', value: 1002 },
-  { label: '赵玲（1003）', value: 1003 },
-];
-
-type LeaveFormValues = LeaveApplicationCreateRequest & {
-  employeeName?: string;
-  departmentName?: string;
-  positionName?: string;
-};
-
 function getInitial(name?: string) {
   return name?.slice(0, 1) || '员';
 }
@@ -67,15 +71,18 @@ function getInitial(name?: string) {
 const LeavePage: React.FC = () => {
   const actionRef = useRef<ActionType>();
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [departmentOptions, setDepartmentOptions] = useState<
-    { label: string; value: number }[]
-  >([]);
-  const [employeePreview, setEmployeePreview] = useState<{
-    employeeName?: string;
-    employeeId?: number;
-    departmentName?: string;
-    positionName?: string;
-  }>({});
+  const [departmentOptions, setDepartmentOptions] = useState<SelectOption[]>([]);
+  const [handoverOptions, setHandoverOptions] = useState<SelectOption[]>([]);
+  const [employeeLoading, setEmployeeLoading] = useState(false);
+  const [handoverLoading, setHandoverLoading] = useState(false);
+  const [handoverKeyword, setHandoverKeyword] = useState('');
+  const [currentEmployeeDetail, setCurrentEmployeeDetail] = useState<Employee>();
+  const [leaveForm] = Form.useForm<LeaveFormValues>();
+
+  const watchedEmployeeId = Form.useWatch('employeeId', leaveForm);
+  const watchedEmployeeName = Form.useWatch('employeeName', leaveForm);
+  const watchedDepartmentName = Form.useWatch('departmentName', leaveForm);
+  const watchedPositionName = Form.useWatch('positionName', leaveForm);
 
   useEffect(() => {
     const loadDepartments = async () => {
@@ -91,7 +98,7 @@ const LeavePage: React.FC = () => {
         message.error('部门数据加载失败，请刷新后重试');
       }
     };
-    loadDepartments();
+    void loadDepartments();
   }, []);
 
   const departmentFilterOption = useMemo(
@@ -102,6 +109,77 @@ const LeavePage: React.FC = () => {
           .includes(input.trim().toLowerCase()),
     [],
   );
+
+  const resetEmployeeRelatedFields = () => {
+    leaveForm.setFieldsValue({
+      employeeName: undefined,
+      departmentName: undefined,
+      positionName: undefined,
+      handoverEmployeeId: undefined,
+    });
+    setCurrentEmployeeDetail(undefined);
+    setHandoverOptions([]);
+    setHandoverKeyword('');
+  };
+
+  const loadHandoverOptions = async (keyword?: string) => {
+    if (!currentEmployeeDetail?.deptId || !currentEmployeeDetail?.id) {
+      setHandoverOptions([]);
+      return;
+    }
+    setHandoverLoading(true);
+    try {
+      const page = await getEmployeeList({
+        deptIds: [currentEmployeeDetail.deptId],
+        keyword: keyword?.trim() || undefined,
+        pageNum: 1,
+        pageSize: 50,
+      });
+      const options = (page.records || [])
+        .filter((employee: EmployeeBrief) => employee.id !== currentEmployeeDetail.id)
+        .map((employee: EmployeeBrief) => ({
+          label: `${employee.employeeName}（${employee.employeeNo} / ${employee.deptName}）`,
+          value: employee.id,
+        }));
+      setHandoverOptions(options);
+    } catch (error) {
+      setHandoverOptions([]);
+      message.error('工作交接人候选加载失败，请稍后重试');
+    } finally {
+      setHandoverLoading(false);
+    }
+  };
+
+  const handleEmployeeLookup = async (rawEmployeeId?: number | string | null) => {
+    const employeeId = Number(rawEmployeeId);
+    if (!employeeId || employeeId < 1) {
+      resetEmployeeRelatedFields();
+      return;
+    }
+    setEmployeeLoading(true);
+    try {
+      const detail = await getEmployeeDetail(employeeId);
+      setCurrentEmployeeDetail(detail);
+      leaveForm.setFieldsValue({
+        employeeId: detail.id,
+        employeeName: detail.employeeName,
+        departmentName: detail.deptName,
+        positionName: detail.postName,
+        handoverEmployeeId: undefined,
+      });
+      setHandoverKeyword('');
+      await loadHandoverOptions();
+    } catch (error) {
+      resetEmployeeRelatedFields();
+      message.error('未找到该员工，请确认员工ID后重试');
+    } finally {
+      setEmployeeLoading(false);
+    }
+  };
+
+  const triggerEmployeeLookup = () => {
+    void handleEmployeeLookup(leaveForm.getFieldValue('employeeId'));
+  };
 
   const columns: ProColumns<LeaveApplication>[] = [
     {
@@ -246,7 +324,6 @@ const LeavePage: React.FC = () => {
               type="primary"
               icon={<PlusOutlined />}
               onClick={() => {
-                setEmployeePreview({});
                 setDrawerOpen(true);
               }}
             >
@@ -257,25 +334,19 @@ const LeavePage: React.FC = () => {
       />
 
       <DrawerForm<LeaveFormValues>
+        form={leaveForm}
         title="离职申请表单"
         width={420}
         open={drawerOpen}
         onOpenChange={(open) => {
           setDrawerOpen(open);
           if (!open) {
-            setEmployeePreview({});
+            leaveForm.resetFields();
+            resetEmployeeRelatedFields();
           }
         }}
         drawerProps={{ destroyOnClose: true }}
         submitter={{ searchConfig: { submitText: '提交审批' } }}
-        onValuesChange={(_, values) => {
-          setEmployeePreview({
-            employeeId: values.employeeId,
-            employeeName: values.employeeName,
-            departmentName: values.departmentName,
-            positionName: values.positionName,
-          });
-        }}
         onFinish={async (values) => {
           const payload: LeaveApplicationCreateRequest = {
             employeeId: values.employeeId,
@@ -295,14 +366,13 @@ const LeavePage: React.FC = () => {
         <Card size="small" title="员工信息" style={{ marginBottom: 16 }}>
           <Space>
             <Avatar size={40} style={{ background: '#2f6fed' }}>
-              {getInitial(employeePreview.employeeName)}
+              {getInitial(watchedEmployeeName)}
             </Avatar>
             <Space direction="vertical" size={0}>
-              <strong>{employeePreview.employeeName || '待选择员工'}</strong>
-              <Text type="secondary">员工 ID：{employeePreview.employeeId || '-'}</Text>
+              <strong>{watchedEmployeeName || '待选择员工'}</strong>
+              <Text type="secondary">员工 ID：{watchedEmployeeId || '-'}</Text>
               <Text type="secondary">
-                部门：{employeePreview.departmentName || '-'}　职位：
-                {employeePreview.positionName || '-'}
+                部门：{watchedDepartmentName || '-'} 职位：{watchedPositionName || '-'}
               </Text>
             </Space>
           </Space>
@@ -314,11 +384,44 @@ const LeavePage: React.FC = () => {
             label="员工 ID"
             width="sm"
             min={1}
-            rules={[{ required: true, message: '请输入离职员工 ID' }]}
+            rules={[{ required: true, message: '请输入离职员工ID' }]}
+            fieldProps={{
+              onBlur: () => {
+                triggerEmployeeLookup();
+              },
+              onPressEnter: (event) => {
+                event.preventDefault();
+                triggerEmployeeLookup();
+              },
+            }}
           />
-          <ProFormText name="employeeName" label="员工姓名" width="md" />
-          <ProFormText name="departmentName" label="当前部门" width="md" />
-          <ProFormText name="positionName" label="当前职位" width="md" />
+          <ProFormText
+            name="employeeName"
+            label="员工姓名"
+            width="md"
+            fieldProps={{
+              readOnly: true,
+              placeholder: employeeLoading ? '员工信息加载中...' : '输入员工ID后自动带出',
+            }}
+          />
+          <ProFormText
+            name="departmentName"
+            label="当前部门"
+            width="md"
+            fieldProps={{
+              readOnly: true,
+              placeholder: employeeLoading ? '员工信息加载中...' : '输入员工ID后自动带出',
+            }}
+          />
+          <ProFormText
+            name="positionName"
+            label="当前职位"
+            width="md"
+            fieldProps={{
+              readOnly: true,
+              placeholder: employeeLoading ? '员工信息加载中...' : '输入员工ID后自动带出',
+            }}
+          />
         </ProFormGroup>
 
         <ProFormSelect
@@ -337,6 +440,26 @@ const LeavePage: React.FC = () => {
           label="工作交接人"
           options={handoverOptions}
           rules={[{ required: true, message: '请选择工作交接人' }]}
+          fieldProps={{
+            disabled: !currentEmployeeDetail?.deptId,
+            loading: handoverLoading,
+            showSearch: true,
+            filterOption: false,
+            allowClear: true,
+            optionFilterProp: 'label',
+            placeholder: currentEmployeeDetail?.deptId
+              ? '请输入姓名或工号查询同部门人员'
+              : '请先输入员工ID',
+            onDropdownVisibleChange: (open) => {
+              if (open && currentEmployeeDetail?.deptId) {
+                void loadHandoverOptions(handoverKeyword);
+              }
+            },
+            onSearch: (value) => {
+              setHandoverKeyword(value);
+              void loadHandoverOptions(value);
+            },
+          }}
         />
         <ProFormTextArea
           name="leaveReason"

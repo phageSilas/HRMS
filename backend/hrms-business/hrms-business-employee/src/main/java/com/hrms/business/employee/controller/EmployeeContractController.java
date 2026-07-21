@@ -4,6 +4,7 @@ import com.hrms.business.employee.dto.ContractCreateDTO;
 import com.hrms.business.employee.dto.ContractUpdateDTO;
 import com.hrms.business.employee.entity.EmployeeContractEntity;
 import com.hrms.business.employee.service.EmployeeContractService;
+import com.hrms.business.employee.vo.EmployeeContractDetailVO;
 import com.hrms.business.employee.vo.EmployeeContractVO;
 import com.hrms.common.web.Result;
 import io.swagger.v3.oas.annotations.Operation;
@@ -13,7 +14,9 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 员工合同控制器
@@ -77,6 +80,24 @@ public class EmployeeContractController {
             @Parameter(description = "员工ID") @PathVariable Long employeeId) {
         List<EmployeeContractVO> list = contractService.getContractsByEmployee(employeeId);
         return Result.success(list);
+    }
+
+    /**
+     * 所有合同列表（分页）
+     */
+    @GetMapping("/all")
+    @Operation(summary = "所有合同列表", description = "获取所有合同列表（分页），支持按员工姓名、工号、合同编号搜索")
+    public Result<Map<String, Object>> listAll(
+            @Parameter(description = "页码") @RequestParam(defaultValue = "1") Integer pageNum,
+            @Parameter(description = "每页数量") @RequestParam(defaultValue = "10") Integer pageSize,
+            @Parameter(description = "关键词") @RequestParam(required = false) String keyword) {
+        List<EmployeeContractDetailVO> list = contractService.getAllContracts(pageNum, pageSize, keyword);
+        long total = contractService.getAllContractsCount(keyword);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("records", list);
+        result.put("total", total);
+        return Result.success(result);
     }
 
 }

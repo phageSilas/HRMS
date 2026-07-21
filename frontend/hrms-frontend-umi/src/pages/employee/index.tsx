@@ -189,13 +189,6 @@ const EmployeePage: React.FC = () => {
                       `/process/transfer?employeeId=${record.id}&employeeName=${encodeURIComponent(record.employeeName)}&employeeNo=${record.employeeNo || ''}`,
                     ),
                 },
-                {
-                  key: 'delete',
-                  icon: <DeleteOutlined />,
-                  label: '删除',
-                  danger: true,
-                  onClick: () => handleDelete(record.id, record.employeeName),
-                },
               ],
             }}
             trigger={['click']}

@@ -41,6 +41,7 @@ const statusMeta: Record<number, { text: string; color: string }> = {
   2: { text: '已通过', color: 'success' },
   3: { text: '已驳回', color: 'error' },
   4: { text: '已撤回', color: 'default' },
+  5: { text: '已入职', color: 'blue' },
 };
 
 function getInitial(name?: string) {

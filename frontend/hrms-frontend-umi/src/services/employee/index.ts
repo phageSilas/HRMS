@@ -134,6 +134,7 @@ export interface Contract {
   // 前端扩展字段（列表展示时关联查询）
   employeeName?: string;
   employeeNo?: string;
+  deptName?: string;
 }
 
 /** 创建合同请求（字段与后端 ContractCreateDTO 对齐） */
@@ -285,8 +286,8 @@ export async function deleteContract(id: number) {
 }
 
 /**
- * 查询全部合同列表（通过员工列表遍历聚合，供合同管理页使用）
- * 注意：后端无全局合同列表接口，此函数仅供兼容，实际页面应通过员工维度查询
+ * 查询全部合同列表（分页）
+ * 供合同管理页使用，支持按员工姓名、工号、合同编号搜索
  */
 export async function getContractList(params: {
   keyword?: string;
@@ -294,8 +295,7 @@ export async function getContractList(params: {
   pageNum?: number;
   pageSize?: number;
 }) {
-  // 后端无全局合同分页接口，如果需要全局列表请调用 /api/v1/employees 后按员工查询
-  return request.get<PageResult<Contract>>('/api/v1/employee-contracts/list', {
+  return request.get<PageResult<Contract>>('/api/v1/employee-contracts/all', {
     params,
   });
 }
