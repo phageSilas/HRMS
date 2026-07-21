@@ -758,6 +758,16 @@ const EntryPage: React.FC = () => {
             label="所属部门"
             width="md"
             options={realDepartmentOptions}
+            fieldProps={{
+              allowClear: true,
+              showSearch: true,
+              optionFilterProp: 'label',
+              placeholder: '请输入或选择所属部门',
+              filterOption: (input: string, option?: { label?: string | number }) =>
+                String(option?.label || '')
+                  .toLowerCase()
+                  .includes(input.trim().toLowerCase()),
+            }}
             rules={[{ required: true, message: '请选择所属部门' }]}
           />
           <ProFormSelect
