@@ -49,16 +49,7 @@ import static com.hrms.business.personnel.common.enums.ServiceErrorCodeEnum.*;
 @Service
 @RequiredArgsConstructor
 public class RegularApplicationServiceImpl implements RegularApplicationService {
-    private static final List<Integer> PENDING_APPROVAL_STATUSES = List.of(
-            ApplicationStatusEnum.DRAFT.getCode(),
-            ApplicationStatusEnum.APPROVING.getCode()
-    );
 
-    private static final List<Integer> EVALUATED_APPROVAL_STATUSES = List.of(
-            ApplicationStatusEnum.APPROVED.getCode(),
-            ApplicationStatusEnum.REJECTED.getCode(),
-            ApplicationStatusEnum.ENTERED.getCode()
-    );
 
     // 转正申请Mapper
     private final RegularApplicationMapper regularApplicationMapper;

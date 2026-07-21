@@ -52,9 +52,6 @@ import static com.hrms.common.exception.ErrorCode.EMPLOYEE_NOT_FOUND;
 @RequiredArgsConstructor
 public class LeaveApplicationServiceImpl implements LeaveApplicationService {
 
-
-
-
     private final LeaveApplicationMapper leaveApplicationMapper;
 
     private final EmployeeService employeeService;

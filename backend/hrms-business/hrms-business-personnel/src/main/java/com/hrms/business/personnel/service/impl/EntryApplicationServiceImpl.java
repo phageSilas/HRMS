@@ -50,9 +50,6 @@ import static com.hrms.business.personnel.common.enums.ServiceErrorCodeEnum.*;
 @RequiredArgsConstructor
 public class EntryApplicationServiceImpl implements EntryApplicationService {
 
-
-
-
     private final EntryApplicationMapper entryApplicationMapper;
 
     private final ApprovalEngine approvalEngine;
