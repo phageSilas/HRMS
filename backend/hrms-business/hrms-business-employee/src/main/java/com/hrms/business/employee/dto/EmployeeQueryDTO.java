@@ -37,4 +37,6 @@ public class EmployeeQueryDTO {
     @Schema(description = "入职日期范围-结束（yyyy-MM-dd）", example = "2026-07-11")
     private LocalDate hireDateEnd;
 
+    @Schema(description = "游标分页：上一页最后一条记录的ID（首次请求不传）", example = "900100")
+    private Long lastId;
 }

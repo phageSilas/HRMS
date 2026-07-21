@@ -1113,15 +1113,6 @@ const SalaryBatchPage: React.FC = () => {
                         导出为Excel
                       </Button>
                     ) : null}
-                    {canManage && currentBatch.batchStatus === 'PENDING_REVIEW' ? (
-                      <Button
-                        icon={<EditOutlined />}
-                        disabled={!previewData?.items?.length}
-                        onClick={() => previewData?.items?.[0] && openAdjustmentModal(previewData.items[0])}
-                      >
-                        手动调整
-                      </Button>
-                    ) : null}
                     {canSubmitApproval ? (
                       <Button
                         type="primary"

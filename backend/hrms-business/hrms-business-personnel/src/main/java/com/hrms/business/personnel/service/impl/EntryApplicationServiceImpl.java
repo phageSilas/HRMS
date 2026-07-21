@@ -2,6 +2,7 @@ package com.hrms.business.personnel.service.impl;
 
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
+import com.hrms.business.personnel.common.cache.PersonnelCacheKeys;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hrms.business.approval.enums.ApprovalTypeEnum;
@@ -32,6 +33,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import java.util.concurrent.TimeUnit;
+
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
@@ -50,9 +55,6 @@ import static com.hrms.business.personnel.common.enums.ServiceErrorCodeEnum.*;
 @RequiredArgsConstructor
 public class EntryApplicationServiceImpl implements EntryApplicationService {
 
-
-
-
     private final EntryApplicationMapper entryApplicationMapper;
 
     private final ApprovalEngine approvalEngine;
@@ -62,6 +64,8 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
     private final DeptService deptService;
 
     private final PostService postService;
+
+    private final ObjectProvider<StringRedisTemplate> redisTemplateProvider;
 
     /**
      * 分页查询入职申请。
@@ -84,9 +88,22 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         return PageResult.of(records, page.getTotal(), pageNum, pageSize);
     }
 
+    /**
+     * 统计入职申请。
+     * @param queryDTO 入职申请查询参数
+      * @return 入职申请统计信息
+     */
     @Override
     public EntryApplicationStatsVO statsEntryApplications(EntryApplicationQueryDTO queryDTO) {
-        return EntryApplicationStatsVO.builder()
+        StringRedisTemplate rt = redisTemplateProvider.getIfAvailable();
+        int queryHash = queryDTO.hashCode();
+        if (rt != null) {
+            String cached = rt.opsForValue().get(PersonnelCacheKeys.entryStats(queryHash));
+            if (StrUtil.isNotBlank(cached)) {
+                return JSONUtil.toBean(cached, EntryApplicationStatsVO.class);
+            }
+        }
+        EntryApplicationStatsVO stats = EntryApplicationStatsVO.builder()
                 .all(countByStatus(queryDTO, null))
                 .draft(countByStatus(queryDTO, ApplicationStatusEnum.DRAFT.getCode()))
                 .approving(countByStatus(queryDTO, ApplicationStatusEnum.APPROVING.getCode()))
@@ -94,6 +111,11 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
                 .rejected(countByStatus(queryDTO, ApplicationStatusEnum.REJECTED.getCode()))
                 .entered(countByStatus(queryDTO, ApplicationStatusEnum.ENTERED.getCode()))
                 .build();
+        if (rt != null) {
+            rt.opsForValue().set(PersonnelCacheKeys.entryStats(queryHash),
+                    JSONUtil.toJsonStr(stats), 1, TimeUnit.MINUTES);
+        }
+        return stats;
     }
 
     /**
@@ -104,7 +126,19 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
      */
     @Override
     public EntryApplicationPageVO getEntryApplication(Long id) {
-        return enrichEntryApplication(getRequiredEntryApplication(id));
+        StringRedisTemplate rt = redisTemplateProvider.getIfAvailable();
+        if (rt != null) {
+            String cached = rt.opsForValue().get(PersonnelCacheKeys.entryDetail(id));
+            if (StrUtil.isNotBlank(cached)) {
+                return JSONUtil.toBean(cached, EntryApplicationPageVO.class);
+            }
+        }
+        EntryApplicationPageVO vo = enrichEntryApplication(getRequiredEntryApplication(id));
+        if (rt != null) {
+            rt.opsForValue().set(PersonnelCacheKeys.entryDetail(id),
+                    JSONUtil.toJsonStr(vo), 5, TimeUnit.MINUTES);
+        }
+        return vo;
     }
 
     /**
@@ -134,6 +168,16 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         EntryApplicationEntity entity = getRequiredEntryApplication(id);
         // 确保状态为草稿
         assertDraft(entity);
+        // 提交防重
+        StringRedisTemplate rt = redisTemplateProvider.getIfAvailable();
+        if (rt != null) {
+            Boolean locked = rt.opsForValue()
+                    .setIfAbsent(PersonnelCacheKeys.entrySubmitToken(id), "1", 30, TimeUnit.SECONDS);
+            if (!Boolean.TRUE.equals(locked)) {
+                throw new GlobalException(ErrorCode.CONFLICT, "入职申请正在提交中，请勿重复操作");
+            }
+        }
+
         // 确保手机号唯一
         checkPhoneAvailable(requestDTO.getPhone(), id);
         // 填充更新内容
@@ -152,6 +196,16 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
     public EntryApplicationSubmitVO submitEntryApplication(Long id) {
         EntryApplicationEntity entity = getRequiredEntryApplication(id);
         assertDraft(entity);
+        // 提交防重
+        StringRedisTemplate rt = redisTemplateProvider.getIfAvailable();
+        if (rt != null) {
+            Boolean locked = rt.opsForValue()
+                    .setIfAbsent(PersonnelCacheKeys.entrySubmitToken(id), "1", 30, TimeUnit.SECONDS);
+            if (!Boolean.TRUE.equals(locked)) {
+                throw new GlobalException(ErrorCode.CONFLICT, "入职申请正在提交中，请勿重复操作");
+            }
+        }
+
 
         // 跨模块调用已完成：当前调用 ApprovalEngine#startApproval(...) 发起入职审批。
         Long approvalInstanceId = approvalEngine.startApproval(
@@ -191,46 +245,40 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public EntryApplicationConfirmVO confirmEntryApplication(Long id, EntryApplicationConfirmRequestDTO requestDTO) {
-        EntryApplicationEntity entity = getRequiredEntryApplication(id);
-        if (entity.getApprovalStatus() != null && entity.getApprovalStatus() == ApplicationStatusEnum.ENTERED.getCode()) {
-            return buildConfirmedEmployee(entity);
+        StringRedisTemplate rt = redisTemplateProvider.getIfAvailable();
+        Boolean lockOk = rt == null ? Boolean.TRUE :
+                rt.opsForValue().setIfAbsent(PersonnelCacheKeys.entryConfirmLock(id), "1", 10, TimeUnit.MINUTES);
+        if (!Boolean.TRUE.equals(lockOk)) {
+            throw new GlobalException(ErrorCode.CONFLICT, "入职申请正在确认中，请稍后重试");
         }
-        Object confirmLock = getEntryConfirmLock(id);
-        synchronized (confirmLock) {
-            EntryApplicationEntity lockedEntity = getRequiredEntryApplication(id);
-            if (lockedEntity.getApprovalStatus() != null
-                    && lockedEntity.getApprovalStatus() == ApplicationStatusEnum.ENTERED.getCode()) {
-                return buildConfirmedEmployee(lockedEntity);
+        try {
+            EntryApplicationEntity entity = getRequiredEntryApplication(id);
+            if (entity.getApprovalStatus() != null && entity.getApprovalStatus() == ApplicationStatusEnum.ENTERED.getCode()) {
+                return buildConfirmedEmployee(entity);
             }
-            assertApproved(lockedEntity);
+            assertApproved(entity);
             // 设置实际入职日期
-            lockedEntity.setActualHireDate(requestDTO.getActualHireDate());
+            entity.setActualHireDate(requestDTO.getActualHireDate());
 
             //  跨模块调用已完成：当前调用 EmployeeService#createEmployee(createDTO) 创建员工档案。
-            EmployeeEntity createdEmployee = createEmployeeFromEntryApplication(lockedEntity);
+            EmployeeEntity createdEmployee = createEmployeeFromEntryApplication(entity);
 
             Long employeeId = createdEmployee.getId();
             String employeeNo = createdEmployee.getEmployeeNo();
 
-            //  跨模块调用已完成：账号创建已由 EmployeeService#createEmployee(createDTO) 内部完成，personnel 不再重复调用 UserService#createUser(...)。
-            lockedEntity.setEmployeeId(employeeId);
-            lockedEntity.setEmployeeNo(employeeNo);
-            lockedEntity.setApprovalStatus(ApplicationStatusEnum.ENTERED.getCode());
-            entryApplicationMapper.updateById(lockedEntity);
+            //  跨模块调用已完成：账号创建已由 EmployeeService#createEmployee(createDTO) 内部完成。
+            entity.setEmployeeId(employeeId);
+            entity.setEmployeeNo(employeeNo);
+            entity.setApprovalStatus(ApplicationStatusEnum.ENTERED.getCode());
+            entryApplicationMapper.updateById(entity);
+            evictEntryDetailCache(id);
 
             return buildConfirmVO(employeeId, employeeNo);
+        } finally {
+            if (rt != null) {
+                rt.delete(PersonnelCacheKeys.entryConfirmLock(id));
+            }
         }
-    }
-
-    /**
-     * 获取入职确认本地锁。
-     *
-     * @param id 入职申请ID
-     * @return 本地锁对象
-     */
-    private Object getEntryConfirmLock(Long id) {
-        // 根据入职申请ID获取本地锁对象，如果不存在则创建一个新对象
-        return ENTRY_CONFIRM_LOCKS.computeIfAbsent(id, key -> new Object());
     }
 
     /**
@@ -472,4 +520,15 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         return Math.min(pageSize, MAX_PAGE_SIZE);
     }
 
+    /**
+     * 清除入职申请详情缓存
+     *
+     * @param id 入职申请ID
+     */
+    private void evictEntryDetailCache(Long id) {
+        StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+        if (redisTemplate != null) {
+            redisTemplate.delete(PersonnelCacheKeys.entryDetail(id));
+        }
+    }
 }

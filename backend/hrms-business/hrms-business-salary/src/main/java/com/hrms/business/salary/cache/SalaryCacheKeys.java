@@ -53,6 +53,29 @@ public final class SalaryCacheKeys {
     }
 
     /**
+     * 获取批次明细分页缓存 Key。
+     *
+     * @param batchId 批次ID
+     * @param pageNum 页码
+     * @return Redis Key
+     * 本方法使用的工具类: 无
+     */
+    public static String batchItemPage(Long batchId, int pageNum) {
+        return "salary:batch:items:" + batchId + ":page:" + pageNum;
+    }
+
+    /**
+     * 获取批次所有明细分页缓存前缀（用于批量删除）。
+     *
+     * @param batchId 批次ID
+     * @return Redis Key 前缀
+     * 本方法使用的工具类: 无
+     */
+    public static String batchItemPagesPrefix(Long batchId) {
+        return "salary:batch:items:" + batchId + ":page:";
+    }
+
+    /**
      * 获取工资条二次验证 Key。
      *
      * @param employeeId 员工ID

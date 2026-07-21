@@ -36,6 +36,7 @@ export interface SalaryTemplate {
 export interface SalaryTemplateQuery {
   templateName?: string;
   scope?: string;
+  employeeId?: number;
   status?: number;
   pageNum?: number;
   pageSize?: number;

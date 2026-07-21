@@ -4,6 +4,10 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.hrms.business.employee.entity.EmployeeEntity;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+
+import java.time.LocalDate;
+import java.util.List;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
 /**
@@ -50,4 +54,28 @@ public interface EmployeeMapper extends BaseMapper<EmployeeEntity> {
     @org.apache.ibatis.annotations.Update("UPDATE hr_employee SET phone = #{newPhone} WHERE phone = #{phone} AND is_deleted = 1")
     int releasePhoneForDeleted(@Param("phone") String phone, @Param("newPhone") String newPhone);
 
+    /**
+     * 游标分页查询员工列表（基于主键ID，O(1)性能）
+     *
+     * @param lastId           上一页最后一条记录的ID，首次传null
+     * @param pageSize         每页条数
+     * @param keyword          关键词（姓名/工号/手机号模糊匹配）
+     * @param deptIds          部门ID列表
+     * @param employmentStatus 在职状态列表
+     * @param jobLevel         职级
+     * @param hireDateStart    入职日期开始
+     * @param hireDateEnd      入职日期结束
+     * @param createBy         仅本人（数据权限）
+     * @return 员工列表
+     * 本方法使用的工具类：foreach(MyBatis XML)
+     */
+    List<EmployeeEntity> selectPageByCursor(@Param("lastId") Long lastId,
+                                            @Param("pageSize") int pageSize,
+                                            @Param("keyword") String keyword,
+                                            @Param("deptIds") List<Long> deptIds,
+                                            @Param("employmentStatus") List<Integer> employmentStatus,
+                                            @Param("jobLevel") String jobLevel,
+                                            @Param("hireDateStart") LocalDate hireDateStart,
+                                            @Param("hireDateEnd") LocalDate hireDateEnd,
+                                            @Param("createBy") Long createBy);
 }
