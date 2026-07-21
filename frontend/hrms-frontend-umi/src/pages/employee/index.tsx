@@ -65,24 +65,24 @@ const EmployeePage: React.FC = () => {
   }, []);
 
   /** 删除确认 */
-  const handleDelete = (id: number, name: string) => {
-    Modal.confirm({
-      title: '确认删除',
-      content: `确定要删除员工「${name}」吗？删除后不可恢复。`,
-      okText: '确认删除',
-      okType: 'danger',
-      cancelText: '取消',
-      onOk: async () => {
-        try {
-          await deleteEmployee(id);
-          message.success('删除成功');
-          actionRef.current?.reload();
-        } catch {
-          message.error('删除失败');
-        }
-      },
-    });
-  };
+  // const handleDelete = (id: number, name: string) => {
+  //   Modal.confirm({
+  //     title: '确认删除',
+  //     content: `确定要删除员工「${name}」吗？删除后不可恢复。`,
+  //     okText: '确认删除',
+  //     okType: 'danger',
+  //     cancelText: '取消',
+  //     onOk: async () => {
+  //       try {
+  //         await deleteEmployee(id);
+  //         message.success('删除成功');
+  //         actionRef.current?.reload();
+  //       } catch {
+  //         message.error('删除失败');
+  //       }
+  //     },
+  //   });
+  // };
 
   const columns: ProColumns<EmployeeBrief>[] = [
     {
@@ -189,6 +189,13 @@ const EmployeePage: React.FC = () => {
                       `/process/transfer?employeeId=${record.id}&employeeName=${encodeURIComponent(record.employeeName)}&employeeNo=${record.employeeNo || ''}`,
                     ),
                 },
+                // {
+                //   key: 'delete',
+                //   icon: <DeleteOutlined />,
+                //   label: '删除',
+                //   danger: true,
+                //   onClick: () => handleDelete(record.id, record.employeeName),
+                // },
               ],
             }}
             trigger={['click']}
