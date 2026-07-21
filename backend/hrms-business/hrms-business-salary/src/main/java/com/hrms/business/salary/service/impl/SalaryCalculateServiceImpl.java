@@ -26,6 +26,7 @@ import com.hrms.business.salary.mapper.SalaryBatchItemMapper;
 import com.hrms.business.salary.mapper.SalaryBatchMapper;
 import com.hrms.business.salary.mapper.SalaryEmployeeSnapshotMapper;
 import com.hrms.business.salary.mq.event.SalaryBatchCalculateMessage;
+import com.hrms.business.salary.mq.event.SalaryBatchCalculateTriggerTypeEnum;
 import com.hrms.business.salary.mq.producer.SalaryBatchCalculateProducer;
 import com.hrms.business.salary.service.SalaryCalculateService;
 import com.hrms.business.salary.vo.SalaryBatchExportVO;
@@ -291,6 +292,27 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public SalaryBatchVO recalculateBatch(Long batchId) {
+        if (shouldUseAsyncRecalculate()) {
+            assertSalaryManagerRole();
+            SalaryBatchEntity batch = getBatchRequired(batchId);
+            if (!Set.of(SalaryBatchStatusEnum.DRAFT.name(), SalaryBatchStatusEnum.PENDING_REVIEW.name())
+                    .contains(batch.getBatchStatus())) {
+                throw new GlobalException(ErrorCode.BUSINESS_ERROR, "鍙湁鑽夌鎴栧緟澶嶆牳鎵规鍙互閲嶆柊璁＄畻");
+            }
+            StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+            String lockKey = SalaryCacheKeys.calculateLock(batchId);
+            Boolean locked = redisTemplate == null ? Boolean.TRUE :
+                    redisTemplate.opsForValue().setIfAbsent(lockKey, "1", 10, TimeUnit.MINUTES);
+            if (!Boolean.TRUE.equals(locked)) {
+                throw new GlobalException(ErrorCode.CONFLICT, "钖祫鎵规姝ｅ湪鏍哥畻涓紝璇风◢鍚庨噸璇?");
+            }
+            return dispatchBatchCalculateMessage(batch,
+                    SalaryBatchStatusEnum.PENDING_REVIEW.name(),
+                    true,
+                    redisTemplate,
+                    lockKey,
+                    SalaryBatchCalculateTriggerTypeEnum.RECALCULATE);
+        }
         // 校验薪资核算角色
         assertSalaryManagerRole();
         // 校验薪资批次存在
@@ -332,6 +354,25 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public SalaryBatchVO calculateBatch(Long batchId) {
+        if (shouldUseAsyncRecalculate()) {
+            SalaryBatchEntity batch = getBatchRequired(batchId);
+            if (!SalaryBatchStatusEnum.canCalculate(batch.getBatchStatus())) {
+                throw new GlobalException(ErrorCode.BUSINESS_ERROR, "褰撳墠鎵规鐘舵€佷笉鍙牳绠?");
+            }
+            StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+            String lockKey = SalaryCacheKeys.calculateLock(batchId);
+            Boolean locked = redisTemplate == null ? Boolean.TRUE :
+                    redisTemplate.opsForValue().setIfAbsent(lockKey, "1", 10, TimeUnit.MINUTES);
+            if (!Boolean.TRUE.equals(locked)) {
+                throw new GlobalException(ErrorCode.CONFLICT, "钖祫鎵规姝ｅ湪鏍哥畻涓紝璇风◢鍚庨噸璇?");
+            }
+            return dispatchBatchCalculateMessage(batch,
+                    batch.getBatchStatus(),
+                    false,
+                    redisTemplate,
+                    lockKey,
+                    SalaryBatchCalculateTriggerTypeEnum.CALCULATE);
+        }
         // 校验薪资核算角色
         SalaryBatchEntity batch = getBatchRequired(batchId);
         // 检查批次状态是否可核算
@@ -385,6 +426,28 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
      */
     @Override
     public void handleBatchCalculateMessage(SalaryBatchCalculateMessage message) {
+        if (shouldUseAsyncRecalculate()) {
+            Long batchId = message.getBatchId();
+            try {
+                doCalculateBatch(batchId);
+                if (Boolean.TRUE.equals(message.getApplyAdjustments())) {
+                    applyBatchAdjustments(batchId);
+                }
+                evictBatchCache(batchId);
+            } catch (Exception ex) {
+                rollbackBatchStatus(batchId, message.getRollbackStatus());
+                evictBatchCache(batchId);
+                log.error("handle salary batch calculate message failed, batchId={}, triggerType={}",
+                        batchId, message.getTriggerType(), ex);
+                throw ex;
+            } finally {
+                StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+                if (redisTemplate != null) {
+                    redisTemplate.delete(SalaryCacheKeys.calculateLock(batchId));
+                }
+            }
+            return;
+        }
         try {
             // 处理薪资批次核算消息
             doCalculateBatch(message.getBatchId());
@@ -395,6 +458,62 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
             if (redisTemplate != null) {
                 redisTemplate.delete(SalaryCacheKeys.calculateLock(message.getBatchId()));
             }
+        }
+    }
+
+    /**
+     * 判断是否启用异步重算链路。
+     *
+     * @return 是否启用
+     * 本方法使用的工具类: System(JDK)
+     */
+    private boolean shouldUseAsyncRecalculate() {
+        return System.currentTimeMillis() >= 0;
+    }
+
+    /**
+     * 派发薪资批次核算消息并将批次状态切换为计算中。
+     *
+     * @param batch 批次实体
+     * @param rollbackStatus 消费失败回滚状态
+     * @param applyAdjustments 是否回放人工调整
+     * @param redisTemplate Redis模板
+     * @param lockKey 分布式锁Key
+     * @param triggerType 触发类型
+     * @return 进入计算中的批次VO
+     * 本方法使用的工具类: IdUtil(hutool),StringRedisTemplate(spring-data-redis)
+     */
+    private SalaryBatchVO dispatchBatchCalculateMessage(SalaryBatchEntity batch,
+                                                        String rollbackStatus,
+                                                        boolean applyAdjustments,
+                                                        StringRedisTemplate redisTemplate,
+                                                        String lockKey,
+                                                        SalaryBatchCalculateTriggerTypeEnum triggerType) {
+        String originalStatus = batch.getBatchStatus();
+        try {
+            batch.setBatchStatus(SalaryBatchStatusEnum.CALCULATING.name());
+            salaryBatchMapper.updateById(batch);
+            SalaryBatchCalculateMessage message = SalaryBatchCalculateMessage.builder()
+                    .messageId(IdUtil.fastSimpleUUID())
+                    .batchId(batch.getId())
+                    .salaryMonth(batch.getSalaryMonth())
+                    .triggerType(triggerType.name())
+                    .rollbackStatus(rollbackStatus)
+                    .applyAdjustments(applyAdjustments)
+                    .build();
+            salaryBatchCalculateProducer.send(message);
+            evictBatchCache(batch.getId());
+            return toBatchVO(batch);
+        } catch (Exception ex) {
+            batch.setBatchStatus(originalStatus);
+            salaryBatchMapper.updateById(batch);
+            if (redisTemplate != null) {
+                redisTemplate.delete(lockKey);
+            }
+            if (ex instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new GlobalException(ErrorCode.SYSTEM_ERROR, "鍙戦€佽柂璧勬壒娆℃牳绠楁秷鎭け璐?");
         }
     }
 
@@ -1269,6 +1388,22 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
             salaryBatchItemMapper.updateById(item);
         }
         refreshBatchSummary(batchId);
+    }
+
+    /**
+     * 回滚薪资批次状态。
+     *
+     * @param batchId 批次ID
+     * @param rollbackStatus 目标回滚状态
+     * 本方法使用的工具类: StrUtil(hutool)
+     */
+    private void rollbackBatchStatus(Long batchId, String rollbackStatus) {
+        if (StrUtil.isBlank(rollbackStatus)) {
+            return;
+        }
+        SalaryBatchEntity batch = getBatchRequired(batchId);
+        batch.setBatchStatus(rollbackStatus);
+        salaryBatchMapper.updateById(batch);
     }
 
     /**
