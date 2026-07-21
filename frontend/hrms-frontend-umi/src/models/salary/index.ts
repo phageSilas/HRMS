@@ -1,5 +1,6 @@
 /**
  * 薪资域状态管理
+ * 为账套、薪资批次和工资条页面保留统一的历史状态容器。
  * 负责人：成员 C
  */
 
@@ -42,6 +43,7 @@ const SalaryModel: SalaryModelType = {
   effects: {},
 
   reducers: {
+    /** 重置薪资模块的列表与分页状态，便于页面重新进入时恢复默认值。 */
     resetState() {
       return {
         accountList: [],

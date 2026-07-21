@@ -63,6 +63,7 @@ type EmployeeOption = {
   value: number;
 };
 
+/** 格式化金额显示。 */
 function formatMoney(value?: number | string | null) {
   if (value == null || value === '') {
     return '--';
@@ -77,6 +78,7 @@ function formatMoney(value?: number | string | null) {
   })}`;
 }
 
+/** 渲染金额差异文本，内部调用 `formatMoney` 统一格式。 */
 function renderDiff(before?: number | string, after?: number | string) {
   const beforeText = formatMoney(before);
   const afterText = formatMoney(after);
@@ -86,6 +88,7 @@ function renderDiff(before?: number | string, after?: number | string) {
   return `${beforeText} -> ${afterText}`;
 }
 
+/** 渲染文本差异，供薪资档案变更历史展示前后值。 */
 function renderTextDiff(before?: string | number, after?: string | number) {
   const beforeText = before == null || before === '' ? '--' : String(before);
   const afterText = after == null || after === '' ? '--' : String(after);
@@ -95,6 +98,10 @@ function renderTextDiff(before?: string | number, after?: string | number) {
   return `${beforeText} -> ${afterText}`;
 }
 
+/**
+ * 薪资档案页面组件。
+ * 负责员工薪资档案查询、详情展示和档案调整保存。
+ */
 const SalaryProfilePage: React.FC = () => {
   const [searchForm] = Form.useForm<SearchFormValues>();
   const [editForm] = Form.useForm<ProfileEditFormValues>();
@@ -110,6 +117,7 @@ const SalaryProfilePage: React.FC = () => {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<number>();
   const [profileDetail, setProfileDetail] = useState<SalaryEmployeeProfileDetail>();
 
+  /** 加载部门列表，供员工筛选和部门选择使用。 */
   const loadDepartments = async () => {
     setDepartmentLoading(true);
     try {
@@ -123,6 +131,7 @@ const SalaryProfilePage: React.FC = () => {
     }
   };
 
+  /** 加载可用薪资账套，供薪资档案编辑时选择账套。 */
   const loadTemplates = async () => {
     setTemplateLoading(true);
     try {
@@ -161,6 +170,7 @@ const SalaryProfilePage: React.FC = () => {
 
   const isProbation = profileDetail?.employmentStatus === 1;
 
+  /** 加载薪资档案详情，供查询结果展示与编辑前回显。 */
   const loadProfileDetail = async (employeeId: number) => {
     setProfileLoading(true);
     try {
@@ -177,6 +187,7 @@ const SalaryProfilePage: React.FC = () => {
     }
   };
 
+  /** 搜索员工选项，供按部门过滤后的员工下拉选择复用。 */
   const searchEmployeeOptions = async (deptId?: number, keyword = '') => {
     if (!deptId) {
       setEmployeeOptions([]);
@@ -205,6 +216,7 @@ const SalaryProfilePage: React.FC = () => {
     }
   };
 
+  /** 按员工 ID 查询员工与薪资档案，内部调用 `loadProfileDetail` 刷新详情面板。 */
   const handleEmployeeIdLookup = async (rawEmployeeId?: number | string | null) => {
     const employeeId = Number(rawEmployeeId);
     if (!employeeId || employeeId < 1) {
@@ -240,6 +252,7 @@ const SalaryProfilePage: React.FC = () => {
     }
   };
 
+  /** 处理员工选择，内部调用 `handleEmployeeIdLookup` 统一刷新档案上下文。 */
   const handleEmployeeSelect = async (employeeId?: number) => {
     if (!employeeId) {
       searchForm.setFieldsValue({ employeeId: undefined, employeeOptionId: undefined });
@@ -251,6 +264,7 @@ const SalaryProfilePage: React.FC = () => {
     await handleEmployeeIdLookup(employeeId);
   };
 
+  /** 打开档案编辑弹窗，并根据当前详情回填表单。 */
   const openEditModal = () => {
     if (!profileDetail || !selectedEmployeeId) {
       return;
@@ -273,6 +287,7 @@ const SalaryProfilePage: React.FC = () => {
     setEditOpen(true);
   };
 
+  /** 保存薪资档案调整，并在成功后重新调用 `loadProfileDetail` 刷新详情。 */
   const handleSave = async (values: ProfileEditFormValues) => {
     if (!selectedEmployeeId) {
       return false;

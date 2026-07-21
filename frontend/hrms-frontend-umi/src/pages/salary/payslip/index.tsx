@@ -70,6 +70,7 @@ interface PayslipQueryState {
 
 interface StoredPayslipQueryState extends Partial<PayslipQueryState> {}
 
+/** 生成工资条查询缓存键，按用户隔离最近的筛选条件。 */
 function resolveStorageKey() {
   const userInfoText = localStorage.getItem('userInfo');
   if (!userInfoText) {
@@ -89,6 +90,7 @@ function resolveStorageKey() {
   }
 }
 
+/** 读取工资条查询缓存，供页面回显上次筛选状态。 */
 function getStoredQuery(): StoredPayslipQueryState {
   const storedText = sessionStorage.getItem(resolveStorageKey());
   if (!storedText) {
@@ -103,6 +105,7 @@ function getStoredQuery(): StoredPayslipQueryState {
   }
 }
 
+/** 格式化工资条金额显示。 */
 function formatCurrency(value?: number | string | null) {
   const amount = Number(value || 0);
   return `¥${amount.toLocaleString('zh-CN', {
@@ -111,6 +114,7 @@ function formatCurrency(value?: number | string | null) {
   })}`;
 }
 
+/** 渲染工资条查看状态标签。 */
 function renderViewStatusTag(status?: string) {
   if (status === 'VIEWED') {
     return <Tag color="success">已查看</Tag>;
@@ -124,6 +128,7 @@ function renderViewStatusTag(status?: string) {
   return <Tag>{status || '--'}</Tag>;
 }
 
+/** 格式化工资月份展示文案。 */
 function formatMonth(value?: string) {
   if (!value) {
     return '--';
@@ -132,6 +137,7 @@ function formatMonth(value?: string) {
   return date.isValid() ? date.format('YYYY年MM月') : value;
 }
 
+/** 构造工资条查询参数。 */
 function buildQueryParams(query: PayslipQueryState): SalaryManagePayslipQuery {
   return {
     keyword: query.keyword,
@@ -143,6 +149,7 @@ function buildQueryParams(query: PayslipQueryState): SalaryManagePayslipQuery {
   };
 }
 
+/** 构造收入项列表，供工资条详情收入分区展示。 */
 function buildIncomeItems(detail?: SalaryPayslipDetail) {
   if (!detail) {
     return [];
@@ -155,6 +162,7 @@ function buildIncomeItems(detail?: SalaryPayslipDetail) {
   ].filter((item) => Number(item.amount || 0) !== 0);
 }
 
+/** 构造扣款项列表，供工资条详情扣款分区展示。 */
 function buildDeductionItems(detail?: SalaryPayslipDetail) {
   if (!detail) {
     return [];
@@ -168,6 +176,10 @@ function buildDeductionItems(detail?: SalaryPayslipDetail) {
   ].filter((item) => Number(item.amount || 0) !== 0);
 }
 
+/**
+ * 管理端工资条页面组件。
+ * 负责工资条筛选、密码校验、详情查看和查看状态更新。
+ */
 const SalaryPayslipManagePage: React.FC = () => {
   const [form] = Form.useForm<PayslipFilterValues>();
   const [verifyForm] = Form.useForm<{ password: string }>();
@@ -191,6 +203,7 @@ const SalaryPayslipManagePage: React.FC = () => {
   const [detailData, setDetailData] = useState<SalaryPayslipDetail>();
   const [pendingViewRecord, setPendingViewRecord] = useState<SalaryManagePayslip>();
 
+  /** 加载部门列表，供工资条筛选中的部门下拉使用。 */
   const loadDepartments = async () => {
     setDepartmentLoading(true);
     try {
@@ -204,6 +217,7 @@ const SalaryPayslipManagePage: React.FC = () => {
     }
   };
 
+  /** 加载工资条列表，内部调用 `buildQueryParams` 统一查询参数。 */
   const loadManagePayslips = async (nextQuery: PayslipQueryState) => {
     setTableLoading(true);
     try {
@@ -240,6 +254,7 @@ const SalaryPayslipManagePage: React.FC = () => {
     });
   };
 
+  /** 打开工资条详情，内部查询详情并展示弹窗。 */
   const openPayslipDetail = async (id: number) => {
     setDetailLoading(true);
     try {
@@ -281,6 +296,7 @@ const SalaryPayslipManagePage: React.FC = () => {
     void loadManagePayslips(query);
   });
 
+  /** 执行工资条查询并重置分页。 */
   const handleSearch = (values: PayslipFilterValues) => {
     setQuery((previous) => ({
       ...previous,
@@ -292,6 +308,7 @@ const SalaryPayslipManagePage: React.FC = () => {
     }));
   };
 
+  /** 重置工资条筛选条件并恢复默认月份。 */
   const handleReset = () => {
     setQuery({
       month: dayjs().format('YYYY-MM'),
@@ -300,6 +317,7 @@ const SalaryPayslipManagePage: React.FC = () => {
     });
   };
 
+  /** 处理查看工资条动作，必要时先进入密码校验流程。 */
   const handleView = async (record: SalaryManagePayslip) => {
     setPendingViewRecord(record);
     if (record.viewStatus === 'UNPUBLISHED') {
@@ -314,6 +332,7 @@ const SalaryPayslipManagePage: React.FC = () => {
     setVerifyModalOpen(true);
   };
 
+  /** 校验查看密码，成功后调用 `openPayslipDetail` 展示工资条详情。 */
   const handleVerify = async () => {
     if (!pendingViewRecord) {
       return;

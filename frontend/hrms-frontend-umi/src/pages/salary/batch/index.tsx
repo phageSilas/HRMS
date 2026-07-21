@@ -86,6 +86,7 @@ interface AdjustmentFormValues {
   adjustments: SalaryBatchAdjustmentItem[];
 }
 
+/** 从本地缓存读取当前用户信息，供角色判断和缓存键生成使用。 */
 function getCurrentUserFromStorage() {
   const userInfoText = localStorage.getItem('userInfo');
   if (!userInfoText) {
@@ -99,6 +100,7 @@ function getCurrentUserFromStorage() {
   }
 }
 
+/** 生成薪资批次月份缓存键，按用户隔离最近查看月份。 */
 function resolveStorageKey() {
   const currentUser = getCurrentUserFromStorage();
   const identity =
@@ -106,6 +108,7 @@ function resolveStorageKey() {
   return `${STORAGE_PREFIX}:${identity}`;
 }
 
+/** 读取缓存中的月份值，作为批次工作台默认月份。 */
 function getStoredMonth() {
   const stored = sessionStorage.getItem(resolveStorageKey());
   if (!stored) {
@@ -114,10 +117,12 @@ function getStoredMonth() {
   return stored;
 }
 
+/** 判断当前用户是否属于薪资管理视角。 */
 function isManagementRole(currentUser?: UserInfo) {
   return MANAGEMENT_ROLES.has(currentUser?.roleCode || '');
 }
 
+/** 将金额字段安全转换为数值。 */
 function toNumber(value?: number | string | null) {
   if (typeof value === 'number') {
     return value;
@@ -126,6 +131,7 @@ function toNumber(value?: number | string | null) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+/** 格式化金额显示。 */
 function formatCurrency(value?: number | string | null) {
   return `¥${toNumber(value).toLocaleString('zh-CN', {
     minimumFractionDigits: 0,
@@ -133,6 +139,7 @@ function formatCurrency(value?: number | string | null) {
   })}`;
 }
 
+/** 获取批次状态在步骤条中的索引。 */
 function getBatchStatusIndex(status?: string) {
   const current = BATCH_STATUS_STEPS.findIndex((item) => item.key === status);
   if (current >= 0) {
@@ -144,6 +151,7 @@ function getBatchStatusIndex(status?: string) {
   return 0;
 }
 
+/** 渲染预警级别标签。 */
 function renderWarningTag(level?: string) {
   if (!level) {
     return <Tag color="success">正常</Tag>;
@@ -163,6 +171,7 @@ function renderWarningTag(level?: string) {
   return <Tag>{level}</Tag>;
 }
 
+/** 构造薪资趋势图数据。 */
 function buildTrendChartData(items: SalaryBatchTrendItem[]) {
   return items.flatMap((item) => [
     {
@@ -180,6 +189,7 @@ function buildTrendChartData(items: SalaryBatchTrendItem[]) {
   ]);
 }
 
+/** 聚合部门维度薪资数据，供部门分布图使用。 */
 function buildDeptChartData(items: SalaryBatchItem[]) {
   const deptMap = new Map<
     string,
@@ -204,6 +214,7 @@ function buildDeptChartData(items: SalaryBatchItem[]) {
   return Array.from(deptMap.values());
 }
 
+/** 聚合收入构成数据，供收入构成图使用。 */
 function buildCompositionData(items: SalaryBatchItem[]) {
   const totals = {
     基本工资: 0,
@@ -236,6 +247,7 @@ function buildCompositionData(items: SalaryBatchItem[]) {
     .filter((item) => item.amount > 0);
 }
 
+/** 聚合社保与公积金数据，供成本构成图使用。 */
 function buildSocialFundData(items: SalaryBatchItem[]) {
   const totals = {
     社保: 0,
@@ -250,6 +262,7 @@ function buildSocialFundData(items: SalaryBatchItem[]) {
   return Object.entries(totals).map(([type, amount]) => ({ type, amount }));
 }
 
+/** 下载导出的薪资批次文件。 */
 async function downloadExportFile(result: SalaryBatchExportResult) {
   const token = localStorage.getItem('token');
   const response = await fetch(result.downloadUrl, {
@@ -269,6 +282,10 @@ async function downloadExportFile(result: SalaryBatchExportResult) {
   window.URL.revokeObjectURL(blobUrl);
 }
 
+/**
+ * 薪资批次页面组件。
+ * 负责批次创建、核算预览、人工调整、审批提交和导出。
+ */
 const SalaryBatchPage: React.FC = () => {
   const currentUser = getCurrentUserFromStorage();
   const canManage = isManagementRole(currentUser);
@@ -295,6 +312,7 @@ const SalaryBatchPage: React.FC = () => {
   const [adjustmentForm] = Form.useForm<AdjustmentFormValues>();
   const pollingRef = useRef<number>();
 
+  /** 加载当前月份批次，供页面初始化和工作区刷新时复用。 */
   const loadCurrentBatch = async (selectedMonth: string) => {
     setLoadingCurrent(true);
     try {
@@ -315,6 +333,7 @@ const SalaryBatchPage: React.FC = () => {
     }
   };
 
+  /** 加载批次预览明细，供预览表格和图表数据联动使用。 */
   const loadPreview = async (batchId: number) => {
     setLoadingPreview(true);
     try {
@@ -331,6 +350,7 @@ const SalaryBatchPage: React.FC = () => {
     }
   };
 
+  /** 加载薪资趋势数据，供顶部趋势图展示。 */
   const loadTrend = async (selectedMonth: string) => {
     if (!canManage) {
       setTrendData([]);
@@ -353,6 +373,7 @@ const SalaryBatchPage: React.FC = () => {
     }
   };
 
+  /** 加载部门列表，供批次按部门筛选或展示时复用。 */
   const loadDepartments = async () => {
     setDepartmentLoading(true);
     try {
@@ -367,6 +388,7 @@ const SalaryBatchPage: React.FC = () => {
     }
   };
 
+  /** 加载整个月份工作区，内部串联 `loadCurrentBatch`、`loadTrend` 和预览加载。 */
   const loadWorkspace = async (selectedMonth: string) => {
     const batch = await loadCurrentBatch(selectedMonth);
     if (batch?.id) {
@@ -414,6 +436,7 @@ const SalaryBatchPage: React.FC = () => {
     void loadWorkspace(month);
   });
 
+  /** 创建薪资批次，成功后调用 `loadWorkspace` 刷新当前月份工作区。 */
   const handleCreateBatch = async () => {
     setCreating(true);
     try {
@@ -433,6 +456,7 @@ const SalaryBatchPage: React.FC = () => {
     }
   };
 
+  /** 重新计算薪资批次，成功后调用 `loadWorkspace` 重新拉取预览和图表。 */
   const handleRecalculate = async () => {
     if (!currentBatch?.id) {
       return;
@@ -451,6 +475,7 @@ const SalaryBatchPage: React.FC = () => {
     }
   };
 
+  /** 提交薪资批次审批，成功后调用 `loadWorkspace` 刷新批次状态。 */
   const handleSubmitApproval = async () => {
     if (!currentBatch?.id) {
       return;
@@ -470,6 +495,7 @@ const SalaryBatchPage: React.FC = () => {
     }
   };
 
+  /** 打开审批确认弹窗，供批次提交前二次确认。 */
   const handleSubmitApprovalAction = () => {
     if (!currentBatch?.id) {
       return;
@@ -493,6 +519,7 @@ const SalaryBatchPage: React.FC = () => {
     });
   };
 
+  /** 导出薪资批次文件，内部调用 `downloadExportFile` 完成下载。 */
   const handleExportBatch = async () => {
     if (!currentBatch?.id) {
       return;
@@ -510,6 +537,7 @@ const SalaryBatchPage: React.FC = () => {
     }
   };
 
+  /** 打开人工调整弹窗并回填当前员工调整项。 */
   const openAdjustmentModal = (item: SalaryBatchItem) => {
     setAdjustingItem(item);
     adjustmentForm.resetFields();
@@ -531,6 +559,7 @@ const SalaryBatchPage: React.FC = () => {
     adjustmentForm.resetFields();
   };
 
+  /** 保存人工调整，成功后调用 `loadWorkspace` 刷新当前批次预览。 */
   const handleSaveAdjustments = async () => {
     if (!currentBatch?.id || !adjustingItem?.employeeId) {
       return;
