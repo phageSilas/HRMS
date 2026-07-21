@@ -47,6 +47,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import java.util.concurrent.CompletableFuture;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import java.util.concurrent.TimeUnit;
 import cn.hutool.json.JSONUtil;
@@ -71,7 +72,7 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     /** ???? */
     private static final String CACHE_PREFIX = "employee:list:";
-    private static final int CACHE_MAX_PAGES = 10;
+    private static final int CACHE_MAX_PAGES = 9;
     private static final long CACHE_TTL_MINUTES = 5;
     private static final long EMPTY_TTL_MINUTES = 1;
     private static final String EMPTY_MARKER = "__EMPTY__";
@@ -250,60 +251,108 @@ public class EmployeeServiceImpl implements EmployeeService {
      * 本方法使用的工具类：StringRedisTemplate(spring-data-redis), JSONUtil(hutool)
      */
     private PageResult<EmployeeListVO> prefetchAndCachePages(EmployeeQueryDTO queryDTO, int pageSize) {
+        // ???1????????????????????????
         LambdaQueryWrapper<EmployeeEntity> wrapper = buildEmployeeWrapper(queryDTO);
         if (wrapper == null) {
-            for (int i = 1; i <= CACHE_MAX_PAGES; i++) {
-                stringRedisTemplate.opsForValue().set(
-                        buildListCacheKey(queryDTO, i), EMPTY_MARKER, EMPTY_TTL_MINUTES, TimeUnit.MINUTES);
-            }
+            // ??????????????
+            stringRedisTemplate.opsForValue().set(
+                    buildListCacheKey(queryDTO, 1), EMPTY_MARKER, EMPTY_TTL_MINUTES, TimeUnit.MINUTES);
             return PageResult.of(List.of(), 0, 1, pageSize);
         }
 
-        int bulkSize = pageSize * CACHE_MAX_PAGES;
-        Page<EmployeeEntity> bulkPage = new Page<>(1, bulkSize);
-        Page<EmployeeEntity> resultPage = employeeMapper.selectPage(bulkPage, wrapper);
+        Page<EmployeeEntity> page1Query = new Page<>(1, pageSize + 1);
+        Page<EmployeeEntity> resultPage = employeeMapper.selectPage(page1Query, wrapper);
 
-        List<EmployeeListVO> allRecords = resultPage.getRecords().stream()
+        List<EmployeeListVO> records = resultPage.getRecords().stream()
                 .map(this::convertToListVO)
                 .collect(Collectors.toList());
 
         long total = resultPage.getTotal();
         int totalPages = (int) Math.ceil((double) total / pageSize);
-        int pagesToCache = Math.min(CACHE_MAX_PAGES, Math.max(1, totalPages));
-
-        for (int i = 0; i < pagesToCache; i++) {
-            int fromIndex = i * pageSize;
-            int toIndex = Math.min(fromIndex + pageSize, allRecords.size());
-            List<EmployeeListVO> pageRecords;
-            if (fromIndex >= allRecords.size()) {
-                pageRecords = List.of();
-            } else {
-                pageRecords = new java.util.ArrayList<>(allRecords.subList(fromIndex, toIndex));
-            }
-
-            PageResult<EmployeeListVO> pageResult = new PageResult<>();
-            pageResult.setRecords(pageRecords);
-            pageResult.setTotal(total);
-            pageResult.setPageNum(i + 1);
-            pageResult.setPageSize(pageSize);
-            pageResult.setPages(totalPages);
-
-            String cacheKey = buildListCacheKey(queryDTO, i + 1);
-            if (pageRecords.isEmpty()) {
-                stringRedisTemplate.opsForValue().set(cacheKey, EMPTY_MARKER, EMPTY_TTL_MINUTES, TimeUnit.MINUTES);
-            } else {
-                stringRedisTemplate.opsForValue().set(cacheKey, JSONUtil.toJsonStr(pageResult), CACHE_TTL_MINUTES, TimeUnit.MINUTES);
-            }
+        boolean hasMore = records.size() > pageSize;
+        if (hasMore) {
+            records = records.subList(0, pageSize);
         }
 
         PageResult<EmployeeListVO> page1 = new PageResult<>();
-        page1.setRecords(allRecords.isEmpty() ? List.of()
-                : new java.util.ArrayList<>(allRecords.subList(0, Math.min(pageSize, allRecords.size()))));
+        page1.setRecords(new java.util.ArrayList<>(records));
         page1.setTotal(total);
         page1.setPageNum(1);
         page1.setPageSize(pageSize);
         page1.setPages(totalPages);
+
+        // ???1?
+        stringRedisTemplate.opsForValue().set(
+                buildListCacheKey(queryDTO, 1), JSONUtil.toJsonStr(page1), CACHE_TTL_MINUTES, TimeUnit.MINUTES);
+
+        // ?????2-9??Redis
+        if (hasMore && totalPages > 1) {
+            asyncCacheEmployeePages(queryDTO, pageSize, total, totalPages);
+        }
+
         return page1;
+    }
+
+    /**
+     * ??????????2-9??Redis?
+     *
+     * @param queryDTO   ????
+     * @param pageSize   ????
+     * @param total      ????
+     * @param totalPages ???
+     * ??????????StringRedisTemplate(spring-data-redis), JSONUtil(hutool), CompletableFuture(JDK)
+     */
+    private void asyncCacheEmployeePages(EmployeeQueryDTO queryDTO, int pageSize, long total, int totalPages) {
+        EmployeeQueryDTO cacheQuery = new EmployeeQueryDTO();
+        cacheQuery.setKeyword(queryDTO.getKeyword());
+        cacheQuery.setDeptIds(queryDTO.getDeptIds());
+        cacheQuery.setEmploymentStatus(queryDTO.getEmploymentStatus());
+        cacheQuery.setJobLevel(queryDTO.getJobLevel());
+        cacheQuery.setHireDateStart(queryDTO.getHireDateStart());
+        cacheQuery.setHireDateEnd(queryDTO.getHireDateEnd());
+        cacheQuery.setPageSize(pageSize);
+
+        CompletableFuture.runAsync(() -> {
+            int pagesToCache = Math.min(CACHE_MAX_PAGES, totalPages);
+            for (int pageNum = 2; pageNum <= pagesToCache; pageNum++) {
+                String cacheKey = buildListCacheKey(queryDTO, pageNum);
+                // ???????
+                if (Boolean.TRUE.equals(stringRedisTemplate.hasKey(cacheKey))) {
+                    continue;
+                }
+                try {
+                    cacheQuery.setPageNum(pageNum);
+                    LambdaQueryWrapper<EmployeeEntity> wrapper = buildEmployeeWrapper(cacheQuery);
+                    if (wrapper == null) {
+                        stringRedisTemplate.opsForValue().set(cacheKey, EMPTY_MARKER, EMPTY_TTL_MINUTES, TimeUnit.MINUTES);
+                        continue;
+                    }
+                    Page<EmployeeEntity> page = new Page<>(pageNum, pageSize);
+                    Page<EmployeeEntity> result = employeeMapper.selectPage(page, wrapper);
+                    List<EmployeeListVO> pageRecords = result.getRecords().stream()
+                            .map(this::convertToListVO)
+                            .collect(Collectors.toList());
+
+                    PageResult<EmployeeListVO> pageResult = new PageResult<>();
+                    pageResult.setRecords(pageRecords);
+                    pageResult.setTotal(total);
+                    pageResult.setPageNum(pageNum);
+                    pageResult.setPageSize(pageSize);
+                    pageResult.setPages(totalPages);
+
+                    if (pageRecords.isEmpty()) {
+                        stringRedisTemplate.opsForValue().set(cacheKey, EMPTY_MARKER, EMPTY_TTL_MINUTES, TimeUnit.MINUTES);
+                    } else {
+                        stringRedisTemplate.opsForValue().set(cacheKey, JSONUtil.toJsonStr(pageResult), CACHE_TTL_MINUTES, TimeUnit.MINUTES);
+                    }
+                } catch (Exception e) {
+                    log.error("?????????{}???", pageNum, e);
+                }
+            }
+        }).exceptionally(ex -> {
+            log.error("??????????", ex);
+            return null;
+        });
     }
 
 
