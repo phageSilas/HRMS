@@ -3,6 +3,7 @@ package com.hrms.business.personnel.service.impl;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
+import com.hrms.business.personnel.common.cache.PersonnelCacheKeys;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hrms.business.approval.enums.ApprovalTypeEnum;
@@ -33,6 +34,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import java.util.concurrent.TimeUnit;
+
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -62,6 +67,8 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
 
     private final PostService postService;
 
+    private final ObjectProvider<StringRedisTemplate> redisTemplateProvider;
+
     /**
      * 离职申请分页查询
      * @param queryDTO 离职申请查询参数
@@ -69,6 +76,14 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
      */
     @Override
     public PageResult<LeaveApplicationPageVO> pageLeaveApplications(LeaveApplicationQueryDTO queryDTO) {
+        String queryHash = queryDTO.hashCode() + "_" + queryDTO.getPageNum() + "_" + queryDTO.getPageSize();
+        StringRedisTemplate rt = redisTemplateProvider.getIfAvailable();
+        if (rt != null) {
+            String cached = rt.opsForValue().get(PersonnelCacheKeys.leavePage(queryHash));
+            if (StrUtil.isNotBlank(cached)) {
+                return JSONUtil.toBean(cached, PageResult.class);
+            }
+        }
         int pageNum = normalizePageNum(queryDTO.getPageNum());
         int pageSize = normalizePageSize(queryDTO.getPageSize());
         // 构建人员显示 enricher
@@ -103,6 +118,15 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
     public LeaveApplicationCreateVO createLeaveApplication(LeaveApplicationCreateRequestDTO requestDTO) {
         // 获取员工快照
         EmployeeSnapshotEntity employeeSnapshot = getRequiredEmployeeSnapshot(requestDTO.getEmployeeId());
+        // 提交防重
+        StringRedisTemplate rt = redisTemplateProvider.getIfAvailable();
+        if (rt != null) {
+            Boolean locked = rt.opsForValue()
+                    .setIfAbsent(PersonnelCacheKeys.leaveSubmitToken(requestDTO.getEmployeeId()), "1", 30, TimeUnit.SECONDS);
+            if (!Boolean.TRUE.equals(locked)) {
+                throw new GlobalException(LEAVE_APPLICATION_DUPLICATE, "该申请正在提交中，请勿重复操作");
+            }
+        }
         // 获取工作交接人快照
         getRequiredEmployeeSnapshot(requestDTO.getHandoverEmployeeId());
         // 确保员工没有进行中的离职申请
