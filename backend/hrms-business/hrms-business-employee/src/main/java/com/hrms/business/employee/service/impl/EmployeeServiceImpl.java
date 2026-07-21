@@ -47,6 +47,9 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.springframework.data.redis.core.StringRedisTemplate;
+import java.util.concurrent.TimeUnit;
+import cn.hutool.json.JSONUtil;
 /**
  * 员工服务实现
  */
@@ -64,6 +67,14 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     /** 独立事务模板，用于创建系统账号（失败不回滚主事务） */
     private final TransactionTemplate transactionTemplate;
+    private final StringRedisTemplate stringRedisTemplate;
+
+    /** ???? */
+    private static final String CACHE_PREFIX = "employee:list:";
+    private static final int CACHE_MAX_PAGES = 10;
+    private static final long CACHE_TTL_MINUTES = 5;
+    private static final long EMPTY_TTL_MINUTES = 1;
+    private static final String EMPTY_MARKER = "__EMPTY__";
 
     public EmployeeServiceImpl(
             EmployeeMapper employeeMapper,
@@ -73,6 +84,7 @@ public class EmployeeServiceImpl implements EmployeeService {
             UserService userService,
             RoleService roleService,
             ApplicationEventPublisher eventPublisher,
+                        StringRedisTemplate stringRedisTemplate,
             PlatformTransactionManager transactionManager) {
         this.employeeMapper = employeeMapper;
         this.fieldPermissionService = fieldPermissionService;
@@ -81,6 +93,7 @@ public class EmployeeServiceImpl implements EmployeeService {
         this.userService = userService;
         this.roleService = roleService;
         this.eventPublisher = eventPublisher;
+                this.stringRedisTemplate = stringRedisTemplate;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
@@ -91,8 +104,34 @@ public class EmployeeServiceImpl implements EmployeeService {
         if (queryDTO.getLastId() != null) {
             return listEmployeesByCursor(queryDTO);
         }
-        // ????????
-        return listEmployeesByOffset(queryDTO);
+
+        int pageNum = queryDTO.getPageNum() != null ? queryDTO.getPageNum() : 1;
+
+        // ?10???? Redis ??
+        if (pageNum <= CACHE_MAX_PAGES && stringRedisTemplate != null) {
+            String cacheKey = buildListCacheKey(queryDTO, pageNum);
+            String cached = stringRedisTemplate.opsForValue().get(cacheKey);
+            if (cached != null) {
+                if (EMPTY_MARKER.equals(cached)) {
+                    return PageResult.of(List.of(), 0, pageNum, queryDTO.getPageSize());
+                }
+                return JSONUtil.toBean(cached, PageResult.class);
+            }
+        }
+
+        PageResult<EmployeeListVO> result = listEmployeesByOffset(queryDTO);
+
+        // ????
+        if (pageNum <= CACHE_MAX_PAGES && stringRedisTemplate != null) {
+            String cacheKey = buildListCacheKey(queryDTO, pageNum);
+            if (result.getRecords() == null || result.getRecords().isEmpty()) {
+                stringRedisTemplate.opsForValue().set(cacheKey, EMPTY_MARKER, EMPTY_TTL_MINUTES, TimeUnit.MINUTES);
+            } else {
+                stringRedisTemplate.opsForValue().set(cacheKey, JSONUtil.toJsonStr(result), CACHE_TTL_MINUTES, TimeUnit.MINUTES);
+            }
+        }
+
+        return result;
     }
 
     /**
@@ -940,6 +979,29 @@ public class EmployeeServiceImpl implements EmployeeService {
         if (post == null) {
             throw new GlobalException(ErrorCode.EMPLOYEE_POST_NOT_FOUND);
         }
+    }
+
+    /**
+     * ???????? Key
+     *
+     * @param queryDTO ????
+     * @param pageNum  ??
+     * @return ?? Key
+     * ??????????SecurityContextHolder(hrms-common)
+     */
+    private String buildListCacheKey(EmployeeQueryDTO queryDTO, int pageNum) {
+        Long userId = SecurityContextHolder.getUserId();
+        StringBuilder sb = new StringBuilder(CACHE_PREFIX);
+        sb.append(userId).append("|");
+        sb.append(queryDTO.getKeyword() != null ? queryDTO.getKeyword() : "").append("|");
+        sb.append(queryDTO.getDeptIds() != null ? queryDTO.getDeptIds().toString() : "").append("|");
+        sb.append(queryDTO.getEmploymentStatus() != null ? queryDTO.getEmploymentStatus().toString() : "").append("|");
+        sb.append(queryDTO.getJobLevel() != null ? queryDTO.getJobLevel() : "").append("|");
+        sb.append(queryDTO.getHireDateStart() != null ? queryDTO.getHireDateStart().toString() : "").append("|");
+        sb.append(queryDTO.getHireDateEnd() != null ? queryDTO.getHireDateEnd().toString() : "").append("|");
+        sb.append(queryDTO.getPageSize() != null ? queryDTO.getPageSize() : 20).append("|");
+        sb.append(pageNum);
+        return sb.toString();
     }
 
 }
