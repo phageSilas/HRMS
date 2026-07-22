@@ -100,6 +100,9 @@ public class ErrorCode implements Serializable {
     public static final ErrorCode DEPT_LEVEL_EXCEED = new ErrorCode(40023, "部门层级超过最大限制（5级）");
     public static final ErrorCode DEPT_HAS_CHILDREN = new ErrorCode(40024, "存在子部门，无法删除");
     public static final ErrorCode DEPT_HAS_EMPLOYEES = new ErrorCode(40025, "存在在职员工，无法删除");
+    public static final ErrorCode DEPT_MERGE_SAME_DEPT = new ErrorCode(40026, "不能合并到自身");
+    public static final ErrorCode DEPT_MERGE_HAS_CHILDREN = new ErrorCode(40027, "有子部门的部门不能合并");
+    public static final ErrorCode DEPT_MERGE_TARGET_NOT_FOUND = new ErrorCode(40028, "目标部门不存在");
 
     /**
      * 字典错误系列 (40030-40039)

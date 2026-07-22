@@ -2,6 +2,7 @@ package com.hrms.system.organization.controller;
 
 import com.hrms.common.web.Result;
 import com.hrms.system.organization.dto.DeptCreateDTO;
+import com.hrms.system.organization.dto.DeptMergeDTO;
 import com.hrms.system.organization.dto.DeptUpdateDTO;
 import com.hrms.system.organization.service.DeptService;
 import com.hrms.system.organization.vo.DeptDetailVO;
@@ -83,6 +84,16 @@ public class DeptController {
     @Operation(summary = "删除部门", description = "逻辑删除部门，需满足无子部门且无在职员工")
     public Result<Void> delete(@PathVariable Long id) {
         deptService.deleteDept(id);
+        return Result.success();
+    }
+
+    /**
+     * 合并部门
+     */
+    @PostMapping("/{id}/merge")
+    @Operation(summary = "合并部门", description = "将源部门的员工迁移到目标部门后删除源部门，只有叶子部门才能被合并")
+    public Result<Void> mergeDept(@PathVariable Long id, @Valid @RequestBody DeptMergeDTO mergeDTO) {
+        deptService.mergeDept(id, mergeDTO);
         return Result.success();
     }
 
