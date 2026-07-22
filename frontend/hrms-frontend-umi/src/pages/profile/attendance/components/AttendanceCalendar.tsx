@@ -106,7 +106,7 @@ const AttendanceCalendar: React.FC<Props> = ({
       {/* 星期头 */}
       <Row gutter={[4, 4]} style={{ marginBottom: 8 }}>
         {WEEKDAY_HEADERS.map((d, idx) => (
-          <Col span={3} key={d} style={{ textAlign: 'center' }}>
+          <Col key={d} style={{ flex: '0 0 calc(100% / 7)', maxWidth: 'calc(100% / 7)', textAlign: 'center' }}>
             <Text strong type="secondary" style={{ color: idx >= 5 ? '#ff4d4f' : undefined }}>
               {d}
             </Text>
@@ -118,7 +118,7 @@ const AttendanceCalendar: React.FC<Props> = ({
       <Row gutter={[4, 4]}>
         {firstDayOffset > 0 &&
           Array.from({ length: firstDayOffset }).map((_, i) => (
-            <Col span={3} key={`offset-${i}`} />
+            <Col key={`offset-${i}`} style={{ flex: '0 0 calc(100% / 7)', maxWidth: 'calc(100% / 7)' }} />
           ))}
         {displayDays.map((day) => {
           const dayNum = dayjs(day.date).date();
@@ -138,7 +138,7 @@ const AttendanceCalendar: React.FC<Props> = ({
           ].filter(Boolean).join('\n') || `${day.date}`;
 
           return (
-            <Col span={3} key={day.date}>
+            <Col key={day.date} style={{ flex: '0 0 calc(100% / 7)', maxWidth: 'calc(100% / 7)' }}>
               <Tooltip title={tooltipContent}>
                 <div
                   style={{
