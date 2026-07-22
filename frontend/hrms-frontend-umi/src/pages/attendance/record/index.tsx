@@ -34,7 +34,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import styles from './index.less';
 
 const { RangePicker } = DatePicker;
@@ -187,6 +187,7 @@ const AttendanceRecordPage: React.FC = () => {
   const [recordPageData, setRecordPageData] = useState<
     PageResult<AttendanceGroupRecord>
   >();
+  const refreshCacheOnNextLoadRef = useRef(false);
   const [query, setQuery] = useState<RecordQueryState>({
     groupId: parseUrlGroupId() ?? storedQuery.groupId,
     yearMonth: storedQuery.yearMonth || dayjs().format('YYYY-MM'),
@@ -243,7 +244,10 @@ const AttendanceRecordPage: React.FC = () => {
   };
 
   /** 加载考勤记录列表，内部调用 `buildRecordQuery` 统一构造接口参数。 */
-  const loadRecords = async (nextQuery: RecordQueryState) => {
+  const loadRecords = async (
+    nextQuery: RecordQueryState,
+    options?: { refreshCache?: boolean },
+  ) => {
     if (!nextQuery.groupId) {
       setRecordPageData({
         records: [],
@@ -258,7 +262,10 @@ const AttendanceRecordPage: React.FC = () => {
     try {
       const nextPageData = await getAttendanceGroupRecords(
         nextQuery.groupId,
-        buildRecordQuery(nextQuery),
+        {
+          ...buildRecordQuery(nextQuery),
+          refreshCache: options?.refreshCache,
+        },
       );
       setRecordPageData(nextPageData);
     } catch (error) {
@@ -316,7 +323,9 @@ const AttendanceRecordPage: React.FC = () => {
   ]);
 
   useEffect(() => {
-    void loadRecords(query);
+    const shouldRefreshCache = refreshCacheOnNextLoadRef.current;
+    refreshCacheOnNextLoadRef.current = false;
+    void loadRecords(query, { refreshCache: shouldRefreshCache });
   }, [query]);
 
   useEffect(() => {
@@ -420,6 +429,7 @@ const AttendanceRecordPage: React.FC = () => {
 
   /** 执行搜索，基于表单值生成新的查询状态并刷新列表。 */
   const handleSearch = (values: RecordFilterValues) => {
+    refreshCacheOnNextLoadRef.current = true;
     const dateRange = values.dateRange;
     setQuery((previous) => ({
       ...previous,

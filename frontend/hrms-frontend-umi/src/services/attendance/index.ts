@@ -216,6 +216,7 @@ export interface AttendanceGroupRecordQuery extends Partial<PageQuery> {
   keyword?: string;
   departmentId?: number;
   status?: string;
+  refreshCache?: boolean;
 }
 
 export interface AttendanceGroupRecord {
@@ -239,6 +240,7 @@ export interface AttendanceLeaveManageQuery extends Partial<PageQuery> {
   deptId?: number;
   keyword?: string;
   approvalStatus?: number;
+  refreshCache?: boolean;
 }
 
 export interface AttendanceLeaveManageItem {
@@ -459,6 +461,7 @@ export async function getAttendanceStatistics(params: {
 export async function getAttendanceSummaryDashboard(params: {
   yearMonth: string;
   deptId?: number;
+  refreshCache?: boolean;
 }) {
   return request.get<AttendanceSummaryDashboard>(
     '/api/v1/attendance/summary/dashboard',
@@ -466,4 +469,11 @@ export async function getAttendanceSummaryDashboard(params: {
       params,
     },
   );
+}
+
+/**
+ * 快速审批通过请假申请
+ */
+export async function quickApproveAttendanceLeave(id: number) {
+  return request.post<void>(`/api/v1/attendance/leaves/${id}/quick-approve`);
 }

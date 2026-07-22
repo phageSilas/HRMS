@@ -17,7 +17,7 @@ import java.time.LocalDate;
 public class AttendanceGroupRecordQueryDTO {
 
     /**
-     * 查询月份，格式 yyyy-MM。
+     * 查询月份，格式为 yyyy-MM。
      */
     private String yearMonth;
 
@@ -32,12 +32,12 @@ public class AttendanceGroupRecordQueryDTO {
     private LocalDate dateEnd;
 
     /**
-     * 关键词，匹配员工姓名或工号。
+     * 关键字，匹配员工姓名或工号。
      */
     private String keyword;
 
     /**
-     * 部门ID。
+     * 部门 ID。
      */
     private Long departmentId;
 
@@ -57,4 +57,9 @@ public class AttendanceGroupRecordQueryDTO {
      */
     @Builder.Default
     private Integer pageSize = 10;
+
+    /**
+     * 是否强制刷新当前查询条件对应缓存。
+     */
+    private Boolean refreshCache;
 }
