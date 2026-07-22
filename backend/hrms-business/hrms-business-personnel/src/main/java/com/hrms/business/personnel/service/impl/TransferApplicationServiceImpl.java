@@ -58,6 +58,11 @@ import static com.hrms.business.personnel.common.enums.ServiceErrorCodeEnum.TRAN
 @Service
 @RequiredArgsConstructor
 public class TransferApplicationServiceImpl implements TransferApplicationService {
+    /**
+     * personnel 分页缓存 TTL（分钟）
+     */
+    private static final long PAGE_CACHE_TTL_MINUTES = 2L;
+
     // 调岗申请Mapper
     private final TransferApplicationMapper transferApplicationMapper;
     // 员工服务
@@ -79,16 +84,13 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
      */
     @Override
     public PageResult<TransferApplicationPageVO> pageTransferApplications(TransferApplicationQueryDTO queryDTO) {
-        String queryHash = queryDTO.hashCode() + "_" + queryDTO.getPageNum() + "_" + queryDTO.getPageSize();
-        StringRedisTemplate rt = redisTemplateProvider.getIfAvailable();
-        if (rt != null) {
-            String cached = rt.opsForValue().get(PersonnelCacheKeys.transferPage(queryHash));
-            if (StrUtil.isNotBlank(cached)) {
-                return JSONUtil.toBean(cached, PageResult.class);
-            }
-        }
         int pageNum = normalizePageNum(queryDTO.getPageNum());
         int pageSize = normalizePageSize(queryDTO.getPageSize());
+        String cacheKey = PersonnelCacheKeys.transferPage(buildTransferPageCacheKey(queryDTO, pageNum, pageSize));
+        PageResult<TransferApplicationPageVO> cachedResult = getCachedTransferPage(cacheKey);
+        if (cachedResult != null) {
+            return cachedResult;
+        }
         // 类型转换
         PersonnelDisplayEnricher displayEnricher = new PersonnelDisplayEnricher(deptService, postService);
 
@@ -108,7 +110,9 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
                         entity.getToDeptId(),
                         entity.getToPostId()))
                 .toList();
-        return PageResult.of(records, page.getTotal(), pageNum, pageSize);
+        PageResult<TransferApplicationPageVO> pageResult = PageResult.of(records, page.getTotal(), pageNum, pageSize);
+        cacheTransferPage(cacheKey, pageResult);
+        return pageResult;
     }
 
     /**
@@ -163,6 +167,7 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
         // 更新调岗申请的审批实例ID
         entity.setApprovalInstanceId(approvalInstanceId);
         transferApplicationMapper.updateById(entity);
+        evictTransferPageCache();
 
         return TransferApplicationCreateVO.builder()
                 .id(entity.getId())
@@ -181,6 +186,7 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
         TransferApplicationEntity entity = getRequiredTransferApplication(id);
         assertApproving(entity.getApprovalStatus(), "当前调岗申请不是审批中状态，无法快速审批");
         processQuickApprove(entity.getApprovalInstanceId(), "当前调岗申请无有效审批实例，无法快速审批");
+        evictTransferPageCache();
     }
 
     /**
@@ -404,6 +410,87 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
             return DEFAULT_PAGE_SIZE;
         }
         return Math.min(pageSize, MAX_PAGE_SIZE);
+    }
+
+    /**
+     * 读取调岗分页缓存。
+     *
+     * @param cacheKey 缓存 Key
+     * @return 分页结果
+     */
+    @SuppressWarnings("unchecked")
+    private PageResult<TransferApplicationPageVO> getCachedTransferPage(String cacheKey) {
+        StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+        if (redisTemplate == null) {
+            return null;
+        }
+        String cached = redisTemplate.opsForValue().get(cacheKey);
+        if (StrUtil.isBlank(cached)) {
+            return null;
+        }
+        return JSONUtil.toBean(cached, PageResult.class);
+    }
+
+    /**
+     * 写入调岗分页缓存。
+     *
+     * @param cacheKey 缓存 Key
+     * @param pageResult 分页结果
+     */
+    private void cacheTransferPage(String cacheKey, PageResult<TransferApplicationPageVO> pageResult) {
+        StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+        if (redisTemplate == null) {
+            return;
+        }
+        redisTemplate.opsForValue().set(cacheKey, JSONUtil.toJsonStr(pageResult), PAGE_CACHE_TTL_MINUTES, TimeUnit.MINUTES);
+    }
+
+    /**
+     * 清理调岗分页缓存。
+     */
+    private void evictTransferPageCache() {
+        StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+        if (redisTemplate == null) {
+            return;
+        }
+        Set<String> keys = redisTemplate.keys(PersonnelCacheKeys.transferPagePattern());
+        if (keys == null || keys.isEmpty()) {
+            return;
+        }
+        redisTemplate.delete(keys);
+    }
+
+    /**
+     * 构建稳定的调岗分页缓存 Key。
+     *
+     * @param queryDTO 查询参数
+     * @param pageNum 页码
+     * @param pageSize 页大小
+     * @return 规范化缓存 Key
+     */
+    private String buildTransferPageCacheKey(TransferApplicationQueryDTO queryDTO, int pageNum, int pageSize) {
+        return StrUtil.join("|",
+                normalizeCacheValue(queryDTO.getKeyword()),
+                normalizeCacheValue(queryDTO.getDepartmentId()),
+                normalizeCacheValue(queryDTO.getApprovalStatus()),
+                pageNum,
+                pageSize);
+    }
+
+    /**
+     * 规范化缓存维度，避免等价查询生成不同 Key。
+     *
+     * @param value 原始值
+     * @return 规范化后的值
+     */
+    private String normalizeCacheValue(Object value) {
+        if (value == null) {
+            return "null";
+        }
+        if (value instanceof String str) {
+            return StrUtil.isBlank(str) ? "blank" : str.trim();
+        }
+        return String.valueOf(value);
     }
 
 }

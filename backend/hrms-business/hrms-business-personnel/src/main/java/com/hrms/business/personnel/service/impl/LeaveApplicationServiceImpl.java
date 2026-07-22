@@ -43,6 +43,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -57,6 +58,11 @@ import static com.hrms.common.exception.ErrorCode.EMPLOYEE_NOT_FOUND;
 @Service
 @RequiredArgsConstructor
 public class LeaveApplicationServiceImpl implements LeaveApplicationService {
+
+    /**
+     * personnel 分页缓存 TTL（分钟）
+     */
+    private static final long PAGE_CACHE_TTL_MINUTES = 2L;
 
     private final LeaveApplicationMapper leaveApplicationMapper;
 
@@ -79,16 +85,13 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
      */
     @Override
     public PageResult<LeaveApplicationPageVO> pageLeaveApplications(LeaveApplicationQueryDTO queryDTO) {
-        String queryHash = queryDTO.hashCode() + "_" + queryDTO.getPageNum() + "_" + queryDTO.getPageSize();
-        StringRedisTemplate rt = redisTemplateProvider.getIfAvailable();
-        if (rt != null) {
-            String cached = rt.opsForValue().get(PersonnelCacheKeys.leavePage(queryHash));
-            if (StrUtil.isNotBlank(cached)) {
-                return JSONUtil.toBean(cached, PageResult.class);
-            }
-        }
         int pageNum = normalizePageNum(queryDTO.getPageNum());
         int pageSize = normalizePageSize(queryDTO.getPageSize());
+        String cacheKey = PersonnelCacheKeys.leavePage(buildLeavePageCacheKey(queryDTO, pageNum, pageSize));
+        PageResult<LeaveApplicationPageVO> cachedResult = getCachedLeavePage(cacheKey);
+        if (cachedResult != null) {
+            return cachedResult;
+        }
         // 构建人员显示 enricher
         PersonnelDisplayEnricher displayEnricher = new PersonnelDisplayEnricher(deptService, postService);
         Page<LeaveApplicationEntity> page = leaveApplicationMapper.selectPage(
@@ -108,7 +111,9 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
                                 ? null
                                 : employeeSnapshotMap.get(entity.getEmployeeId()).getDeptId()))
                 .toList();
-        return PageResult.of(records, page.getTotal(), pageNum, pageSize);
+        PageResult<LeaveApplicationPageVO> pageResult = PageResult.of(records, page.getTotal(), pageNum, pageSize);
+        cacheLeavePage(cacheKey, pageResult);
+        return pageResult;
     }
 
     /**
@@ -158,6 +163,7 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
         );
         entity.setApprovalInstanceId(approvalInstanceId);
         leaveApplicationMapper.updateById(entity);
+        evictLeavePageCache();
 
         return LeaveApplicationCreateVO.builder()
                 .id(entity.getId())
@@ -175,6 +181,7 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
         LeaveApplicationEntity entity = getRequiredLeaveApplication(id);
         assertApproving(entity.getApprovalStatus(), "当前离职申请不是审批中状态，无法快速审批");
         processQuickApprove(entity.getApprovalInstanceId(), "当前离职申请无有效审批实例，无法快速审批");
+        evictLeavePageCache();
     }
 
     /**
@@ -403,6 +410,88 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
             return DEFAULT_PAGE_SIZE;
         }
         return Math.min(pageSize, MAX_PAGE_SIZE);
+    }
+
+    /**
+     * 读取离职分页缓存。
+     *
+     * @param cacheKey 缓存 Key
+     * @return 分页结果
+     */
+    @SuppressWarnings("unchecked")
+    private PageResult<LeaveApplicationPageVO> getCachedLeavePage(String cacheKey) {
+        StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+        if (redisTemplate == null) {
+            return null;
+        }
+        String cached = redisTemplate.opsForValue().get(cacheKey);
+        if (StrUtil.isBlank(cached)) {
+            return null;
+        }
+        return JSONUtil.toBean(cached, PageResult.class);
+    }
+
+    /**
+     * 写入离职分页缓存。
+     *
+     * @param cacheKey 缓存 Key
+     * @param pageResult 分页结果
+     */
+    private void cacheLeavePage(String cacheKey, PageResult<LeaveApplicationPageVO> pageResult) {
+        StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+        if (redisTemplate == null) {
+            return;
+        }
+        redisTemplate.opsForValue().set(cacheKey, JSONUtil.toJsonStr(pageResult), PAGE_CACHE_TTL_MINUTES, TimeUnit.MINUTES);
+    }
+
+    /**
+     * 清理离职分页缓存。
+     */
+    private void evictLeavePageCache() {
+        StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+        if (redisTemplate == null) {
+            return;
+        }
+        Set<String> keys = redisTemplate.keys(PersonnelCacheKeys.leavePagePattern());
+        if (keys == null || keys.isEmpty()) {
+            return;
+        }
+        redisTemplate.delete(keys);
+    }
+
+    /**
+     * 构建稳定的离职分页缓存 Key。
+     *
+     * @param queryDTO 查询参数
+     * @param pageNum 页码
+     * @param pageSize 页大小
+     * @return 规范化缓存 Key
+     */
+    private String buildLeavePageCacheKey(LeaveApplicationQueryDTO queryDTO, int pageNum, int pageSize) {
+        return StrUtil.join("|",
+                normalizeCacheValue(queryDTO.getKeyword()),
+                normalizeCacheValue(queryDTO.getDepartmentId()),
+                normalizeCacheValue(queryDTO.getLeaveType()),
+                normalizeCacheValue(queryDTO.getApprovalStatus()),
+                pageNum,
+                pageSize);
+    }
+
+    /**
+     * 规范化缓存维度，避免等价查询生成不同 Key。
+     *
+     * @param value 原始值
+     * @return 规范化后的值
+     */
+    private String normalizeCacheValue(Object value) {
+        if (value == null) {
+            return "null";
+        }
+        if (value instanceof String str) {
+            return StrUtil.isBlank(str) ? "blank" : str.trim();
+        }
+        return String.valueOf(value);
     }
 
 }
