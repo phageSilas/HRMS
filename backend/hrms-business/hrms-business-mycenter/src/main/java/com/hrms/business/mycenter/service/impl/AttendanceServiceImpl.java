@@ -566,7 +566,7 @@ public class AttendanceServiceImpl implements AttendanceService {
             case "LATE" -> "迟到";
             case "EARLY_LEAVE" -> "早退";
             case "ABSENT" -> "旷工";
-            case "MISSED" -> "缺卡";
+            case "MISSED" -> "未打卡记录";
             case "LEAVE" -> "请假";
             case "HOLIDAY" -> "休息日";
             default -> "未知";
