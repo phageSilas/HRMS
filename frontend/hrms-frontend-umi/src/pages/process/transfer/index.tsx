@@ -61,6 +61,11 @@ type SelectOption = {
   value: number;
 };
 
+type EmployeeOption = {
+  label: string;
+  value: number;
+};
+
 type JobLevelOption = {
   label: string;
   value: string;
@@ -75,6 +80,7 @@ const statusMeta: Record<number, { text: string; color: string }> = {
 };
 
 type TransferFormValues = TransferApplicationCreateRequest & {
+  employeeOptionId?: number;
   employeeName?: string;
   employeeNo?: string;
   fromDeptName?: string;
@@ -83,7 +89,9 @@ type TransferFormValues = TransferApplicationCreateRequest & {
   fromLeaderId?: number;
 };
 
-/** 生成候选汇报人角色标签，区分 Leader、HR 或二者兼具。 */
+/**
+ * 生成候选汇报人角色标签，区分 Leader、HR 或二者兼具。
+ */
 function buildLeaderRoleLabel(
   employeeId: number,
   leaderIds: Set<number>,
@@ -103,7 +111,9 @@ function buildLeaderRoleLabel(
   return '';
 }
 
-/** 根据岗位职级区间构造可选职级列表，供新岗位职级自动提示和校验。 */
+/**
+ * 根据岗位职级区间构造可选职级列表。
+ */
 function buildJobLevelOptions(post?: PostItem): JobLevelOption[] {
   const minLevel = post?.jobLevelMin?.trim();
   const maxLevel = post?.jobLevelMax?.trim();
@@ -146,25 +156,36 @@ function buildJobLevelOptions(post?: PostItem): JobLevelOption[] {
 }
 
 /**
+ * 构建员工下拉选项。
+ */
+function buildEmployeeOption(
+  employee: Pick<EmployeeBrief, 'id' | 'employeeName' | 'employeeNo'>,
+): EmployeeOption {
+  return {
+    label: `${employee.employeeName}（${employee.employeeNo}）`,
+    value: employee.id,
+  };
+}
+
+/**
  * 调岗申请页面组件。
  * 负责调岗申请列表查询、员工原岗位回填和目标岗位审批提交。
  */
 const TransferPage: React.FC = () => {
   const actionRef = useRef<ActionType>();
   const [modalOpen, setModalOpen] = useState(false);
-  const [departmentOptions, setDepartmentOptions] = useState<SelectOption[]>(
-    [],
-  );
+  const [departmentOptions, setDepartmentOptions] = useState<SelectOption[]>([]);
   const [realPostOptions, setRealPostOptions] = useState<PostItem[]>([]);
-  const [realLeaderOptions, setRealLeaderOptions] = useState<SelectOption[]>(
-    [],
-  );
+  const [realLeaderOptions, setRealLeaderOptions] = useState<SelectOption[]>([]);
+  const [employeeOptions, setEmployeeOptions] = useState<EmployeeOption[]>([]);
   const [employeeLoading, setEmployeeLoading] = useState(false);
+  const [employeeSearchLoading, setEmployeeSearchLoading] = useState(false);
   const [postLoading, setPostLoading] = useState(false);
   const [leaderLoading, setLeaderLoading] = useState(false);
-  const [currentEmployeeDetail, setCurrentEmployeeDetail] =
-    useState<Employee>();
+  const [currentEmployeeDetail, setCurrentEmployeeDetail] = useState<Employee>();
   const [form] = Form.useForm<TransferFormValues>();
+  const employeeSearchTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const employeeSearchRequestRef = useRef(0);
 
   const selectedToDeptId = Form.useWatch('toDeptId', form);
   const selectedToPostId = Form.useWatch('toPostId', form);
@@ -191,15 +212,21 @@ const TransferPage: React.FC = () => {
           })),
         );
         setRealPostOptions(
-          (postPage.records || []).filter(
-            (item) => item.id !== SYSTEM_ADMIN_POST_ID,
-          ),
+          (postPage.records || []).filter((item) => item.id !== SYSTEM_ADMIN_POST_ID),
         );
       } catch (error) {
         message.error('部门或岗位数据加载失败，请刷新后重试');
       }
     };
-    loadDepartments();
+    void loadDepartments();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (employeeSearchTimerRef.current) {
+        clearTimeout(employeeSearchTimerRef.current);
+      }
+    };
   }, []);
 
   const departmentFilterOption = useMemo(
@@ -239,12 +266,29 @@ const TransferPage: React.FC = () => {
     if (jobLevelOptions.length === 1) {
       return '将自动带出职级';
     }
-    return `可选: ${jobLevelOptions.map((item) => item.value).join(' / ')}`;
+    return `可选：${jobLevelOptions.map((item) => item.value).join(' / ')}`;
   }, [jobLevelOptions, selectedToPostId]);
 
-  /** 重置员工关联信息，供员工未命中或关闭弹窗时统一清理表单状态。 */
+  /**
+   * 将当前员工加入候选项列表，避免已选员工不在下拉中。
+   */
+  const appendEmployeeOption = (
+    employee: Pick<EmployeeBrief, 'id' | 'employeeName' | 'employeeNo'>,
+  ) => {
+    const nextOption = buildEmployeeOption(employee);
+    setEmployeeOptions((previous) => {
+      const filtered = previous.filter((item) => item.value !== nextOption.value);
+      return [nextOption, ...filtered];
+    });
+  };
+
+  /**
+   * 重置员工关联信息。
+   */
   const resetEmployeeRelatedFields = () => {
     form.setFieldsValue({
+      employeeOptionId: undefined,
+      employeeId: undefined,
       employeeName: undefined,
       employeeNo: undefined,
       fromDeptName: undefined,
@@ -255,7 +299,9 @@ const TransferPage: React.FC = () => {
     setCurrentEmployeeDetail(undefined);
   };
 
-  /** 加载员工基础信息，内部调用 `resetEmployeeRelatedFields` 处理无效员工场景。 */
+  /**
+   * 加载员工详情并自动回填原岗位信息。
+   */
   const handleEmployeeLookup = async (
     rawEmployeeId?: number | string | null,
   ) => {
@@ -268,7 +314,9 @@ const TransferPage: React.FC = () => {
     try {
       const detail = await getEmployeeDetail(employeeId);
       setCurrentEmployeeDetail(detail);
+      appendEmployeeOption(detail);
       form.setFieldsValue({
+        employeeOptionId: detail.id,
         employeeId: detail.id,
         employeeName: detail.employeeName,
         employeeNo: detail.employeeNo,
@@ -279,15 +327,68 @@ const TransferPage: React.FC = () => {
       });
     } catch (error) {
       resetEmployeeRelatedFields();
-      message.error('未找到该员工，请确认员工ID后重试');
+      message.error('未找到匹配员工，请确认姓名或工号后重试');
     } finally {
       setEmployeeLoading(false);
     }
   };
 
-  /** 触发员工信息查询，内部调用 `handleEmployeeLookup` 按表单员工 ID 回填原岗位信息。 */
-  const triggerEmployeeLookup = () => {
-    void handleEmployeeLookup(form.getFieldValue('employeeId'));
+  /**
+   * 搜索员工，支持按姓名或工号模糊查询。
+   */
+  const handleEmployeeSearch = (keyword?: string) => {
+    const normalizedKeyword = keyword?.trim() || '';
+    if (employeeSearchTimerRef.current) {
+      clearTimeout(employeeSearchTimerRef.current);
+    }
+    if (!normalizedKeyword) {
+      setEmployeeSearchLoading(false);
+      setEmployeeOptions(
+        currentEmployeeDetail ? [buildEmployeeOption(currentEmployeeDetail)] : [],
+      );
+      return;
+    }
+    employeeSearchTimerRef.current = setTimeout(async () => {
+      const requestId = employeeSearchRequestRef.current + 1;
+      employeeSearchRequestRef.current = requestId;
+      setEmployeeSearchLoading(true);
+      try {
+        const result = await getEmployeeList({
+          keyword: normalizedKeyword,
+          pageNum: 1,
+          pageSize: 20,
+        });
+        if (employeeSearchRequestRef.current !== requestId) {
+          return;
+        }
+        setEmployeeOptions(
+          (result.records || []).map((employee) => buildEmployeeOption(employee)),
+        );
+      } catch (error) {
+        if (employeeSearchRequestRef.current === requestId) {
+          message.error('员工搜索失败，请稍后重试');
+        }
+      } finally {
+        if (employeeSearchRequestRef.current === requestId) {
+          setEmployeeSearchLoading(false);
+        }
+      }
+    }, 300);
+  };
+
+  /**
+   * 选择员工后触发详情回填。
+   */
+  const handleEmployeeSelect = (employeeId?: number) => {
+    if (!employeeId) {
+      resetEmployeeRelatedFields();
+      return;
+    }
+    form.setFieldsValue({
+      employeeOptionId: employeeId,
+      employeeId,
+    });
+    void handleEmployeeLookup(employeeId);
   };
 
   useEffect(() => {
@@ -428,9 +529,8 @@ const TransferPage: React.FC = () => {
     if (!employeeId || employeeId < 1) {
       return;
     }
-    form.setFieldsValue({ employeeId });
     void handleEmployeeLookup(employeeId);
-  }, [employeeIdFromUrl, form, modalOpen]);
+  }, [employeeIdFromUrl, modalOpen]);
 
   const columns: ProColumns<TransferApplication>[] = [
     {
@@ -473,8 +573,7 @@ const TransferPage: React.FC = () => {
       dataIndex: 'employeeName',
       width: 140,
       search: false,
-      renderText: (_, record) =>
-        record.employeeName || `员工 ${record.employeeId}`,
+      renderText: (_, record) => record.employeeName || `员工 ${record.employeeId}`,
     },
     {
       title: '原部门 / 新部门',
@@ -604,17 +703,22 @@ const TransferPage: React.FC = () => {
           if (!open) {
             form.resetFields();
             setCurrentEmployeeDetail(undefined);
-            setRealPostOptions([]);
+            setEmployeeOptions([]);
             setRealLeaderOptions([]);
             setEmployeeLoading(false);
+            setEmployeeSearchLoading(false);
             setPostLoading(false);
             setLeaderLoading(false);
+            if (employeeSearchTimerRef.current) {
+              clearTimeout(employeeSearchTimerRef.current);
+            }
           }
         }}
         modalProps={{ destroyOnClose: true, centered: true }}
         submitter={{ searchConfig: { submitText: '提交审批' } }}
         initialValues={{
           employeeId: employeeIdFromUrl ? Number(employeeIdFromUrl) : undefined,
+          employeeOptionId: employeeIdFromUrl ? Number(employeeIdFromUrl) : undefined,
         }}
         onFinish={async (values) => {
           const payload: TransferApplicationCreateRequest = {
@@ -635,20 +739,32 @@ const TransferPage: React.FC = () => {
         }}
       >
         <ProFormGroup title="员工选择">
+          <ProFormSelect
+            name="employeeOptionId"
+            label="员工姓名/工号"
+            width="md"
+            rules={[{ required: true, message: '请选择调岗员工' }]}
+            options={employeeOptions}
+            fieldProps={{
+              showSearch: true,
+              allowClear: true,
+              filterOption: false,
+              loading: employeeSearchLoading,
+              placeholder: '请输入员工姓名或工号搜索',
+              onSearch: handleEmployeeSearch,
+              onChange: (value) => {
+                handleEmployeeSelect(value ? Number(value) : undefined);
+              },
+            }}
+          />
           <ProFormDigit
             name="employeeId"
             label="员工 ID"
             width="sm"
             min={1}
-            rules={[{ required: true, message: '请输入调岗员工ID' }]}
             fieldProps={{
-              onBlur: () => {
-                triggerEmployeeLookup();
-              },
-              onPressEnter: (event) => {
-                event.preventDefault();
-                triggerEmployeeLookup();
-              },
+              readOnly: true,
+              placeholder: employeeLoading ? '员工信息加载中...' : '选择员工后自动带出',
             }}
           />
           <ProFormText
@@ -657,9 +773,7 @@ const TransferPage: React.FC = () => {
             width="md"
             fieldProps={{
               readOnly: true,
-              placeholder: employeeLoading
-                ? '员工信息加载中...'
-                : '输入员工ID后自动带出',
+              placeholder: employeeLoading ? '员工信息加载中...' : '选择员工后自动带出',
             }}
           />
           <ProFormText
@@ -668,9 +782,7 @@ const TransferPage: React.FC = () => {
             width="md"
             fieldProps={{
               readOnly: true,
-              placeholder: employeeLoading
-                ? '员工信息加载中...'
-                : '输入员工ID后自动带出',
+              placeholder: employeeLoading ? '员工信息加载中...' : '选择员工后自动带出',
             }}
           />
         </ProFormGroup>
@@ -689,7 +801,7 @@ const TransferPage: React.FC = () => {
                   readOnly: true,
                   placeholder: currentEmployeeDetail
                     ? '已自动带出员工原部门'
-                    : '员工接口完善后自动带出',
+                    : '选择员工后自动带出',
                 }}
               />
               <ProFormText
@@ -699,7 +811,7 @@ const TransferPage: React.FC = () => {
                   readOnly: true,
                   placeholder: currentEmployeeDetail
                     ? '已自动带出员工原职位'
-                    : '员工接口完善后自动带出',
+                    : '选择员工后自动带出',
                 }}
               />
             </Card>
@@ -730,9 +842,7 @@ const TransferPage: React.FC = () => {
                   allowClear: true,
                   showSearch: true,
                   optionFilterProp: 'label',
-                  placeholder: selectedToDeptId
-                    ? '请选择新职位'
-                    : '请先选择新部门',
+                  placeholder: selectedToDeptId ? '请选择新职位' : '请先选择新部门',
                 }}
               />
               <ProFormText
