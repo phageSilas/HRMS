@@ -178,8 +178,9 @@ public class AttendanceController {
      */
     @GetMapping("/summary/dashboard")
     public Result<AttendanceSummaryDashboardVO> getSummaryDashboard(@RequestParam String yearMonth,
-                                                                    @RequestParam(required = false) Long deptId) {
-        return Result.success(attendanceService.getSummaryDashboard(yearMonth, deptId));
+                                                                    @RequestParam(required = false) Long deptId,
+                                                                    @RequestParam(required = false) Boolean refreshCache) {
+        return Result.success(attendanceService.getSummaryDashboard(yearMonth, deptId, refreshCache));
     }
 
     /**
@@ -193,6 +194,18 @@ public class AttendanceController {
     public Result<PageResult<AttendanceLeaveManageItemVO>> pageLeaveManageList(
             @Valid AttendanceLeaveManageQueryDTO queryDTO) {
         return Result.success(attendanceService.pageLeaveManageList(queryDTO));
+    }
+
+    /**
+     * 快速审批通过请假申请。
+     *
+     * @param id 请假申请 ID
+     * @return 处理结果
+     */
+    @PostMapping("/leaves/{id}/quick-approve")
+    public Result<Void> quickApproveLeaveRequest(@PathVariable Long id) {
+        attendanceService.quickApproveLeaveRequest(id);
+        return Result.success();
     }
 
     /**
