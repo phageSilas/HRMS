@@ -1,5 +1,7 @@
 package com.hrms.business.approval.service.impl;
 
+import com.hrms.business.approval.dto.EmployeeBriefDTO;
+import com.hrms.business.approval.mapper.ApprovalEmployeeMapper;
 import com.hrms.business.approval.service.ApprovalEngine;
 import com.hrms.business.approval.service.ApprovalService;
 import com.hrms.common.security.SecurityContextHolder;
@@ -19,6 +21,7 @@ import org.springframework.stereotype.Service;
 public class ApprovalServiceImpl implements ApprovalService {
 
     private final ApprovalEngine approvalEngine;
+    private final ApprovalEmployeeMapper approvalEmployeeMapper;
 
     /**
      * 发起审批（无表单数据）
@@ -46,7 +49,16 @@ public class ApprovalServiceImpl implements ApprovalService {
     @Override
     public Long startApproval(String type, Long bizId, String formData) {
         Long userId = SecurityContextHolder.getUserId();
+
+        // 优先从员工档案获取部门ID（sys_user.dept_id 可能不准）
         Long deptId = SecurityContextHolder.getDeptId();
+        if (userId != null) {
+            EmployeeBriefDTO emp = approvalEmployeeMapper.findByUserId(userId);
+            if (emp != null && emp.getDeptId() != null) {
+                deptId = emp.getDeptId();
+            }
+        }
+
         return approvalEngine.startApproval(type, bizId, formData, userId, deptId, null);
     }
 

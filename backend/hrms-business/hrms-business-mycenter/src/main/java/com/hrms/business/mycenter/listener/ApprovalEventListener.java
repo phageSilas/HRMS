@@ -4,7 +4,9 @@ import com.hrms.business.approval.service.event.ApprovalCompletedEvent;
 import com.hrms.business.mycenter.entity.AttendanceCorrectionEntity;
 import com.hrms.business.mycenter.entity.AttendanceOvertimeEntity;
 import com.hrms.business.mycenter.entity.LeaveRequestEntity;
+import com.hrms.business.mycenter.entity.MyAttendanceRecordEntity;
 import com.hrms.business.mycenter.mapper.AttendanceOvertimeMapper;
+import com.hrms.business.mycenter.mapper.MyAttendanceRecordMapper;
 import com.hrms.business.mycenter.mapper.MyCenterAttendanceCorrectionMapper;
 import com.hrms.business.mycenter.mapper.MyCenterLeaveRequestMapper;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +34,7 @@ public class ApprovalEventListener {
     private final MyCenterLeaveRequestMapper leaveRequestMapper;
     private final MyCenterAttendanceCorrectionMapper correctionMapper;
     private final AttendanceOvertimeMapper overtimeMapper;
+    private final MyAttendanceRecordMapper attendanceRecordMapper;
 
     @EventListener
     @Transactional(rollbackFor = Exception.class)
@@ -66,7 +69,7 @@ public class ApprovalEventListener {
     }
 
     /**
-     * 处理补卡审批完成：根据审批结果更新补卡记录状态
+     * 处理补卡审批完成：根据审批结果更新补卡记录状态，通过时同步更新考勤记录
      */
     private void handleCorrectionCompleted(ApprovalCompletedEvent event) {
         AttendanceCorrectionEntity correction = correctionMapper.selectById(event.getBizId());
@@ -79,6 +82,21 @@ public class ApprovalEventListener {
         int newStatus = event.getInstanceStatus() == 2 ? 2 : 3;
         correction.setApprovalStatus(newStatus);
         correctionMapper.updateById(correction);
+
+        // 审批通过 → 同步更新考勤记录，上下班状态均置为 NORMAL
+        if (newStatus == 2 && correction.getRecordId() != null) {
+            MyAttendanceRecordEntity record = attendanceRecordMapper.selectById(correction.getRecordId());
+            if (record != null) {
+                record.setClockInStatus("NORMAL");
+                record.setClockOutStatus("NORMAL");
+                record.setCorrectionStatus("APPROVED");
+                attendanceRecordMapper.updateById(record);
+                log.info("补卡审批通过，已同步更新考勤记录: recordId={}, correctionType={}",
+                        correction.getRecordId(), correction.getCorrectionType());
+            } else {
+                log.warn("补卡审批通过但考勤记录不存在: recordId={}", correction.getRecordId());
+            }
+        }
 
         log.info("补卡审批完成: correctionId={}, newStatus={}", event.getBizId(), newStatus);
     }

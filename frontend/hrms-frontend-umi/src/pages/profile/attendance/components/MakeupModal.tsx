@@ -1,7 +1,7 @@
 /**
  * 补卡申请弹窗
  */
-import { DatePicker, Form, Input, Modal, Select } from 'antd';
+import { DatePicker, Form, Input, Modal, Select, message } from 'antd';
 import dayjs from 'dayjs';
 import React from 'react';
 
@@ -27,8 +27,9 @@ const MakeupModal: React.FC<Props> = ({ open, onClose, onSubmit, initialDate }) 
       const values = await form.validateFields();
       await onSubmit(values);
       form.resetFields();
-    } catch {
+    } catch (err: any) {
       // 表单校验失败或提交异常
+      if (err?.message) message.error(err.message);
     }
   };
 
@@ -51,7 +52,9 @@ const MakeupModal: React.FC<Props> = ({ open, onClose, onSubmit, initialDate }) 
           label="补卡日期"
           rules={[{ required: true, message: '请选择补卡日期' }]}
         >
-          <DatePicker style={{ width: '100%' }} />
+          <DatePicker style={{ width: '100%' }}
+            disabledDate={(current) => current && current.isAfter(dayjs().endOf('day'))}
+          />
         </Form.Item>
         <Form.Item
           name="correctionType"

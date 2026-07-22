@@ -136,17 +136,4 @@ public interface EmployeeService {
      */
     EmployeeEntity syncEmployeeForApproval(Long employeeId, EmployeeApprovalSyncUpdateDTO updateDTO);
 
-
-
-
-    /**
-     * 批量更新员工的部门ID（模块间服务）
-     * 用于部门合并场景，将源部门的所有员工迁移到目标部门
-     *
-     * @param oldDeptId 原部门ID
-     * @param newDeptId 新部门ID
-     * @return 更新的员工数量
-     */
-    int updateDeptIdByDeptId(Long oldDeptId, Long newDeptId);
-
 }

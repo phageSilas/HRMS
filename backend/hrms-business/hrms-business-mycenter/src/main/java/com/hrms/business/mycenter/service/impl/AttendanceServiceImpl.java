@@ -121,6 +121,10 @@ public class AttendanceServiceImpl implements AttendanceService {
             if (isWeekend) {
                 day.setStatus("HOLIDAY");
                 day.setStatusDesc("休息日");
+            } else if (date.isAfter(LocalDate.now())) {
+                // 未来日期不显示考勤/请假/缺卡状态
+                day.setStatus("NONE");
+                day.setStatusDesc("");
             } else if (matchedLeave != null) {
                 // 请假优先：即使当天有打卡记录也显示为请假
                 day.setStatus("LEAVE");
@@ -145,9 +149,9 @@ public class AttendanceServiceImpl implements AttendanceService {
                 day.setStatus(determineStatus(record));
                 day.setStatusDesc(getStatusDesc(day.getStatus()));
             } else {
-                // 工作日无记录 → 缺卡
+                // 工作日无记录 → 未打卡记录
                 day.setStatus("MISSED");
-                day.setStatusDesc("缺卡");
+                day.setStatusDesc(getStatusDesc("MISSED"));
             }
 
             days.add(day);
@@ -566,7 +570,7 @@ public class AttendanceServiceImpl implements AttendanceService {
             case "LATE" -> "迟到";
             case "EARLY_LEAVE" -> "早退";
             case "ABSENT" -> "旷工";
-            case "MISSED" -> "缺卡";
+            case "MISSED" -> "未打卡记录";
             case "LEAVE" -> "请假";
             case "HOLIDAY" -> "休息日";
             default -> "未知";
