@@ -74,6 +74,7 @@ const approvalStatusMeta: Record<number, { label: string; color: string }> = {
   4: { label: '已撤回', color: 'warning' },
 };
 
+/** 从本地缓存读取当前用户信息，供权限判断和个性化缓存键生成使用。 */
 function getCurrentUserFromStorage() {
   const userInfoText = localStorage.getItem('userInfo');
   if (!userInfoText) {
@@ -87,6 +88,7 @@ function getCurrentUserFromStorage() {
   }
 }
 
+/** 生成请假管理查询缓存键，按用户隔离不同筛选条件。 */
 function resolveStorageKey() {
   const currentUser = getCurrentUserFromStorage();
   const identity =
@@ -94,6 +96,7 @@ function resolveStorageKey() {
   return `${LEAVE_MANAGE_STORAGE_PREFIX}:${identity}`;
 }
 
+/** 读取上次查询条件，供页面回显用户最近一次筛选状态。 */
 function getStoredQuery() {
   const storedText = sessionStorage.getItem(resolveStorageKey());
   if (!storedText) {
@@ -108,14 +111,17 @@ function getStoredQuery() {
   }
 }
 
+/** 判断当前用户是否具备 HR 或管理员视角。 */
 function isHrOrAdmin(currentUser?: UserContext) {
   return HR_ROLE_CODES.has(currentUser?.roleCode || '');
 }
 
+/** 判断当前用户是否为主管角色。 */
 function isManager(currentUser?: UserContext) {
   return currentUser?.roleCode === 'MANAGER';
 }
 
+/** 格式化管理侧时间显示。 */
 function formatDateTime(value?: string) {
   if (!value) {
     return '--';
@@ -127,6 +133,7 @@ function formatDateTime(value?: string) {
   return date.format('YYYY-MM-DD HH:mm');
 }
 
+/** 渲染审批状态标签，统一管理侧请假状态样式。 */
 function renderApprovalStatusTag(status?: number, label?: string) {
   if (status == null && !label) {
     return <Text type="secondary">--</Text>;
@@ -135,6 +142,7 @@ function renderApprovalStatusTag(status?: number, label?: string) {
   return <Tag color={meta?.color || 'default'}>{label || meta?.label || '--'}</Tag>;
 }
 
+/** 构造请假管理查询参数，供列表请求方法复用。 */
 function buildLeaveManageParams(query: LeaveManageQueryState): AttendanceLeaveManageQuery {
   return {
     yearMonth: query.yearMonth,
@@ -146,6 +154,10 @@ function buildLeaveManageParams(query: LeaveManageQueryState): AttendanceLeaveMa
   };
 }
 
+/**
+ * 请假管理页面组件。
+ * 负责管理侧请假查询、角色化部门筛选和审批详情跳转。
+ */
 const AttendanceLeaveManagePage: React.FC = () => {
   const currentUser = getCurrentUserFromStorage();
   const canSelectDepartment = isHrOrAdmin(currentUser);
@@ -175,6 +187,7 @@ const AttendanceLeaveManagePage: React.FC = () => {
     [departments],
   );
 
+  /** 加载部门列表，供 HR/管理员筛选部门时复用。 */
   const loadDepartments = async () => {
     if (!canSelectDepartment) {
       return departments;
@@ -195,6 +208,7 @@ const AttendanceLeaveManagePage: React.FC = () => {
     }
   };
 
+  /** 加载请假管理列表，内部调用 `buildLeaveManageParams` 统一请求参数。 */
   const loadLeaveManageList = async (nextQuery: LeaveManageQueryState) => {
     setLeaveLoading(true);
     try {
@@ -371,6 +385,7 @@ const AttendanceLeaveManagePage: React.FC = () => {
     },
   ];
 
+  /** 执行筛选查询并重置分页，从表单值构建新的查询状态。 */
   const handleSearch = (values: LeaveManageFilterValues) => {
     setQuery((previous) => ({
       ...previous,
@@ -382,6 +397,7 @@ const AttendanceLeaveManagePage: React.FC = () => {
     }));
   };
 
+  /** 重置筛选条件并恢复当前角色下的默认查询范围。 */
   const handleReset = () => {
     setQuery({
       yearMonth: dayjs().format('YYYY-MM'),

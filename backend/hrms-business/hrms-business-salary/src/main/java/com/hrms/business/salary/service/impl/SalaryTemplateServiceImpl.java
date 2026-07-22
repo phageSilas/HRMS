@@ -6,20 +6,27 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.hrms.business.employee.dto.EmployeeUpdateDTO;
+import com.hrms.business.employee.service.EmployeeService;
+import com.hrms.business.employee.vo.EmployeeDetailVO;
 import com.hrms.business.salary.cache.SalaryCacheKeys;
 import com.hrms.business.salary.dto.EmployeeSalaryProfileRequestDTO;
 import com.hrms.business.salary.dto.SalaryTemplateCreateOrUpdateRequestDTO;
 import com.hrms.business.salary.dto.SalaryTemplateItemRequestDTO;
 import com.hrms.business.salary.dto.SalaryTemplateQueryDTO;
 import com.hrms.business.salary.entity.EmployeeSalaryProfileEntity;
+import com.hrms.business.salary.entity.EmployeeSalaryProfileHistoryEntity;
 import com.hrms.business.salary.entity.SalaryEmployeeSnapshotEntity;
 import com.hrms.business.salary.entity.SalaryTemplateEntity;
 import com.hrms.business.salary.entity.SalaryTemplateItemEntity;
 import com.hrms.business.salary.mapper.EmployeeSalaryProfileMapper;
+import com.hrms.business.salary.mapper.EmployeeSalaryProfileHistoryMapper;
 import com.hrms.business.salary.mapper.SalaryEmployeeSnapshotMapper;
 import com.hrms.business.salary.mapper.SalaryTemplateItemMapper;
 import com.hrms.business.salary.mapper.SalaryTemplateMapper;
 import com.hrms.business.salary.service.SalaryTemplateService;
+import com.hrms.business.salary.vo.EmployeeSalaryProfileDetailVO;
+import com.hrms.business.salary.vo.EmployeeSalaryProfileHistoryVO;
 import com.hrms.business.salary.vo.EmployeeSalaryProfileVO;
 import com.hrms.business.salary.vo.SalaryTemplateItemVO;
 import com.hrms.business.salary.vo.SalaryTemplatePageVO;
@@ -34,6 +41,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -57,8 +65,12 @@ public class SalaryTemplateServiceImpl implements SalaryTemplateService {
     private final SalaryTemplateItemMapper salaryTemplateItemMapper;
     // 员工薪资配置Mapper
     private final EmployeeSalaryProfileMapper employeeSalaryProfileMapper;
+    // 员工薪资档案变更历史Mapper
+    private final EmployeeSalaryProfileHistoryMapper employeeSalaryProfileHistoryMapper;
     // 员工薪资快照Mapper
     private final SalaryEmployeeSnapshotMapper employeeSnapshotMapper;
+    // 员工服务
+    private final EmployeeService employeeService;
     // Redis模板提供者
     private final ObjectProvider<StringRedisTemplate> redisTemplateProvider;
 
@@ -79,6 +91,24 @@ public class SalaryTemplateServiceImpl implements SalaryTemplateService {
         // 添加账套范围条件
         appendTemplateScopeCondition(wrapper, queryDTO.getScope());
         wrapper.orderByDesc(SalaryTemplateEntity::getCreateTime);
+        if (queryDTO.getEmployeeId() != null) {
+            EmployeeDetailVO employeeDetail = employeeService.getEmployeeDetail(queryDTO.getEmployeeId());
+            List<SalaryTemplateEntity> matchedTemplates = salaryTemplateMapper.selectList(wrapper).stream()
+                    .filter(template -> matchesTemplateScope(template, employeeDetail))
+                    .toList();
+            int pageNum = Optional.ofNullable(queryDTO.getPageNum()).orElse(1);
+            int pageSize = Optional.ofNullable(queryDTO.getPageSize()).orElse(10);
+            int fromIndex = Math.min((pageNum - 1) * pageSize, matchedTemplates.size());
+            int toIndex = Math.min(fromIndex + pageSize, matchedTemplates.size());
+            List<SalaryTemplateEntity> pageRecords = matchedTemplates.subList(fromIndex, toIndex);
+            List<Long> templateIds = pageRecords.stream().map(SalaryTemplateEntity::getId).toList();
+            Map<Long, List<SalaryTemplateItemEntity>> itemMap = listTemplateItems(templateIds).stream()
+                    .collect(Collectors.groupingBy(SalaryTemplateItemEntity::getTemplateId));
+            List<SalaryTemplatePageVO> records = pageRecords.stream()
+                    .map(entity -> toTemplateVO(entity, itemMap.getOrDefault(entity.getId(), List.of())))
+                    .toList();
+            return PageResult.of(records, matchedTemplates.size(), pageNum, pageSize);
+        }
         Page<SalaryTemplateEntity> page = salaryTemplateMapper.selectPage(
                 Page.of(queryDTO.getPageNum(), queryDTO.getPageSize()), wrapper);
         List<Long> templateIds = page.getRecords().stream().map(SalaryTemplateEntity::getId).toList();
@@ -162,13 +192,61 @@ public class SalaryTemplateServiceImpl implements SalaryTemplateService {
     @Override
     public EmployeeSalaryProfileVO getEmployeeProfile(Long employeeId) {
         SalaryEmployeeSnapshotEntity employee = getEmployeeRequired(employeeId);
+        EmployeeDetailVO employeeDetail = employeeService.getEmployeeDetail(employeeId);
         EmployeeSalaryProfileEntity profile = employeeSalaryProfileMapper.selectOne(Wrappers
                 .lambdaQuery(EmployeeSalaryProfileEntity.class)
                 .eq(EmployeeSalaryProfileEntity::getEmployeeId, employeeId));
         if (profile == null) {
             throw new GlobalException(ErrorCode.NOT_FOUND, "员工薪资档案不存在");
         }
-        return toProfileVO(profile, employee);
+        return toProfileVO(profile, employee, employeeDetail);
+    }
+
+    /**
+     * 查询员工薪资档案详情。
+     *
+     * @param employeeId 员工ID
+     * @return 员工薪资档案详情
+     * 本方法使用的工具类: Wrappers(MyBatis-Plus)
+     */
+    @Override
+    public EmployeeSalaryProfileDetailVO getEmployeeProfileDetail(Long employeeId) {
+        SalaryEmployeeSnapshotEntity employee = getEmployeeRequired(employeeId);
+        EmployeeDetailVO employeeDetail = employeeService.getEmployeeDetail(employeeId);
+        EmployeeSalaryProfileEntity profile = employeeSalaryProfileMapper.selectOne(Wrappers
+                .lambdaQuery(EmployeeSalaryProfileEntity.class)
+                .eq(EmployeeSalaryProfileEntity::getEmployeeId, employeeId));
+        boolean assignedTemplate = profile != null && profile.getTemplateId() != null;
+        Long templateId = assignedTemplate ? profile.getTemplateId() : null;
+        return EmployeeSalaryProfileDetailVO.builder()
+                .employeeId(employeeId)
+                .employeeNo(employee.getEmployeeNo())
+                .employeeName(employee.getEmployeeName())
+                .deptId(employeeDetail.getDeptId())
+                .deptName(employeeDetail.getDeptName())
+                .postId(employeeDetail.getPostId())
+                .postName(employeeDetail.getPostName())
+                .employmentStatus(employeeDetail.getEmploymentStatus())
+                .employmentStatusDesc(employeeDetail.getEmploymentStatusDesc())
+                .templateId(templateId)
+                .templateName(resolveTemplateName(templateId))
+                .assignedTemplate(assignedTemplate)
+                .baseSalary(resolveProfileMoney(profile == null ? null : profile.getBaseSalary(), employeeDetail.getBaseSalary()))
+                .allowance(resolveProfileMoney(profile == null ? null : profile.getAllowance(), ZERO))
+                .performanceBase(resolveProfileMoney(profile == null ? null : profile.getPerformanceBase(), ZERO))
+                .socialInsuranceBase(resolveProfileMoney(
+                        profile == null ? null : resolveCompatibleSocialInsuranceBase(
+                                profile.getSocialInsuranceBase(),
+                                profile.getPensionInsuranceBase(),
+                                profile.getMedicalInsuranceBase(),
+                                profile.getUnemploymentInsuranceBase()),
+                        ZERO))
+                .housingFundBase(resolveProfileMoney(profile == null ? null : profile.getHousingFundBase(), ZERO))
+                .probationSalaryRatio(employeeDetail.getProbationSalaryRatio())
+                .effectiveDate(profile == null ? null : profile.getEffectiveDate())
+                .remark(profile == null ? null : profile.getRemark())
+                .history(listProfileHistory(employeeId))
+                .build();
     }
 
     /**
@@ -183,13 +261,19 @@ public class SalaryTemplateServiceImpl implements SalaryTemplateService {
     @Transactional(rollbackFor = Exception.class)
     public EmployeeSalaryProfileVO setEmployeeProfile(Long employeeId, EmployeeSalaryProfileRequestDTO requestDTO) {
         SalaryEmployeeSnapshotEntity employee = getEmployeeRequired(employeeId);
+        EmployeeDetailVO employeeDetail = employeeService.getEmployeeDetail(employeeId);
         // 只有当请求中包含账套ID时才进行账套存在性检查
         if (requestDTO.getTemplateId() != null) {
-            getTemplateRequired(requestDTO.getTemplateId());
+            SalaryTemplateEntity template = getTemplateRequired(requestDTO.getTemplateId());
+            if (!matchesTemplateScope(template, employeeDetail)) {
+                throw new GlobalException(ErrorCode.PARAM_FORMAT_ERROR, "当前员工不在该薪资账套适用范围内");
+            }
         }
         EmployeeSalaryProfileEntity profile = employeeSalaryProfileMapper.selectOne(Wrappers
                 .lambdaQuery(EmployeeSalaryProfileEntity.class)
                 .eq(EmployeeSalaryProfileEntity::getEmployeeId, employeeId));
+        EmployeeSalaryProfileEntity beforeProfile = copyProfile(profile);
+        BigDecimal beforeProbationSalaryRatio = employeeDetail.getProbationSalaryRatio();
         boolean create = profile == null;
         // 如果是创建操作，则初始化薪资档案实体
         if (create) {
@@ -235,7 +319,13 @@ public class SalaryTemplateServiceImpl implements SalaryTemplateService {
         } else {
             employeeSalaryProfileMapper.updateById(profile);
         }
-        return toProfileVO(profile, employee);
+        syncEmployeeSalaryFields(employeeId, requestDTO);
+        BigDecimal afterProbationSalaryRatio = requestDTO.getProbationSalaryRatio() != null
+                ? requestDTO.getProbationSalaryRatio()
+                : beforeProbationSalaryRatio;
+        recordProfileHistory(employeeId, beforeProfile, profile, beforeProbationSalaryRatio, afterProbationSalaryRatio,
+                requestDTO.getChangeReason());
+        return toProfileVO(profile, employee, employeeService.getEmployeeDetail(employeeId));
     }
 
     /**
@@ -306,13 +396,19 @@ public class SalaryTemplateServiceImpl implements SalaryTemplateService {
      * @param employee 员工
      * @return 薪资模板项VO
      */
-    private EmployeeSalaryProfileVO toProfileVO(EmployeeSalaryProfileEntity profile, SalaryEmployeeSnapshotEntity employee) {
+    private EmployeeSalaryProfileVO toProfileVO(EmployeeSalaryProfileEntity profile,
+                                                SalaryEmployeeSnapshotEntity employee,
+                                                EmployeeDetailVO employeeDetail) {
         SalaryTemplateEntity template = profile.getTemplateId() == null ? null : salaryTemplateMapper.selectById(profile.getTemplateId());
         return EmployeeSalaryProfileVO.builder()
                 .id(profile.getId())
                 .employeeId(profile.getEmployeeId())
                 .employeeNo(employee.getEmployeeNo())
                 .employeeName(employee.getEmployeeName())
+                .deptId(employeeDetail.getDeptId())
+                .deptName(employeeDetail.getDeptName())
+                .employmentStatus(employeeDetail.getEmploymentStatus())
+                .employmentStatusDesc(employeeDetail.getEmploymentStatusDesc())
                 .templateId(profile.getTemplateId())
                 .templateName(template == null ? null : template.getTemplateName())
                 .baseSalary(profile.getBaseSalary())
@@ -338,11 +434,204 @@ public class SalaryTemplateServiceImpl implements SalaryTemplateService {
                 .unemploymentInsuranceRate(resolveInsuranceRate(
                         profile.getUnemploymentInsuranceRate(), null, DEFAULT_UNEMPLOYMENT_INSURANCE_RATE))
                 .housingFundBase(profile.getHousingFundBase())
+                .probationSalaryRatio(employeeDetail.getProbationSalaryRatio())
                 .bankName(profile.getBankName())
                 .bankAccountMasked(maskBankAccount(profile.getBankAccount()))
                 .effectiveDate(profile.getEffectiveDate())
                 .remark(profile.getRemark())
                 .build();
+    }
+
+    /**
+     * 查询员工薪资档案历史列表。
+     *
+     * @param employeeId 员工ID
+     * @return 员工薪资档案历史列表
+     * 本方法使用的工具类: Wrappers(MyBatis-Plus)
+     */
+    private List<EmployeeSalaryProfileHistoryVO> listProfileHistory(Long employeeId) {
+        return employeeSalaryProfileHistoryMapper.selectList(Wrappers
+                        .lambdaQuery(EmployeeSalaryProfileHistoryEntity.class)
+                        .eq(EmployeeSalaryProfileHistoryEntity::getEmployeeId, employeeId)
+                        .orderByDesc(EmployeeSalaryProfileHistoryEntity::getCreateTime)
+                        .orderByDesc(EmployeeSalaryProfileHistoryEntity::getId))
+                .stream()
+                .map(this::toProfileHistoryVO)
+                .toList();
+    }
+
+    /**
+     * 同步员工表中的薪资基础字段。
+     *
+     * @param employeeId 员工ID
+     * @param requestDTO 薪资档案设置请求
+     * 本方法使用的工具类: EmployeeService(hrms-business-employee)
+     */
+    private void syncEmployeeSalaryFields(Long employeeId, EmployeeSalaryProfileRequestDTO requestDTO) {
+        EmployeeUpdateDTO updateDTO = new EmployeeUpdateDTO();
+        updateDTO.setSalaryTemplateId(requestDTO.getTemplateId());
+        updateDTO.setBaseSalary(requestDTO.getBaseSalary());
+        if (requestDTO.getProbationSalaryRatio() != null) {
+            updateDTO.setProbationSalaryRatio(requestDTO.getProbationSalaryRatio());
+        }
+        employeeService.updateEmployee(employeeId, updateDTO);
+    }
+
+    /**
+     * 记录薪资档案变更历史。
+     *
+     * @param employeeId 员工ID
+     * @param beforeProfile 变更前档案
+     * @param afterProfile 变更后档案
+     * @param beforeProbationSalaryRatio 变更前试用期薪资比例
+     * @param afterProbationSalaryRatio 变更后试用期薪资比例
+     * @param changeReason 变更原因
+     * 本方法使用的工具类: StrUtil(hutool)
+     */
+    private void recordProfileHistory(Long employeeId,
+                                      EmployeeSalaryProfileEntity beforeProfile,
+                                      EmployeeSalaryProfileEntity afterProfile,
+                                      BigDecimal beforeProbationSalaryRatio,
+                                      BigDecimal afterProbationSalaryRatio,
+                                      String changeReason) {
+        if (!hasProfileHistoryChange(beforeProfile, afterProfile, beforeProbationSalaryRatio, afterProbationSalaryRatio)) {
+            return;
+        }
+        EmployeeSalaryProfileHistoryEntity history = new EmployeeSalaryProfileHistoryEntity();
+        history.setId(IdUtil.getSnowflakeNextId());
+        history.setEmployeeId(employeeId);
+        history.setTemplateIdBefore(beforeProfile == null ? null : beforeProfile.getTemplateId());
+        history.setTemplateIdAfter(afterProfile.getTemplateId());
+        history.setBaseSalaryBefore(beforeProfile == null ? null : beforeProfile.getBaseSalary());
+        history.setBaseSalaryAfter(afterProfile.getBaseSalary());
+        history.setAllowanceBefore(beforeProfile == null ? null : beforeProfile.getAllowance());
+        history.setAllowanceAfter(afterProfile.getAllowance());
+        history.setPerformanceBaseBefore(beforeProfile == null ? null : beforeProfile.getPerformanceBase());
+        history.setPerformanceBaseAfter(afterProfile.getPerformanceBase());
+        history.setSocialInsuranceBaseBefore(beforeProfile == null ? null : beforeProfile.getSocialInsuranceBase());
+        history.setSocialInsuranceBaseAfter(afterProfile.getSocialInsuranceBase());
+        history.setHousingFundBaseBefore(beforeProfile == null ? null : beforeProfile.getHousingFundBase());
+        history.setHousingFundBaseAfter(afterProfile.getHousingFundBase());
+        history.setProbationSalaryRatioBefore(beforeProbationSalaryRatio);
+        history.setProbationSalaryRatioAfter(afterProbationSalaryRatio);
+        history.setChangeReason(StrUtil.blankToDefault(changeReason, "手工维护薪资档案"));
+        employeeSalaryProfileHistoryMapper.insert(history);
+    }
+
+    /**
+     * 判断薪资档案是否发生需要留痕的变更。
+     *
+     * @param beforeProfile 变更前档案
+     * @param afterProfile 变更后档案
+     * @param beforeProbationSalaryRatio 变更前试用期薪资比例
+     * @param afterProbationSalaryRatio 变更后试用期薪资比例
+     * @return 是否发生变化
+     * 本方法使用的工具类: Objects(JDK)
+     */
+    private boolean hasProfileHistoryChange(EmployeeSalaryProfileEntity beforeProfile,
+                                            EmployeeSalaryProfileEntity afterProfile,
+                                            BigDecimal beforeProbationSalaryRatio,
+                                            BigDecimal afterProbationSalaryRatio) {
+        return !Objects.equals(beforeProfile == null ? null : beforeProfile.getTemplateId(), afterProfile.getTemplateId())
+                || !Objects.equals(beforeProfile == null ? null : beforeProfile.getBaseSalary(), afterProfile.getBaseSalary())
+                || !Objects.equals(beforeProfile == null ? null : beforeProfile.getAllowance(), afterProfile.getAllowance())
+                || !Objects.equals(beforeProfile == null ? null : beforeProfile.getPerformanceBase(), afterProfile.getPerformanceBase())
+                || !Objects.equals(beforeProfile == null ? null : beforeProfile.getSocialInsuranceBase(), afterProfile.getSocialInsuranceBase())
+                || !Objects.equals(beforeProfile == null ? null : beforeProfile.getHousingFundBase(), afterProfile.getHousingFundBase())
+                || !Objects.equals(beforeProbationSalaryRatio, afterProbationSalaryRatio);
+    }
+
+    /**
+     * 复制薪资档案快照，供历史比较使用。
+     *
+     * @param profile 原始薪资档案
+     * @return 档案快照
+     * 本方法使用的工具类: 无
+     */
+    private EmployeeSalaryProfileEntity copyProfile(EmployeeSalaryProfileEntity profile) {
+        if (profile == null) {
+            return null;
+        }
+        EmployeeSalaryProfileEntity copy = new EmployeeSalaryProfileEntity();
+        copy.setId(profile.getId());
+        copy.setEmployeeId(profile.getEmployeeId());
+        copy.setTemplateId(profile.getTemplateId());
+        copy.setBaseSalary(profile.getBaseSalary());
+        copy.setAllowance(profile.getAllowance());
+        copy.setPerformanceBase(profile.getPerformanceBase());
+        copy.setSocialInsuranceBase(profile.getSocialInsuranceBase());
+        copy.setPensionInsuranceBase(profile.getPensionInsuranceBase());
+        copy.setPensionInsuranceRate(profile.getPensionInsuranceRate());
+        copy.setMedicalInsuranceBase(profile.getMedicalInsuranceBase());
+        copy.setMedicalInsuranceRate(profile.getMedicalInsuranceRate());
+        copy.setUnemploymentInsuranceBase(profile.getUnemploymentInsuranceBase());
+        copy.setUnemploymentInsuranceRate(profile.getUnemploymentInsuranceRate());
+        copy.setHousingFundBase(profile.getHousingFundBase());
+        copy.setBankName(profile.getBankName());
+        copy.setBankAccount(profile.getBankAccount());
+        copy.setEffectiveDate(profile.getEffectiveDate());
+        copy.setRemark(profile.getRemark());
+        return copy;
+    }
+
+    /**
+     * 薪资档案历史实体转视图对象。
+     *
+     * @param entity 历史实体
+     * @return 薪资档案历史视图对象
+     * 本方法使用的工具类: 无
+     */
+    private EmployeeSalaryProfileHistoryVO toProfileHistoryVO(EmployeeSalaryProfileHistoryEntity entity) {
+        return EmployeeSalaryProfileHistoryVO.builder()
+                .id(entity.getId())
+                .employeeId(entity.getEmployeeId())
+                .templateIdBefore(entity.getTemplateIdBefore())
+                .templateNameBefore(resolveTemplateName(entity.getTemplateIdBefore()))
+                .templateIdAfter(entity.getTemplateIdAfter())
+                .templateNameAfter(resolveTemplateName(entity.getTemplateIdAfter()))
+                .baseSalaryBefore(entity.getBaseSalaryBefore())
+                .baseSalaryAfter(entity.getBaseSalaryAfter())
+                .allowanceBefore(entity.getAllowanceBefore())
+                .allowanceAfter(entity.getAllowanceAfter())
+                .performanceBaseBefore(entity.getPerformanceBaseBefore())
+                .performanceBaseAfter(entity.getPerformanceBaseAfter())
+                .socialInsuranceBaseBefore(entity.getSocialInsuranceBaseBefore())
+                .socialInsuranceBaseAfter(entity.getSocialInsuranceBaseAfter())
+                .housingFundBaseBefore(entity.getHousingFundBaseBefore())
+                .housingFundBaseAfter(entity.getHousingFundBaseAfter())
+                .probationSalaryRatioBefore(entity.getProbationSalaryRatioBefore())
+                .probationSalaryRatioAfter(entity.getProbationSalaryRatioAfter())
+                .changeReason(entity.getChangeReason())
+                .createTime(entity.getCreateTime())
+                .createBy(entity.getCreateBy())
+                .build();
+    }
+
+    /**
+     * 解析薪资账套名称。
+     *
+     * @param templateId 薪资账套ID
+     * @return 薪资账套名称
+     * 本方法使用的工具类: 无
+     */
+    private String resolveTemplateName(Long templateId) {
+        if (templateId == null) {
+            return null;
+        }
+        SalaryTemplateEntity template = salaryTemplateMapper.selectById(templateId);
+        return template == null ? null : template.getTemplateName();
+    }
+
+    /**
+     * 解析详情展示金额，当前值为空时回退到默认值。
+     *
+     * @param currentValue 当前值
+     * @param fallbackValue 回退值
+     * @return 展示金额
+     * 本方法使用的工具类: 无
+     */
+    private BigDecimal resolveProfileMoney(BigDecimal currentValue, BigDecimal fallbackValue) {
+        return currentValue != null ? currentValue : money(fallbackValue);
     }
 
     /**
@@ -426,6 +715,59 @@ public class SalaryTemplateServiceImpl implements SalaryTemplateService {
             return;
         }
         wrapper.like(SalaryTemplateEntity::getScopeValue, scopeText);
+    }
+
+    /**
+     * 判断员工是否命中薪资账套适用范围。
+     *
+     * @param template 薪资账套
+     * @param employeeDetail 员工详情
+     * @return 是否命中
+     * 本方法使用的工具类: StrUtil(hutool),CollUtil(hutool)
+     */
+    private boolean matchesTemplateScope(SalaryTemplateEntity template, EmployeeDetailVO employeeDetail) {
+        if (template == null || employeeDetail == null) {
+            return false;
+        }
+        String scopeType = normalizeScopeType(template.getScopeType());
+        if ("ALL".equals(scopeType)) {
+            return true;
+        }
+        List<String> scopeValues = parseTemplateScopeValues(template.getScopeValue());
+        if (CollUtil.isEmpty(scopeValues)) {
+            return false;
+        }
+        if ("DEPT".equals(scopeType)) {
+            return employeeDetail.getDeptId() != null
+                    && scopeValues.contains(String.valueOf(employeeDetail.getDeptId()));
+        }
+        if ("EMPLOYEE".equals(scopeType)) {
+            return employeeDetail.getId() != null
+                    && scopeValues.contains(String.valueOf(employeeDetail.getId()));
+        }
+        if ("JOB_LEVEL".equals(scopeType)) {
+            return StrUtil.isNotBlank(employeeDetail.getJobLevel())
+                    && scopeValues.contains(employeeDetail.getJobLevel().trim());
+        }
+        return false;
+    }
+
+    /**
+     * 解析薪资账套适用范围值列表。
+     *
+     * @param scopeValue 适用范围值
+     * @return 范围值列表
+     * 本方法使用的工具类: StrUtil(hutool)
+     */
+    private List<String> parseTemplateScopeValues(String scopeValue) {
+        if (StrUtil.isBlank(scopeValue)) {
+            return List.of();
+        }
+        return List.of(scopeValue.split(",")).stream()
+                .map(String::trim)
+                .filter(StrUtil::isNotBlank)
+                .distinct()
+                .toList();
     }
 
     /**

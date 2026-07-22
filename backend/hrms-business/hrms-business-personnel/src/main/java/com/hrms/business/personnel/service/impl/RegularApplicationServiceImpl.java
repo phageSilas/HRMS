@@ -5,6 +5,7 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import cn.hutool.json.JSONUtil;
+import com.hrms.business.personnel.common.cache.PersonnelCacheKeys;
 import com.hrms.business.approval.enums.ApprovalTypeEnum;
 import com.hrms.business.approval.service.ApprovalEngine;
 import com.hrms.business.employee.entity.EmployeeEntity;
@@ -33,6 +34,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import java.util.concurrent.TimeUnit;
+
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -49,16 +54,7 @@ import static com.hrms.business.personnel.common.enums.ServiceErrorCodeEnum.*;
 @Service
 @RequiredArgsConstructor
 public class RegularApplicationServiceImpl implements RegularApplicationService {
-    private static final List<Integer> PENDING_APPROVAL_STATUSES = List.of(
-            ApplicationStatusEnum.DRAFT.getCode(),
-            ApplicationStatusEnum.APPROVING.getCode()
-    );
 
-    private static final List<Integer> EVALUATED_APPROVAL_STATUSES = List.of(
-            ApplicationStatusEnum.APPROVED.getCode(),
-            ApplicationStatusEnum.REJECTED.getCode(),
-            ApplicationStatusEnum.ENTERED.getCode()
-    );
 
     // 转正申请Mapper
     private final RegularApplicationMapper regularApplicationMapper;
@@ -73,6 +69,8 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
     // 岗位服务
     private final PostService postService;
 
+    private final ObjectProvider<StringRedisTemplate> redisTemplateProvider;
+
     /**
      * 分页查询转正申请。
      * @param queryDTO 转正申请查询参数
@@ -80,6 +78,14 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
      */
     @Override
     public PageResult<RegularApplicationPageVO> pageRegularApplications(RegularApplicationQueryDTO queryDTO) {
+        String queryHash = queryDTO.hashCode() + "_" + queryDTO.getPageNum() + "_" + queryDTO.getPageSize();
+        StringRedisTemplate rt = redisTemplateProvider.getIfAvailable();
+        if (rt != null) {
+            String cached = rt.opsForValue().get(PersonnelCacheKeys.regularPage(queryHash));
+            if (StrUtil.isNotBlank(cached)) {
+                return JSONUtil.toBean(cached, PageResult.class);
+            }
+        }
         if (TAB_EVALUATED.equals(queryDTO.getTab())) {
             return pageEvaluatedRegularApplications(queryDTO);
         }
@@ -98,6 +104,15 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
     @Transactional(rollbackFor = Exception.class)
     public RegularApplicationApplyVO applyRegular(Long employeeId, RegularApplicationApplyRequestDTO requestDTO) {
         EmployeeSnapshotEntity employeeSnapshot = getRequiredEmployeeSnapshot(employeeId);
+        // 提交防重
+        StringRedisTemplate rt = redisTemplateProvider.getIfAvailable();
+        if (rt != null) {
+            Boolean locked = rt.opsForValue()
+                    .setIfAbsent(PersonnelCacheKeys.regularSubmitToken(employeeId), "1", 30, TimeUnit.SECONDS);
+            if (!Boolean.TRUE.equals(locked)) {
+                throw new GlobalException(REGULAR_APPLICATION_DUPLICATE, "该申请正在提交中，请勿重复操作");
+            }
+        }
         // 将从前端传来的 requestDTO.getResult() 字符串值转换为对应的枚举对象。fromValue 方法会遍历所有枚举常量，找到与传入值匹配的枚举项。
         RegularEvaluateResultEnum evaluateResult = RegularEvaluateResultEnum.fromValue(requestDTO.getResult());
         // 校验延长试用时是否填写了延长月数
@@ -211,6 +226,14 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
      * 本方法使用的工具类: StrUtil(hutool)
      */
     private PageResult<RegularApplicationPageVO> pagePendingRegularEmployees(RegularApplicationQueryDTO queryDTO) {
+        String queryHash = queryDTO.hashCode() + "_" + queryDTO.getPageNum() + "_" + queryDTO.getPageSize();
+        StringRedisTemplate rt = redisTemplateProvider.getIfAvailable();
+        if (rt != null) {
+            String cached = rt.opsForValue().get(PersonnelCacheKeys.regularPage(queryHash));
+            if (StrUtil.isNotBlank(cached)) {
+                return JSONUtil.toBean(cached, PageResult.class);
+            }
+        }
         int pageNum = normalizePageNum(queryDTO.getPageNum());
         int pageSize = normalizePageSize(queryDTO.getPageSize());
         PersonnelDisplayEnricher displayEnricher = new PersonnelDisplayEnricher(deptService, postService);
@@ -245,6 +268,14 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
      * 本方法使用的工具类: CollUtil(hutool)
      */
     private PageResult<RegularApplicationPageVO> pageEvaluatedRegularApplications(RegularApplicationQueryDTO queryDTO) {
+        String queryHash = queryDTO.hashCode() + "_" + queryDTO.getPageNum() + "_" + queryDTO.getPageSize();
+        StringRedisTemplate rt = redisTemplateProvider.getIfAvailable();
+        if (rt != null) {
+            String cached = rt.opsForValue().get(PersonnelCacheKeys.regularPage(queryHash));
+            if (StrUtil.isNotBlank(cached)) {
+                return JSONUtil.toBean(cached, PageResult.class);
+            }
+        }
         int pageNum = normalizePageNum(queryDTO.getPageNum());
         int pageSize = normalizePageSize(queryDTO.getPageSize());
         // 筛选待转正员工ID列表

@@ -105,6 +105,7 @@ const LOCATION_STATUS_COLOR: Record<AmapLocationStatus, string> = {
   failed: 'warning',
 };
 
+/** 解析后端日期时间值，统一兼容数组、字符串和 Date 类型。 */
 function parseBackendDate(value?: BackendDateValue) {
   if (!value) return undefined;
 
@@ -134,19 +135,23 @@ function parseBackendDate(value?: BackendDateValue) {
   return parsed.isValid() ? parsed : undefined;
 }
 
+/** 格式化纯时间数组，供班次和打卡时间展示。 */
 function formatLocalTimeArray(value: number[]) {
   const [hour = 0, minute = 0] = value;
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 }
 
+/** 归一化日期字符串，内部调用 `parseBackendDate` 提取 YYYY-MM-DD。 */
 function normalizeDate(value?: BackendDateValue) {
   return parseBackendDate(value)?.format('YYYY-MM-DD');
 }
 
+/** 归一化日期时间字符串，内部调用 `parseBackendDate` 提取完整时间。 */
 function normalizeDateTime(value?: BackendDateValue) {
   return parseBackendDate(value)?.format('YYYY-MM-DDTHH:mm:ss');
 }
 
+/** 格式化打卡相关时间显示，兼容数组和字符串。 */
 function formatTime(value?: BackendDateValue) {
   if (Array.isArray(value)) {
     if (value.length <= 4) {
@@ -162,19 +167,23 @@ function formatTime(value?: BackendDateValue) {
   return parseBackendDate(value)?.format('HH:mm') || '--:--';
 }
 
+/** 获取打卡状态文案。 */
 function getStatusLabel(status?: string) {
   if (!status) return '未打卡';
   return STATUS_LABEL_MAP[status] || status;
 }
 
+/** 获取打卡动作文案，区分上班打卡和下班打卡。 */
 function getClockLabel(period?: string) {
   return period === 'CLOCK_OUT' ? '下班打卡' : '上班打卡';
 }
 
+/** 获取后端返回的网络 IP，兼容不同字段名。 */
 function getClockIp(result?: AttendanceClockVO) {
   return result?.networkIp || result?.clientIp;
 }
 
+/** 解包打卡接口响应体，兼容直接返回 data 或嵌套 data 的两种结构。 */
 function unwrapClockResponse(payload: ClockResponsePayload) {
   if (!payload) return undefined;
   if ('data' in payload && payload.data) {
@@ -183,6 +192,7 @@ function unwrapClockResponse(payload: ClockResponsePayload) {
   return payload as AttendanceClockVO;
 }
 
+/** 规范化打卡成功结果，内部调用 `unwrapClockResponse`、`normalizeDate` 和 `normalizeDateTime`。 */
 function normalizeClockResult(
   payload: ClockResponsePayload,
   fallbackPeriod: ClockPeriod,
@@ -208,6 +218,7 @@ function normalizeClockResult(
   } satisfies AttendanceClockVO;
 }
 
+/** 格式化定位经纬度文案。 */
 function formatLocationText(location?: AmapLocationResult) {
   if (!location) return '未获取定位，以后端校验结果为准';
   return `经度 ${location.longitude.toFixed(
@@ -215,11 +226,13 @@ function formatLocationText(location?: AmapLocationResult) {
   )}，纬度 ${location.latitude.toFixed(6)}`;
 }
 
+/** 将定位结果转换为后端需要的经纬度字符串。 */
 function buildGpsText(location?: AmapLocationResult) {
   if (!location) return undefined;
   return `${location.latitude},${location.longitude}`;
 }
 
+/** 格式化经纬度字符串，供最近一次打卡定位回显。 */
 function formatGpsText(value?: string) {
   if (!value) return undefined;
   const [latitudeText, longitudeText] = value
@@ -238,6 +251,7 @@ function formatGpsText(value?: string) {
   return `经度 ${longitude.toFixed(6)}，纬度 ${latitude.toFixed(6)}`;
 }
 
+/** 生成定位精度与来源说明。 */
 function formatLocationDetail(location?: AmapLocationResult) {
   if (!location) return undefined;
   const accuracy =
@@ -245,6 +259,7 @@ function formatLocationDetail(location?: AmapLocationResult) {
   return `精度 ${accuracy}，类型 ${location.locationType || '未知'}`;
 }
 
+/** 构建设备信息字符串，供打卡接口上传终端与定位环境。 */
 function getDeviceInfo(location?: AmapLocationResult) {
   const platform = navigator.platform || 'unknown';
   const language = navigator.language || 'unknown';
@@ -261,6 +276,7 @@ function getDeviceInfo(location?: AmapLocationResult) {
   return `web:${browser}-${platform};lang:${language}${locationInfo}`;
 }
 
+/** 从月度日历中查找当天记录。 */
 function findTodayRecord(
   days: AttendanceCalendarDayVO[] | undefined,
   currentDate: string,
@@ -270,6 +286,7 @@ function findTodayRecord(
   );
 }
 
+/** 合并本地最新打卡结果与服务端日历记录，保证当天展示即时刷新。 */
 function mergeTodayRecord(
   calendarRecord?: AttendanceCalendarDayVO,
   localRecord?: LocalTodayRecord,
@@ -296,6 +313,10 @@ function mergeTodayRecord(
   };
 }
 
+/**
+ * 员工打卡页面组件。
+ * 负责定位打卡、今日状态展示和个人月度考勤同步回显。
+ */
 const AttendancePunchPage: React.FC = () => {
   const [now, setNow] = useState(dayjs());
   const currentDate = now.format('YYYY-MM-DD');
@@ -310,6 +331,7 @@ const AttendancePunchPage: React.FC = () => {
     text: '点击打卡时获取高德定位',
   });
 
+  /** 加载个人月度考勤日历，供页面初始化和打卡成功后刷新当日记录。 */
   const loadCalendar = async () => {
     setLoading(true);
     try {
@@ -340,6 +362,7 @@ const AttendancePunchPage: React.FC = () => {
     return mergeTodayRecord(todayRecord, localTodayRecord);
   }, [currentDate, localTodayRecord, todayRecord]);
 
+  /** 提交打卡，内部调用 `normalizeClockResult`、`mergeTodayRecord` 和 `loadCalendar` 同步页面状态。 */
   const handleSubmitClock = async (type: ClockPeriod) => {
     if (clocking) return;
 

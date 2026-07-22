@@ -78,6 +78,7 @@ interface LeaveFormValues {
   leaveReason: string;
 }
 
+/** 格式化请假时间文本，统一展示到分钟粒度。 */
 function formatDateTime(value?: string) {
   if (!value) {
     return '--';
@@ -86,10 +87,12 @@ function formatDateTime(value?: string) {
   return parsed.isValid() ? parsed.format('YYYY-MM-DD HH:mm') : value;
 }
 
+/** 拼接请假起止时间范围，内部调用 `formatDateTime` 保持展示格式一致。 */
 function formatDateRange(startTime?: string, endTime?: string) {
   return `${formatDateTime(startTime)} - ${formatDateTime(endTime)}`;
 }
 
+/** 构造假期余额卡片配置，供页面顶部余额概览渲染。 */
 function buildBalanceCards(balance?: LeaveBalanceVO) {
   return [
     {
@@ -111,10 +114,12 @@ function buildBalanceCards(balance?: LeaveBalanceVO) {
   ];
 }
 
+/** 根据日期时间判断上午或下午，用于生成请假申请时段字段。 */
 function resolvePeriod(value: Dayjs): 'AM' | 'PM' {
   return value.hour() < 12 ? 'AM' : 'PM';
 }
 
+/** 构建请假提交载荷，内部调用 `resolvePeriod` 生成开始和结束时段。 */
 function buildAttendanceLeaveCreatePayload(
   values: LeaveFormValues,
 ): AttendanceLeaveCreateRequest {
@@ -130,6 +135,10 @@ function buildAttendanceLeaveCreatePayload(
   };
 }
 
+/**
+ * 员工请假页面组件。
+ * 负责我的请假、余额展示、请假提交流程和撤回操作。
+ */
 const AttendanceLeavePage: React.FC = () => {
   const [activeTab, setActiveTab] = useState('all');
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
@@ -142,6 +151,7 @@ const AttendanceLeavePage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [cancellingId, setCancellingId] = useState<number>();
 
+  /** 加载请假页面核心数据，供初始化、自动刷新和提交后复用。 */
   const loadLeavePageData = async () => {
     setLoading(true);
     try {
@@ -156,6 +166,7 @@ const AttendanceLeavePage: React.FC = () => {
     }
   };
 
+  /** 加载请假类型字典，供请假申请表单下拉选择使用。 */
   const loadLeaveTypes = async () => {
     setLeaveTypeLoading(true);
     try {
@@ -199,6 +210,7 @@ const AttendanceLeavePage: React.FC = () => {
     },
   ];
 
+  /** 提交请假申请，内部调用 `buildAttendanceLeaveCreatePayload` 组装接口参数并刷新页面数据。 */
   const handleSubmitLeave = async () => {
     try {
       const values = await submitForm.validateFields();

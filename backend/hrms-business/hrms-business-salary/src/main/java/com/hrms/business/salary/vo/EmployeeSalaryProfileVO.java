@@ -25,6 +25,14 @@ public class EmployeeSalaryProfileVO {
 
     private String employeeName;
 
+    private Long deptId;
+
+    private String deptName;
+
+    private Integer employmentStatus;
+
+    private String employmentStatusDesc;
+
     private Long templateId;
 
     private String templateName;
@@ -50,6 +58,8 @@ public class EmployeeSalaryProfileVO {
     private BigDecimal unemploymentInsuranceRate;
 
     private BigDecimal housingFundBase;
+
+    private BigDecimal probationSalaryRatio;
 
     private String bankName;
 

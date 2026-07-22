@@ -118,6 +118,7 @@ interface SalaryTemplateFormValues {
 
 interface StoredSalaryTemplateQueryState extends Partial<SalaryTemplateQueryState> {}
 
+/** 生成账套查询缓存键，按用户隔离最近一次筛选条件。 */
 function resolveStorageKey() {
   const userInfoText = localStorage.getItem('userInfo');
   if (!userInfoText) {
@@ -137,6 +138,7 @@ function resolveStorageKey() {
   }
 }
 
+/** 读取上次账套查询条件，用于页面回显和恢复列表状态。 */
 function getStoredQuery(): StoredSalaryTemplateQueryState {
   const storedText = sessionStorage.getItem(resolveStorageKey());
   if (!storedText) {
@@ -151,6 +153,7 @@ function getStoredQuery(): StoredSalaryTemplateQueryState {
   }
 }
 
+/** 格式化账套生效日期。 */
 function formatDate(value?: string) {
   if (!value) {
     return '--';
@@ -159,6 +162,7 @@ function formatDate(value?: string) {
   return date.isValid() ? date.format('YYYY-MM-DD') : value;
 }
 
+/** 渲染账套启停状态标签。 */
 function renderStatusTag(status?: number) {
   if (status === 1) {
     return <Tag color="success">启用</Tag>;
@@ -166,6 +170,7 @@ function renderStatusTag(status?: number) {
   return <Tag color="default">停用</Tag>;
 }
 
+/** 渲染薪资项目分类标签。 */
 function renderCategoryTag(category?: string) {
   if (!category) {
     return <Tag>--</Tag>;
@@ -174,6 +179,7 @@ function renderCategoryTag(category?: string) {
   return <Tag color={meta?.color || 'default'}>{meta?.label || category}</Tag>;
 }
 
+/** 构造账套列表查询参数。 */
 function buildTemplateQuery(query: SalaryTemplateQueryState): SalaryTemplateQuery {
   return {
     templateName: query.templateName,
@@ -184,6 +190,7 @@ function buildTemplateQuery(query: SalaryTemplateQueryState): SalaryTemplateQuer
   };
 }
 
+/** 生成账套适用范围值，供表单提交时转换不同范围类型。 */
 function buildScopeValue(
   scopeType: string | undefined,
   scopeSelection?: Array<string | number> | string,
@@ -206,6 +213,7 @@ function buildScopeValue(
   return undefined;
 }
 
+/** 解析账套适用范围值，供编辑账套时回填范围控件。 */
 function parseScopeSelection(scopeType?: string, scopeValue?: string) {
   if (!scopeValue) {
     return undefined;
@@ -216,6 +224,7 @@ function parseScopeSelection(scopeType?: string, scopeValue?: string) {
   return scopeValue;
 }
 
+/** 构造账套提交载荷，内部调用 `buildScopeValue` 统一范围字段格式。 */
 function buildTemplatePayload(values: SalaryTemplateFormValues): SalaryTemplateCreateOrUpdateRequest {
   return {
     templateName: values.templateName.trim(),
@@ -235,6 +244,7 @@ function buildTemplatePayload(values: SalaryTemplateFormValues): SalaryTemplateC
   };
 }
 
+/** 构造账套启停切换载荷，保留原账套配置并只切换状态。 */
 function buildTogglePayload(template: SalaryTemplate): SalaryTemplateCreateOrUpdateRequest {
   return {
     templateName: template.templateName,
@@ -255,6 +265,7 @@ function buildTogglePayload(template: SalaryTemplate): SalaryTemplateCreateOrUpd
   };
 }
 
+/** 规范化员工选项列表，供账套适用范围按员工选择时复用。 */
 function normalizeEmployeeOptions(records?: EmployeeBrief[]) {
   return (records || []).map((item) => ({
     label: `${item.employeeName} (${item.employeeNo})`,
@@ -262,6 +273,7 @@ function normalizeEmployeeOptions(records?: EmployeeBrief[]) {
   }));
 }
 
+/** 将部门树转换为 TreeSelect 组件数据结构。 */
 function toTreeSelectData(nodes?: DepartmentTree[]): Array<{
   title: string;
   value: string;
@@ -279,6 +291,10 @@ function toTreeSelectData(nodes?: DepartmentTree[]): Array<{
   }));
 }
 
+/**
+ * 薪资账套页面组件。
+ * 负责账套分页查询、适用范围配置、新增编辑和启停切换。
+ */
 const SalaryAccountPage: React.FC = () => {
   const [form] = Form.useForm<SalaryTemplateFilterValues>();
   const [drawerForm] = Form.useForm<SalaryTemplateFormValues>();
@@ -303,6 +319,7 @@ const SalaryAccountPage: React.FC = () => {
   const [employeeLoading, setEmployeeLoading] = useState(false);
   const currentScopeType = Form.useWatch('scopeType', drawerForm) || 'ALL';
 
+  /** 加载账套列表，内部调用 `buildTemplateQuery` 统一请求参数。 */
   const loadTemplates = async (nextQuery: SalaryTemplateQueryState) => {
     setTableLoading(true);
     try {
@@ -316,6 +333,7 @@ const SalaryAccountPage: React.FC = () => {
     }
   };
 
+  /** 加载部门树，供账套按部门适用范围选择使用。 */
   const loadDepartmentTree = async () => {
     setDepartmentLoading(true);
     try {
@@ -329,6 +347,7 @@ const SalaryAccountPage: React.FC = () => {
     }
   };
 
+  /** 加载职级字典，供账套按职级适用范围选择使用。 */
   const loadJobLevelOptions = async () => {
     setJobLevelLoading(true);
     try {
@@ -355,6 +374,7 @@ const SalaryAccountPage: React.FC = () => {
     }
   };
 
+  /** 加载员工列表，供账套按员工适用范围选择使用。 */
   const loadEmployeeOptions = async () => {
     setEmployeeLoading(true);
     try {
@@ -396,6 +416,7 @@ const SalaryAccountPage: React.FC = () => {
     void loadJobLevelOptions();
   });
 
+  /** 打开新建账套抽屉，并重置表单与编辑上下文。 */
   const openCreateDrawer = () => {
     setEditingTemplate(undefined);
     drawerForm.resetFields();
@@ -414,6 +435,7 @@ const SalaryAccountPage: React.FC = () => {
     setDrawerOpen(true);
   };
 
+  /** 打开编辑账套抽屉，内部调用范围解析方法回填适用范围。 */
   const openEditDrawer = (template: SalaryTemplate) => {
     setEditingTemplate(template);
     drawerForm.resetFields();
@@ -443,6 +465,7 @@ const SalaryAccountPage: React.FC = () => {
     drawerForm.resetFields();
   };
 
+  /** 执行账套查询并重置分页。 */
   const handleSearch = (values: SalaryTemplateFilterValues) => {
     setQuery((previous) => ({
       ...previous,
@@ -453,6 +476,7 @@ const SalaryAccountPage: React.FC = () => {
     }));
   };
 
+  /** 重置账套筛选条件并恢复默认分页。 */
   const handleReset = () => {
     setQuery({
       pageNum: 1,
@@ -460,6 +484,7 @@ const SalaryAccountPage: React.FC = () => {
     });
   };
 
+  /** 提交账套表单，内部调用 `buildTemplatePayload` 组装保存参数并刷新列表。 */
   const handleSubmit = async () => {
     try {
       const values = await drawerForm.validateFields();
@@ -483,6 +508,7 @@ const SalaryAccountPage: React.FC = () => {
     }
   };
 
+  /** 切换账套启停状态，内部调用 `buildTogglePayload` 复用原账套配置。 */
   const handleToggleStatus = async (template: SalaryTemplate) => {
     try {
       await updateSalaryTemplate(template.id, buildTogglePayload(template));

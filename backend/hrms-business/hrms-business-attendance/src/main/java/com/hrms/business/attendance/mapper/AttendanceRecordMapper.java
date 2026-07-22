@@ -197,4 +197,32 @@ public interface AttendanceRecordMapper extends BaseMapper<AttendanceRecordEntit
             WHERE group_id = #{groupId}
             """)
     long countByGroupId(@Param("groupId") Long groupId);
+
+    /**
+     * 批量按员工ID列表和日期范围查询打卡记录
+     *
+     * @param employeeIds 员工ID列表
+     * @param startDate   开始日期
+     * @param endDate     结束日期
+     * @return 打卡记录列表
+     * 本方法使用的工具类：foreach(MyBatis XML)
+     */
+    @Select("""
+            <script>
+            SELECT id, employee_id, group_id, record_date, clock_in_time, clock_out_time,
+                   clock_in_status, clock_out_status, clock_in_ip, clock_out_ip,
+                   clock_in_gps, clock_out_gps, device_info, correction_status,
+                   create_time, update_time
+            FROM hr_attendance_record
+            WHERE employee_id IN
+            <foreach collection="employeeIds" item="eid" open="(" separator="," close=")">
+                #{eid}
+            </foreach>
+              AND record_date BETWEEN #{startDate} AND #{endDate}
+            ORDER BY employee_id ASC, record_date ASC
+            </script>
+            """)
+    List<AttendanceRecordEntity> selectByEmployeeIdsAndDateRange(@Param("employeeIds") List<Long> employeeIds,
+                                                                  @Param("startDate") LocalDate startDate,
+                                                                  @Param("endDate") LocalDate endDate);
 }

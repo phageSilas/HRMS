@@ -297,12 +297,14 @@ export async function getAttendanceGroups(params: AttendanceGroupQuery) {
   });
 }
 
+/** 获取指定年份的考勤日历配置，供考勤组页面的工作日设置面板使用。 */
 export async function getAttendanceCalendarConfig(year: number) {
   return request.get<AttendanceCalendarConfig>('/api/v1/attendance/calendar-config', {
     params: { year },
   });
 }
 
+/** 更新考勤日历配置，供考勤组页面保存节假日和工作日规则时调用。 */
 export async function updateAttendanceCalendarConfig(
   data: AttendanceCalendarConfig,
 ) {
@@ -328,13 +330,12 @@ export async function updateAttendanceGroup(
 
 // ============ 考勤记录接口 ============
 
-/**
- * 获取考勤记录列表
- */
+/** 删除考勤组，供考勤组页面的删除操作调用。 */
 export async function deleteAttendanceGroup(id: number) {
   return request.delete<void>(`/api/v1/attendance/groups/${id}`);
 }
 
+/** 查询指定考勤组下的打卡记录列表，供考勤记录页按组筛选展示。 */
 export async function getAttendanceGroupRecords(
   groupId: number,
   params: AttendanceGroupRecordQuery,
@@ -345,6 +346,7 @@ export async function getAttendanceGroupRecords(
   );
 }
 
+/** 查询通用考勤记录列表，供旧版记录页面或兼容逻辑复用。 */
 export async function getAttendanceRecordList(params: AttendanceQuery) {
   return request.get<PageResult<AttendanceRecord>>('/attendance/records', {
     params,
@@ -417,9 +419,6 @@ export async function getAttendanceLeaveTypes() {
 // ============ 考勤汇总接口 ============
 
 /**
- * 获取员工考勤汇总（跨模块接口）
- */
-/**
  * 提交请假申请
  */
 export async function createAttendanceLeave(
@@ -428,6 +427,7 @@ export async function createAttendanceLeave(
   return request.post<AttendanceLeaveCreateResult>('/api/v1/leaves', data);
 }
 
+/** 查询员工月度考勤汇总，供员工或跨模块统计读取单人汇总结果。 */
 export async function getAttendanceSummary(
   employeeId: number,
   yearMonth: string,

@@ -84,6 +84,7 @@ const statusTabs = [
   { key: String(ApprovalStatus.ENTERED), label: '已入职' },
 ];
 
+/** 解析表单日期值，统一兼容字符串、数组和 Dayjs 三种日期来源。 */
 function parseFormDateValue(
   value?: string | number[] | Dayjs,
 ): Dayjs | undefined {
@@ -119,6 +120,7 @@ function formatDateValue(value?: string | number[] | Dayjs): string | undefined 
   return parsedDate.isValid() ? parsedDate.format('YYYY-MM-DD') : value;
 }
 
+/** 构建提交给后端的入职表单数据，内部调用 `formatDateValue` 统一日期格式。 */
 function buildFormValues(values: EntryApplicationFormValues) {
   return {
     ...values,
@@ -126,6 +128,7 @@ function buildFormValues(values: EntryApplicationFormValues) {
   };
 }
 
+/** 构建入职表单初始值，内部调用 `parseFormDateValue` 回填日期控件。 */
 function buildEntryFormInitialValues(record?: EntryApplication): Partial<EntryApplicationFormValues> {
   return {
     candidateName: record?.candidateName,
@@ -144,10 +147,12 @@ function buildEntryFormInitialValues(record?: EntryApplication): Partial<EntryAp
   };
 }
 
+/** 获取姓名首字，用于候选人头像占位展示。 */
 function getInitial(name?: string) {
   return name?.slice(0, 1) || '人';
 }
 
+/** 生成候选汇报人角色标签，区分 Leader、HR 或二者兼具。 */
 function buildLeaderRoleLabel(
   employeeId: number,
   leaderIds: Set<number>,
@@ -167,6 +172,10 @@ function buildLeaderRoleLabel(
   return '';
 }
 
+/**
+ * 入职管理页面组件。
+ * 负责入职申请列表、草稿维护、提交审批和确认入职全流程操作。
+ */
 const EntryPage: React.FC = () => {
   const actionRef = useRef<ActionType>();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -235,6 +244,7 @@ const EntryPage: React.FC = () => {
     Omit<EntryApplicationQuery, 'pageNum' | 'pageSize' | 'approvalStatus'>
   >({});
 
+  /** 加载状态统计卡片数据，供筛选结果变化后同步刷新顶部汇总。 */
   const loadStatusCounts = async (
     query: Omit<EntryApplicationQuery, 'pageNum' | 'pageSize' | 'approvalStatus'>,
   ) => {
@@ -242,8 +252,10 @@ const EntryPage: React.FC = () => {
     setStatusCounts(stats);
   };
 
+  /** 刷新表格数据，供提交审批、保存草稿和确认入职后复用。 */
   const reloadTable = () => actionRef.current?.reload();
 
+  /** 提交入职审批，内部调用 `loadStatusCounts` 刷新统计并调用 `reloadTable` 刷新列表。 */
   const handleSubmitApproval = async (record: EntryApplication) => {
     await submitEntryApplication(record.id);
     message.success('已提交入职审批');
@@ -251,6 +263,7 @@ const EntryPage: React.FC = () => {
     reloadTable();
   };
 
+  /** 加载并打开草稿编辑表单，内部调用 `getEntryApplication` 获取详情。 */
   const handleEditRecord = async (recordId: number) => {
     setEditingLoadingId(recordId);
     try {
@@ -262,6 +275,7 @@ const EntryPage: React.FC = () => {
     }
   };
 
+  /** 确认员工正式入职，内部调用 `loadStatusCounts` 和 `reloadTable` 同步页面状态。 */
   const handleConfirmEntry = async () => {
     if (!confirmRecord) {
       return;
@@ -744,6 +758,16 @@ const EntryPage: React.FC = () => {
             label="所属部门"
             width="md"
             options={realDepartmentOptions}
+            fieldProps={{
+              allowClear: true,
+              showSearch: true,
+              optionFilterProp: 'label',
+              placeholder: '请输入或选择所属部门',
+              filterOption: (input: string, option?: { label?: string | number }) =>
+                String(option?.label || '')
+                  .toLowerCase()
+                  .includes(input.trim().toLowerCase()),
+            }}
             rules={[{ required: true, message: '请选择所属部门' }]}
           />
           <ProFormSelect

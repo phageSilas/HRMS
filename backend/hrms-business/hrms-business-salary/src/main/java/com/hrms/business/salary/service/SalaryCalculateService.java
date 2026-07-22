@@ -2,6 +2,7 @@ package com.hrms.business.salary.service;
 
 import com.hrms.business.salary.dto.SalaryBatchAdjustmentRequestDTO;
 import com.hrms.business.salary.dto.SalaryBatchCreateRequestDTO;
+import com.hrms.business.salary.dto.SalaryBatchItemQueryDTO;
 import com.hrms.business.salary.mq.event.SalaryBatchCalculateMessage;
 import com.hrms.business.salary.vo.SalaryBatchExportVO;
 import com.hrms.business.salary.vo.SalaryBatchItemVO;
@@ -9,6 +10,7 @@ import com.hrms.business.salary.vo.SalaryBatchPreviewVO;
 import com.hrms.business.salary.vo.SalaryBatchTrendVO;
 import com.hrms.business.salary.vo.SalaryBatchVO;
 
+import com.hrms.common.web.PageResult;
 import java.util.List;
 
 /**
@@ -92,6 +94,16 @@ public interface SalaryCalculateService {
      * 本方法使用的工具类: 无
      */
     SalaryBatchPreviewVO previewBatch(Long batchId);
+
+    /**
+     * 分页查询薪资批次明细（前10页走Redis缓存，超出走游标分页）。
+     *
+     * @param batchId  批次ID
+     * @param queryDTO 分页查询参数
+     * @return 分页结果
+     * 本方法使用的工具类：PageResult(hrms-common)
+     */
+    PageResult<SalaryBatchItemVO> pageBatchItems(Long batchId, SalaryBatchItemQueryDTO queryDTO);
 
     /**
      * 导出薪资批次 Excel。

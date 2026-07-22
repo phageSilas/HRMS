@@ -3,6 +3,7 @@ package com.hrms.business.personnel.service.impl;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
+import com.hrms.business.personnel.common.cache.PersonnelCacheKeys;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hrms.business.approval.enums.ApprovalTypeEnum;
@@ -34,6 +35,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import java.util.concurrent.TimeUnit;
+
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -63,6 +68,8 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
     // 岗位服务
     private final PostService postService;
 
+    private final ObjectProvider<StringRedisTemplate> redisTemplateProvider;
+
     /**
      * 分页查询调岗申请。
      * @param queryDTO 调岗申请查询参数
@@ -70,6 +77,14 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
      */
     @Override
     public PageResult<TransferApplicationPageVO> pageTransferApplications(TransferApplicationQueryDTO queryDTO) {
+        String queryHash = queryDTO.hashCode() + "_" + queryDTO.getPageNum() + "_" + queryDTO.getPageSize();
+        StringRedisTemplate rt = redisTemplateProvider.getIfAvailable();
+        if (rt != null) {
+            String cached = rt.opsForValue().get(PersonnelCacheKeys.transferPage(queryHash));
+            if (StrUtil.isNotBlank(cached)) {
+                return JSONUtil.toBean(cached, PageResult.class);
+            }
+        }
         int pageNum = normalizePageNum(queryDTO.getPageNum());
         int pageSize = normalizePageSize(queryDTO.getPageSize());
         // 类型转换
@@ -106,6 +121,15 @@ public class TransferApplicationServiceImpl implements TransferApplicationServic
     public TransferApplicationCreateVO createTransferApplication(TransferApplicationCreateRequestDTO requestDTO) {
         //查询必须存在的员工快照。
         EmployeeSnapshotEntity employeeSnapshot = getRequiredEmployeeSnapshot(requestDTO.getEmployeeId());
+        // 提交防重
+        StringRedisTemplate rt = redisTemplateProvider.getIfAvailable();
+        if (rt != null) {
+            Boolean locked = rt.opsForValue()
+                    .setIfAbsent(PersonnelCacheKeys.transferSubmitToken(requestDTO.getEmployeeId()), "1", 30, TimeUnit.SECONDS);
+            if (!Boolean.TRUE.equals(locked)) {
+                throw new GlobalException(TRANSFER_APPLICATION_DUPLICATE, "该申请正在提交中，请勿重复操作");
+            }
+        }
         // 确保员工没有进行中的调岗申请
         assertNoProcessingTransferApplication(requestDTO.getEmployeeId());
 

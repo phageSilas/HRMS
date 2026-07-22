@@ -23,6 +23,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -56,7 +58,12 @@ class RegularApplicationServiceImplTest {
     @Mock
     private PostService postService;
 
+    @Mock
+    private ObjectProvider<StringRedisTemplate> redisTemplateProvider;
+
     private RegularApplicationServiceImpl regularApplicationService;
+
+
 
     @BeforeEach
     void setUp() {
@@ -68,7 +75,8 @@ class RegularApplicationServiceImplTest {
                 employeeService,
                 approvalEngine,
                 deptService,
-                postService
+                postService,
+                redisTemplateProvider
         );
     }
 

@@ -20,4 +20,10 @@ public class SalaryBatchCalculateMessage implements HrmsMqMessage {
     private Long batchId;
 
     private String salaryMonth;
+
+    private String triggerType;
+
+    private String rollbackStatus;
+
+    private Boolean applyAdjustments;
 }

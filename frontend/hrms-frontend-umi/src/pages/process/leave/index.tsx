@@ -64,10 +64,15 @@ const leaveTypeOptions = [
   { label: '合同到期', value: 'contract_end' },
 ];
 
+/** 获取员工姓名首字，用于页面头像与卡片占位展示。 */
 function getInitial(name?: string) {
   return name?.slice(0, 1) || '员';
 }
 
+/**
+ * 离职申请页面组件。
+ * 负责离职申请列表查询、员工信息回填、交接人选择和审批提交流程。
+ */
 const LeavePage: React.FC = () => {
   const actionRef = useRef<ActionType>();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -110,6 +115,7 @@ const LeavePage: React.FC = () => {
     [],
   );
 
+  /** 重置员工关联字段，供员工不存在或抽屉关闭时统一清空表单上下文。 */
   const resetEmployeeRelatedFields = () => {
     leaveForm.setFieldsValue({
       employeeName: undefined,
@@ -122,6 +128,7 @@ const LeavePage: React.FC = () => {
     setHandoverKeyword('');
   };
 
+  /** 加载交接人选项，供同部门交接人下拉搜索复用。 */
   const loadHandoverOptions = async (keyword?: string) => {
     if (!currentEmployeeDetail?.deptId || !currentEmployeeDetail?.id) {
       setHandoverOptions([]);
@@ -150,6 +157,7 @@ const LeavePage: React.FC = () => {
     }
   };
 
+  /** 查询离职员工详情，内部调用 `loadHandoverOptions` 自动准备交接人候选列表。 */
   const handleEmployeeLookup = async (rawEmployeeId?: number | string | null) => {
     const employeeId = Number(rawEmployeeId);
     if (!employeeId || employeeId < 1) {
@@ -177,6 +185,7 @@ const LeavePage: React.FC = () => {
     }
   };
 
+  /** 触发员工信息查询，内部调用 `handleEmployeeLookup` 按输入的员工 ID 回填信息。 */
   const triggerEmployeeLookup = () => {
     void handleEmployeeLookup(leaveForm.getFieldValue('employeeId'));
   };

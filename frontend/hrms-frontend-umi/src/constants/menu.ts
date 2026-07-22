@@ -85,6 +85,7 @@ export const menuConfig: MenuItem[] = [
     access: 'salary',
     children: [
       { key: 'salary-account', name: '薪资账套', icon: '', path: '/salary/account' },
+      { key: 'salary-profile', name: '薪资档案', icon: '', path: '/salary/profile' },
       { key: 'salary-batch', name: '薪资核算', icon: '', path: '/salary/batch' },
       { key: 'salary-payslip', name: '工资条', icon: '', path: '/salary/payslip' },
     ],

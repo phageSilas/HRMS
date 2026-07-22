@@ -3,6 +3,7 @@ package com.hrms.business.salary.service;
 import com.hrms.business.salary.dto.EmployeeSalaryProfileRequestDTO;
 import com.hrms.business.salary.dto.SalaryTemplateCreateOrUpdateRequestDTO;
 import com.hrms.business.salary.dto.SalaryTemplateQueryDTO;
+import com.hrms.business.salary.vo.EmployeeSalaryProfileDetailVO;
 import com.hrms.business.salary.vo.EmployeeSalaryProfileVO;
 import com.hrms.business.salary.vo.SalaryTemplatePageVO;
 import com.hrms.common.web.PageResult;
@@ -48,6 +49,15 @@ public interface SalaryTemplateService {
      * 本方法使用的工具类: 无
      */
     EmployeeSalaryProfileVO getEmployeeProfile(Long employeeId);
+
+    /**
+     * 查询员工薪资档案详情。
+     *
+     * @param employeeId 员工ID
+     * @return 员工薪资档案详情
+     * 本方法使用的工具类: 无
+     */
+    EmployeeSalaryProfileDetailVO getEmployeeProfileDetail(Long employeeId);
 
     /**
      * 设置员工薪资档案。

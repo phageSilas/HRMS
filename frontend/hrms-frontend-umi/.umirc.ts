@@ -235,6 +235,11 @@ export default defineConfig({
           component: '@/pages/salary/account',
         },
         {
+          path: '/salary/profile',
+          name: '薪资档案',
+          component: '@/pages/salary/profile',
+        },
+        {
           path: '/salary/batch',
           name: '薪资核算',
           component: '@/pages/salary/batch',
