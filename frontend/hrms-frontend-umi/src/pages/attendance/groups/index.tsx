@@ -122,7 +122,7 @@ const defaultCalendarConfig: AttendanceCalendarConfig = {
 };
 
 /** 格式化后端返回的班次时间，统一为 HH:mm 展示。 */
-function formatBackendTime(value?: string | number[]) {
+function formatBackendTime(value?: string | number[] | number) {
   if (!value) return '--:--';
   if (Array.isArray(value)) {
     const [hour = 0, minute = 0] = value;
@@ -131,11 +131,15 @@ function formatBackendTime(value?: string | number[]) {
       '0',
     )}`;
   }
+  if (typeof value === 'number') {
+    const parsed = dayjs(value);
+    return parsed.isValid() ? parsed.format('HH:mm') : '--:--';
+  }
   return value.slice(0, 5);
 }
 
 /** 将后端时间转换为 TimePicker 值，内部调用 `formatBackendTime` 统一解析格式。 */
-function toPickerTime(value?: string | number[]) {
+function toPickerTime(value?: string | number[] | number) {
   const text = formatBackendTime(value);
   return text === '--:--' ? undefined : dayjs(`2026-01-01 ${text}:00`);
 }
@@ -162,7 +166,13 @@ function normalizeHolidayDateValue(value: string | number[]) {
     return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;
   }
 
-  const parsed = dayjs(value, ['YYYY-MM-DD', 'YYYY/M/D', 'YYYY/M/DD', 'YYYY/MM/D', 'YYYY/MM/DD']);
+  const parsed = dayjs(value, [
+    'YYYY-MM-DD',
+    'YYYY/M/D',
+    'YYYY/M/DD',
+    'YYYY/MM/D',
+    'YYYY/MM/DD',
+  ]);
   return parsed.isValid() ? parsed.format('YYYY-MM-DD') : value;
 }
 
@@ -323,7 +333,10 @@ const AttendanceGroupsPage: React.FC = () => {
     try {
       const config = await getAttendanceCalendarConfig(year);
       setSelectedWorkdays(
-        (config?.workdays?.length ? config.workdays : defaultCalendarConfig.workdays)
+        (config?.workdays?.length
+          ? config.workdays
+          : defaultCalendarConfig.workdays
+        )
           .slice()
           .sort((left, right) => left - right),
       );
@@ -753,7 +766,9 @@ const AttendanceGroupsPage: React.FC = () => {
                     }
                     const nextYear = value.year();
                     setCalendarConfigYear(nextYear);
-                    setCalendarPanelDate(dayjs(`${nextYear}-01-01`, 'YYYY-MM-DD'));
+                    setCalendarPanelDate(
+                      dayjs(`${nextYear}-01-01`, 'YYYY-MM-DD'),
+                    );
                   }}
                 />
                 <Button
@@ -972,7 +987,9 @@ const AttendanceGroupsPage: React.FC = () => {
                               if (editingGroup || (value && value.length > 0)) {
                                 return Promise.resolve();
                               }
-                              return Promise.reject(new Error('请选择指定员工'));
+                              return Promise.reject(
+                                new Error('请选择指定员工'),
+                              );
                             },
                           },
                         ]}

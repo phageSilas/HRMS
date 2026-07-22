@@ -159,6 +159,16 @@ public class AttendanceServiceImpl implements AttendanceService {
      */
     @Override
     public PageResult<AttendanceGroupPageVO> pageAttendanceGroups(AttendanceGroupQueryDTO queryDTO) {
+        String cacheKey = AttendanceCacheKeys.attendanceGroupPage(buildAttendanceGroupPageCacheKey(queryDTO));
+        try {
+            String cached = stringRedisTemplate.opsForValue().get(cacheKey);
+            if (StrUtil.isNotBlank(cached)) {
+                return JSONUtil.toBean(cached, PageResult.class);
+            }
+        } catch (Exception ex) {
+            log.warn("load attendance group page cache failed, cacheKey={}", cacheKey, ex);
+        }
+
         Page<AttendanceGroupEntity> page = Page.of(queryDTO.getPageNum(), queryDTO.getPageSize());
         LambdaQueryWrapper<AttendanceGroupEntity> wrapper = new LambdaQueryWrapper<AttendanceGroupEntity>()
                 .like(StrUtil.isNotBlank(queryDTO.getGroupName()), AttendanceGroupEntity::getGroupName, queryDTO.getGroupName())
@@ -170,7 +180,19 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .map(AttendanceGroupConvert::toPageVO)
                 .map(this::fillAttendanceGroupScope)
                 .toList();
-        return PageResult.of(records, resultPage.getTotal(), queryDTO.getPageNum(), queryDTO.getPageSize());
+        PageResult<AttendanceGroupPageVO> result = PageResult.of(
+                records,
+                resultPage.getTotal(),
+                queryDTO.getPageNum(),
+                queryDTO.getPageSize()
+        );
+
+        try {
+            stringRedisTemplate.opsForValue().set(cacheKey, JSONUtil.toJsonStr(result), Duration.ofDays(2));
+        } catch (Exception ex) {
+            log.warn("save attendance group page cache failed, cacheKey={}", cacheKey, ex);
+        }
+        return result;
     }
 
     /**
@@ -187,6 +209,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         attendanceGroupMapper.insert(entity);
         rebuildGroupMembers(entity.getId(), requestDTO.getMemberRange());
         evictGroupRuleCache(entity.getId());
+        evictAttendanceGroupPageCache();
         return fillAttendanceGroupScope(AttendanceGroupConvert.toPageVO(entity));
 
     }
@@ -211,6 +234,7 @@ public class AttendanceServiceImpl implements AttendanceService {
             rebuildGroupMembers(id, requestDTO.getMemberRange());
         }
         evictGroupRuleCache(id);
+        evictAttendanceGroupPageCache();
         return fillAttendanceGroupScope(AttendanceGroupConvert.toPageVO(entity));
     }
 
@@ -236,6 +260,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
         attendanceGroupMapper.deleteById(entity.getId());
         evictGroupRuleCache(id);
+        evictAttendanceGroupPageCache();
     }
 
     /**
@@ -3104,6 +3129,45 @@ public class AttendanceServiceImpl implements AttendanceService {
         } catch (Exception ex) {
             log.warn("delete attendance group rule cache failed, groupId={}", groupId, ex);
         }
+    }
+
+    /**
+     * 删除考勤组分页缓存。
+     */
+    private void evictAttendanceGroupPageCache() {
+        try {
+            Set<String> keys = stringRedisTemplate.keys(AttendanceCacheKeys.attendanceGroupPagePattern());
+            if (keys == null || keys.isEmpty()) {
+                return;
+            }
+            stringRedisTemplate.delete(keys);
+        } catch (Exception ex) {
+            log.warn("delete attendance group page cache failed");
+        }
+    }
+
+    /**
+     * 构建考勤组分页缓存查询键。
+     *
+     * @param queryDTO 查询参数
+     * @return 查询键
+     */
+    private String buildAttendanceGroupPageCacheKey(AttendanceGroupQueryDTO queryDTO) {
+        return String.join(":",
+                String.valueOf(queryDTO.getPageNum()),
+                String.valueOf(queryDTO.getPageSize()),
+                normalizeCacheValue(queryDTO.getGroupName()),
+                String.valueOf(queryDTO.getStatus() == null ? "null" : queryDTO.getStatus()));
+    }
+
+    /**
+     * 标准化缓存字段值，避免空值和空白值生成不同 key。
+     *
+     * @param value 原始值
+     * @return 标准化后的值
+     */
+    private String normalizeCacheValue(String value) {
+        return StrUtil.isBlank(value) ? "blank" : value.trim();
     }
 
     /**

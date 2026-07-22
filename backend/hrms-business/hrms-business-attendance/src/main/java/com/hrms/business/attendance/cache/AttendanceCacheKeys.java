@@ -16,6 +16,11 @@ public final class AttendanceCacheKeys {
     public static final String GROUP_RULE_PREFIX = "attendance:group:rule:";
 
     /**
+     * 考勤组分页缓存 Key 前缀。
+     */
+    public static final String GROUP_PAGE_PREFIX = "attendance:group:page:";
+
+    /**
      * 构建考勤组规则缓存 Key。
      *
      * @param groupId 考勤组ID
@@ -24,6 +29,25 @@ public final class AttendanceCacheKeys {
      */
     public static String groupRule(Long groupId) {
         return GROUP_RULE_PREFIX + groupId;
+    }
+
+    /**
+     * 构建考勤组分页缓存 Key。
+     *
+     * @param queryKey 查询条件唯一键
+     * @return Redis Key
+     */
+    public static String attendanceGroupPage(String queryKey) {
+        return GROUP_PAGE_PREFIX + queryKey;
+    }
+
+    /**
+     * 构建考勤组分页缓存 Key 模式。
+     *
+     * @return Redis Key 模式
+     */
+    public static String attendanceGroupPagePattern() {
+        return GROUP_PAGE_PREFIX + "*";
     }
 
     /**
