@@ -2,6 +2,7 @@
  * 请假申请弹窗
  */
 import { DatePicker, Form, Input, Modal, Select } from 'antd';
+import dayjs from 'dayjs';
 import React from 'react';
 import { LEAVE_TYPE_OPTIONS } from '../constants';
 
@@ -57,7 +58,9 @@ const LeaveModal: React.FC<Props> = ({ open, onClose, onSubmit }) => {
           label="请假时间"
           rules={[{ required: true, message: '请选择请假时间范围' }]}
         >
-          <DatePicker.RangePicker showTime style={{ width: '100%' }} format="YYYY-MM-DD HH:mm" />
+          <DatePicker.RangePicker showTime style={{ width: '100%' }} format="YYYY-MM-DD HH:mm"
+            disabledDate={(current) => current && current.isAfter(dayjs().endOf('day'))}
+          />
         </Form.Item>
         <Form.Item
           name="leaveReason"
