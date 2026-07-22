@@ -29,6 +29,7 @@ import {
   TeamOutlined,
   ApartmentOutlined,
   UserOutlined,
+  MergeCellsOutlined,
 } from '@ant-design/icons';
 import {
   getDeptTree,
@@ -36,6 +37,7 @@ import {
   createDept,
   updateDept,
   deleteDept,
+  mergeDept,
 } from '@/services/organization';
 import { hasEmployeesInDept } from '@/services/employee';
 import type { DeptTreeNode, DeptDetail } from '@/services/organization';
@@ -53,6 +55,9 @@ const DeptPage: React.FC = () => {
   const [selectedDeptName, setSelectedDeptName] = useState<string>('');
   const [form] = Form.useForm();
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
+  const [mergeModalVisible, setMergeModalVisible] = useState(false);
+  const [mergeTargetDeptId, setMergeTargetDeptId] = useState<number | null>(null);
+  const [mergeLoading, setMergeLoading] = useState(false);
 
   // 加载部门树
   const fetchDeptTree = async () => {
@@ -170,6 +175,67 @@ const DeptPage: React.FC = () => {
     } catch (error: any) {
       message.error(error.message || '删除失败');
     }
+  };
+
+  // 打开合并部门弹窗
+  const handleOpenMerge = () => {
+    setMergeTargetDeptId(null);
+    setMergeModalVisible(true);
+  };
+
+  // 确认合并部门
+  const handleMerge = async () => {
+    if (!mergeTargetDeptId) {
+      message.warning('请选择目标部门');
+      return;
+    }
+    if (mergeTargetDeptId === selectedDeptId) {
+      message.warning('不能合并到自身');
+      return;
+    }
+
+    setMergeLoading(true);
+    try {
+      await mergeDept(selectedDeptId!, { targetDeptId: mergeTargetDeptId });
+      message.success('部门合并成功');
+      setMergeModalVisible(false);
+      // 清空选中状态，刷新部门树
+      setSelectedDeptId(null);
+      setSelectedDeptName('');
+      setCurrentDept(null);
+      fetchDeptTree();
+    } catch (error: any) {
+      message.error(error.message || '合并失败');
+    } finally {
+      setMergeLoading(false);
+    }
+  };
+
+  // 过滤掉源部门及其子部门，用于合并目标选择
+  const filterDeptTreeForMerge = (nodes: DeptTreeNode[], excludeId: number): DeptTreeNode[] => {
+    return nodes
+      .filter(node => node.id !== excludeId)
+      .map(node => ({
+        ...node,
+        children: node.children ? filterDeptTreeForMerge(node.children, excludeId) : undefined,
+      }));
+  };
+
+  // 将树数据转换为 Tree 组件需要的格式（用于合并目标选择）
+  const convertMergeTreeData = (nodes: DeptTreeNode[]): any[] => {
+    return nodes.map((node) => ({
+      key: node.id,
+      title: (
+        <span>
+          <ApartmentOutlined style={{ marginRight: 8, color: '#1890ff' }} />
+          {node.deptName}
+          <span style={{ marginLeft: 8, color: '#999', fontSize: 12 }}>
+            ({node.employeeCount || 0}人)
+          </span>
+        </span>
+      ),
+      children: node.children ? convertMergeTreeData(node.children) : undefined,
+    }));
   };
 
   // 渲染树节点标题
@@ -291,6 +357,12 @@ const DeptPage: React.FC = () => {
                     onClick={() => handleAdd(selectedDeptId, selectedDeptName)}
                   >
                     新增子部门
+                  </Button>
+                  <Button
+                    icon={<MergeCellsOutlined />}
+                    onClick={handleOpenMerge}
+                  >
+                    合并部门
                   </Button>
                   <Popconfirm
                     title="确认删除"
@@ -428,6 +500,46 @@ const DeptPage: React.FC = () => {
             <TextArea rows={3} placeholder="请输入备注" />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* 合并部门弹窗 */}
+      <Modal
+        title="合并部门"
+        open={mergeModalVisible}
+        onOk={handleMerge}
+        onCancel={() => setMergeModalVisible(false)}
+        confirmLoading={mergeLoading}
+        width={600}
+        destroyOnClose
+      >
+        <div style={{ marginBottom: 16 }}>
+          <p style={{ marginBottom: 8 }}>
+            将 <strong>{selectedDeptName}</strong> 合并到目标部门：
+          </p>
+          <p style={{ color: '#999', fontSize: 12 }}>
+            合并后，该部门的所有员工将迁移到目标部门，原部门将被删除。
+          </p>
+        </div>
+        <div style={{ border: '1px solid #d9d9d9', borderRadius: 4, padding: 12, maxHeight: 400, overflow: 'auto' }}>
+          <Tree
+            treeData={convertMergeTreeData(filterDeptTreeForMerge(treeData, selectedDeptId!))}
+            expandedKeys={expandedKeys}
+            onExpand={(keys) => setExpandedKeys(keys)}
+            selectedKeys={mergeTargetDeptId ? [mergeTargetDeptId] : []}
+            onSelect={(selectedKeys) => {
+              if (selectedKeys.length > 0) {
+                setMergeTargetDeptId(selectedKeys[0] as number);
+              }
+            }}
+            showLine={{ showLeafIcon: false }}
+            style={{ fontSize: 14 }}
+          />
+        </div>
+        {mergeTargetDeptId && (
+          <div style={{ marginTop: 12, padding: 12, background: '#f5f5f5', borderRadius: 4 }}>
+            <span>目标部门 ID: <strong>{mergeTargetDeptId}</strong></span>
+          </div>
+        )}
       </Modal>
     </PageContainer>
   );

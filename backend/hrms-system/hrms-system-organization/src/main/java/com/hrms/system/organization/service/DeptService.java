@@ -1,6 +1,7 @@
 package com.hrms.system.organization.service;
 
 import com.hrms.system.organization.dto.DeptCreateDTO;
+import com.hrms.system.organization.dto.DeptMergeDTO;
 import com.hrms.system.organization.dto.DeptUpdateDTO;
 import com.hrms.system.organization.entity.DeptEntity;
 import com.hrms.system.organization.vo.DeptDetailVO;
@@ -66,5 +67,17 @@ public interface DeptService {
      * @return 子部门 ID 列表
      */
     List<Long> getSubDeptIds(Long parentId);
+
+    /**
+     * 合并部门
+     * <p>
+     * 将源部门的员工迁移到目标部门，然后删除源部门。
+     * 只有叶子部门（无子部门）才能被合并。
+     * </p>
+     *
+     * @param sourceDeptId 源部门 ID（将被删除）
+     * @param mergeDTO     合并参数（包含目标部门 ID）
+     */
+    void mergeDept(Long sourceDeptId, DeptMergeDTO mergeDTO);
 
 }

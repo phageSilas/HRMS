@@ -7,14 +7,17 @@ import com.hrms.common.exception.GlobalException;
 import com.hrms.common.security.DataScopeUtils;
 import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.system.organization.dto.DeptCreateDTO;
+import com.hrms.system.organization.dto.DeptMergeDTO;
 import com.hrms.system.organization.dto.DeptUpdateDTO;
 import com.hrms.system.organization.entity.DeptEntity;
+import com.hrms.system.organization.event.DeptMergeEvent;
 import com.hrms.system.organization.mapper.DeptMapper;
 import com.hrms.system.organization.service.DeptService;
 import com.hrms.system.organization.vo.DeptDetailVO;
 import com.hrms.system.organization.vo.DeptListVO;
 import com.hrms.system.organization.vo.DeptTreeVO;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
@@ -35,6 +38,7 @@ import java.util.stream.Collectors;
 public class DeptServiceImpl implements DeptService {
 
     private final DeptMapper deptMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     private static final int MAX_DEPT_LEVEL = 5;
 
@@ -407,6 +411,50 @@ public class DeptServiceImpl implements DeptService {
         }
 
         return result;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void mergeDept(Long sourceDeptId, DeptMergeDTO mergeDTO) {
+        // 1. 校验源部门存在且未删除
+        DeptEntity sourceDept = deptMapper.selectById(sourceDeptId);
+        if (sourceDept == null || sourceDept.getIsDeleted() == 1) {
+            throw new GlobalException(ErrorCode.NOT_FOUND);
+        }
+
+        // 2. 校验源部门无子部门（叶子部门检查）
+        Long childCount = deptMapper.selectCount(
+                Wrappers.<DeptEntity>lambdaQuery()
+                        .eq(DeptEntity::getParentId, sourceDeptId)
+                        .eq(DeptEntity::getIsDeleted, 0)
+        );
+        if (childCount > 0) {
+            throw new GlobalException(ErrorCode.DEPT_MERGE_HAS_CHILDREN);
+        }
+
+        // 3. 校验目标部门存在且未删除
+        Long targetDeptId = mergeDTO.getTargetDeptId();
+        DeptEntity targetDept = deptMapper.selectById(targetDeptId);
+        if (targetDept == null || targetDept.getIsDeleted() == 1) {
+            throw new GlobalException(ErrorCode.DEPT_MERGE_TARGET_NOT_FOUND);
+        }
+
+        // 4. 校验源部门和目标部门不是同一个
+        if (sourceDeptId.equals(targetDeptId)) {
+            throw new GlobalException(ErrorCode.DEPT_MERGE_SAME_DEPT);
+        }
+
+        // 5. 数据权限校验（源部门和目标部门都需要校验）
+        int dataScope = DataScopeUtils.getCurrentUserDataScope();
+        Long userDeptId = SecurityContextHolder.getDeptId();
+        checkDeptAccess(sourceDept, dataScope, userDeptId);
+        checkDeptAccess(targetDept, dataScope, userDeptId);
+
+        // 6. 发布部门合并事件（触发员工迁移和部门人数更新）
+        eventPublisher.publishEvent(new DeptMergeEvent(this, sourceDeptId, targetDeptId));
+
+        // 7. 删除源部门
+        deptMapper.deleteById(sourceDeptId);
     }
 
 }

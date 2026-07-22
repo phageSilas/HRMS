@@ -240,6 +240,21 @@ export async function deleteDept(id: number): Promise<void> {
   return request.delete<void>(`/api/v1/depts/${id}`);
 }
 
+/**
+ * 合并部门请求
+ */
+export interface DeptMergeRequest {
+  targetDeptId: number;
+}
+
+/**
+ * 合并部门
+ * 将源部门的员工迁移到目标部门后删除源部门
+ */
+export async function mergeDept(id: number, data: DeptMergeRequest): Promise<void> {
+  return request.post<void>(`/api/v1/depts/${id}/merge`, data);
+}
+
 // ============ 职位接口 ============
 
 /**
