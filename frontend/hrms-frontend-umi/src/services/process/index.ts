@@ -168,6 +168,7 @@ export interface LeaveApplication {
   id: number;
   employeeId: number;
   employeeName?: string;
+  employeeNo?: string;
   departmentName?: string;
   leaveType: string;
   leaveTypeName?: string;
