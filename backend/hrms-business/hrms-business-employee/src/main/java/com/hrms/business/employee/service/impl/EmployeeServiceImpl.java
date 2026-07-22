@@ -33,6 +33,7 @@ import com.hrms.system.auth.vo.UserCreateResultVO;
 import com.hrms.system.organization.service.DeptService;
 import com.hrms.system.organization.service.PostService;
 import com.hrms.system.organization.vo.DeptDetailVO;
+import com.hrms.system.organization.vo.DeptListVO;
 import com.hrms.system.organization.vo.PostVO;
 import com.hrms.business.employee.event.EmployeeChangeEvent;
 import lombok.extern.slf4j.Slf4j;
@@ -73,7 +74,7 @@ public class EmployeeServiceImpl implements EmployeeService {
     private final StringRedisTemplate stringRedisTemplate;
 
     /** ???? */
-    private static final String CACHE_PREFIX = "employee:list:";
+    private static final String CACHE_PREFIX = "employee:list:v2:";
     private static final int CACHE_MAX_PAGES = 9;
     private static final long CACHE_TTL_MINUTES = 30;
     private static final long EMPTY_TTL_MINUTES = 1;
@@ -155,7 +156,12 @@ public class EmployeeServiceImpl implements EmployeeService {
             return PageResult.of(List.of(), 0, queryDTO.getPageNum(), queryDTO.getPageSize());
         }
         Page<EmployeeEntity> resultPage = employeeMapper.selectPage(page, wrapper);
-        return buildPageResult(resultPage, queryDTO.getPageNum(), queryDTO.getPageSize());
+        return buildPageResult(
+                resultPage,
+                queryDTO.getPageNum(),
+                queryDTO.getPageSize(),
+                buildDeptNameMap()
+        );
     }
 
     /**
@@ -231,9 +237,10 @@ public class EmployeeServiceImpl implements EmployeeService {
      * @param pageSize   每页条数
      * @return PageResult
      */
-    private PageResult<EmployeeListVO> buildPageResult(Page<EmployeeEntity> resultPage, int pageNum, int pageSize) {
+    private PageResult<EmployeeListVO> buildPageResult(Page<EmployeeEntity> resultPage, int pageNum, int pageSize,
+                                                       java.util.Map<Long, String> deptNameMap) {
         List<EmployeeListVO> records = resultPage.getRecords().stream()
-                .map(this::convertToListVO)
+                .map(entity -> convertToListVO(entity, deptNameMap))
                 .collect(Collectors.toList());
 
         PageResult<EmployeeListVO> pageResult = new PageResult<>();
@@ -267,9 +274,10 @@ public class EmployeeServiceImpl implements EmployeeService {
 
         Page<EmployeeEntity> page1Query = new Page<>(1, pageSize + 1);
         Page<EmployeeEntity> resultPage = employeeMapper.selectPage(page1Query, wrapper);
+        java.util.Map<Long, String> deptNameMap = buildDeptNameMap();
 
         List<EmployeeListVO> records = resultPage.getRecords().stream()
-                .map(this::convertToListVO)
+                .map(entity -> convertToListVO(entity, deptNameMap))
                 .collect(Collectors.toList());
 
         long total = resultPage.getTotal();
@@ -286,6 +294,9 @@ public class EmployeeServiceImpl implements EmployeeService {
         page1.setPageSize(pageSize);
         page1.setPages(totalPages);
 
+        // 先清理旧的员工列表缓存，避免命中修复前写入的错误分页数据。
+        evictEmployeeListCache();
+
         // ???1?
         Long userId = SecurityContextHolder.getUserId();
         stringRedisTemplate.opsForValue().set(
@@ -293,7 +304,7 @@ public class EmployeeServiceImpl implements EmployeeService {
 
         // ?????2-9??Redis
         if (hasMore && totalPages > 1) {
-            asyncCacheEmployeePages(queryDTO, pageSize, total, totalPages);
+            asyncCacheEmployeePages(queryDTO, pageSize, total, totalPages, deptNameMap);
         }
 
         return page1;
@@ -308,7 +319,8 @@ public class EmployeeServiceImpl implements EmployeeService {
      * @param totalPages ???
      * ??????????StringRedisTemplate(spring-data-redis), JSONUtil(hutool), CompletableFuture(JDK)
      */
-    private void asyncCacheEmployeePages(EmployeeQueryDTO queryDTO, int pageSize, long total, int totalPages) {
+    private void asyncCacheEmployeePages(EmployeeQueryDTO queryDTO, int pageSize, long total, int totalPages,
+                                         java.util.Map<Long, String> deptNameMap) {
         EmployeeQueryDTO cacheQuery = new EmployeeQueryDTO();
         cacheQuery.setKeyword(queryDTO.getKeyword());
         cacheQuery.setDeptIds(queryDTO.getDeptIds());
@@ -343,7 +355,7 @@ public class EmployeeServiceImpl implements EmployeeService {
                     Page<EmployeeEntity> page = new Page<>(pageNum, pageSize);
                     Page<EmployeeEntity> result = employeeMapper.selectPage(page, wrapper);
                     List<EmployeeListVO> pageRecords = result.getRecords().stream()
-                            .map(this::convertToListVO)
+                            .map(entity -> convertToListVO(entity, deptNameMap))
                             .collect(Collectors.toList());
 
                     PageResult<EmployeeListVO> pageResult = new PageResult<>();
@@ -528,8 +540,9 @@ public class EmployeeServiceImpl implements EmployeeService {
             entities = entities.subList(0, pageSize);
         }
 
+        java.util.Map<Long, String> deptNameMap = buildDeptNameMap();
         List<EmployeeListVO> records = entities.stream()
-                .map(this::convertToListVO)
+                .map(entity -> convertToListVO(entity, deptNameMap))
                 .collect(Collectors.toList());
 
         Long nextLastId = records.isEmpty() ? null : records.get(records.size() - 1).getId();
@@ -1024,10 +1037,16 @@ public class EmployeeServiceImpl implements EmployeeService {
      * 转换为列表 VO
      */
     private EmployeeListVO convertToListVO(EmployeeEntity entity) {
+        return convertToListVO(entity, null);
+    }
+
+    private EmployeeListVO convertToListVO(EmployeeEntity entity, java.util.Map<Long, String> deptNameMap) {
         EmployeeListVO vo = EmployeeConvert.INSTANCE.toListVO(entity);
 
         // 填充部门名称
-        if (entity.getDeptId() != null) {
+        if (entity.getDeptId() != null && deptNameMap != null) {
+            vo.setDeptName(resolveDeptNameWithoutScope(entity.getDeptId(), deptNameMap));
+        } else if (entity.getDeptId() != null) {
             try {
                 DeptDetailVO dept = deptService.getDeptById(entity.getDeptId());
                 if (dept != null) {
@@ -1320,6 +1339,59 @@ public class EmployeeServiceImpl implements EmployeeService {
         sb.append(queryDTO.getPageSize() != null ? queryDTO.getPageSize() : 20).append("|");
         sb.append(pageNum);
         return sb.toString();
+    }
+
+    /**
+     * 构建当前用户可见部门名称映射。
+     *
+     * @return 部门ID到名称映射
+     */
+    private java.util.Map<Long, String> buildDeptNameMap() {
+        try {
+            return deptService.getDeptList().stream()
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toMap(
+                            DeptListVO::getId,
+                            DeptListVO::getDeptName,
+                            (left, right) -> left,
+                            java.util.HashMap::new
+                    ));
+        } catch (Exception e) {
+            log.warn("构建员工列表部门映射失败", e);
+            return new java.util.HashMap<>();
+        }
+    }
+
+    /**
+     * 使用预构建映射解析部门名称。
+     *
+     * @param deptId 部门ID
+     * @param deptNameMap 部门名称映射
+     * @return 部门名称
+     */
+    private String resolveDeptNameWithoutScope(Long deptId, java.util.Map<Long, String> deptNameMap) {
+        if (deptId == null || deptNameMap == null || deptNameMap.isEmpty()) {
+            return null;
+        }
+        return deptNameMap.get(deptId);
+    }
+
+    /**
+     * 清理员工列表缓存。
+     */
+    private void evictEmployeeListCache() {
+        if (stringRedisTemplate == null) {
+            return;
+        }
+        try {
+            java.util.Set<String> keys = stringRedisTemplate.keys(CACHE_PREFIX + "*");
+            if (keys == null || keys.isEmpty()) {
+                return;
+            }
+            stringRedisTemplate.delete(keys);
+        } catch (Exception e) {
+            log.warn("清理员工列表缓存失败", e);
+        }
     }
 
     /**

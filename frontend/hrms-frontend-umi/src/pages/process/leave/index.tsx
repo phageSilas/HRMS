@@ -53,8 +53,15 @@ type SelectOption = {
   value: number;
 };
 
+type EmployeeOption = {
+  label: string;
+  value: number;
+};
+
 type LeaveFormValues = LeaveApplicationCreateRequest & {
+  employeeOptionId?: number;
   employeeName?: string;
+  employeeNo?: string;
   departmentName?: string;
   positionName?: string;
 };
@@ -75,9 +82,23 @@ const leaveTypeOptions = [
   { label: '合同到期', value: 'contract_end' },
 ];
 
-/** 获取员工姓名首字，用于页面头像与卡片占位展示。 */
+/**
+ * 获取员工姓名首字，用于头像占位显示。
+ */
 function getInitial(name?: string) {
   return name?.slice(0, 1) || '员';
+}
+
+/**
+ * 构建员工候选选项，统一展示姓名与工号。
+ */
+function buildEmployeeOption(
+  employee: Pick<EmployeeBrief, 'id' | 'employeeName' | 'employeeNo'>,
+): EmployeeOption {
+  return {
+    label: `${employee.employeeName}（${employee.employeeNo}）`,
+    value: employee.id,
+  };
 }
 
 /**
@@ -91,15 +112,20 @@ const LeavePage: React.FC = () => {
     [],
   );
   const [handoverOptions, setHandoverOptions] = useState<SelectOption[]>([]);
+  const [employeeOptions, setEmployeeOptions] = useState<EmployeeOption[]>([]);
   const [employeeLoading, setEmployeeLoading] = useState(false);
+  const [employeeSearchLoading, setEmployeeSearchLoading] = useState(false);
   const [handoverLoading, setHandoverLoading] = useState(false);
   const [handoverKeyword, setHandoverKeyword] = useState('');
   const [currentEmployeeDetail, setCurrentEmployeeDetail] =
     useState<Employee>();
   const [leaveForm] = Form.useForm<LeaveFormValues>();
+  const employeeSearchTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const employeeSearchRequestRef = useRef(0);
 
   const watchedEmployeeId = Form.useWatch('employeeId', leaveForm);
   const watchedEmployeeName = Form.useWatch('employeeName', leaveForm);
+  const watchedEmployeeNo = Form.useWatch('employeeNo', leaveForm);
   const watchedDepartmentName = Form.useWatch('departmentName', leaveForm);
   const watchedPositionName = Form.useWatch('positionName', leaveForm);
 
@@ -120,6 +146,14 @@ const LeavePage: React.FC = () => {
     void loadDepartments();
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (employeeSearchTimerRef.current) {
+        clearTimeout(employeeSearchTimerRef.current);
+      }
+    };
+  }, []);
+
   const departmentFilterOption = useMemo(
     () => (input: string, option?: { label?: string | number }) =>
       String(option?.label || '')
@@ -128,10 +162,28 @@ const LeavePage: React.FC = () => {
     [],
   );
 
-  /** 重置员工关联字段，供员工不存在或抽屉关闭时统一清空表单上下文。 */
+  /**
+   * 将当前员工加入候选项，避免已选择员工不在下拉数据里。
+   */
+  const appendEmployeeOption = (
+    employee: Pick<EmployeeBrief, 'id' | 'employeeName' | 'employeeNo'>,
+  ) => {
+    const nextOption = buildEmployeeOption(employee);
+    setEmployeeOptions((previous) => {
+      const filtered = previous.filter((item) => item.value !== nextOption.value);
+      return [nextOption, ...filtered];
+    });
+  };
+
+  /**
+   * 重置员工关联字段。
+   */
   const resetEmployeeRelatedFields = () => {
     leaveForm.setFieldsValue({
+      employeeOptionId: undefined,
+      employeeId: undefined,
       employeeName: undefined,
+      employeeNo: undefined,
       departmentName: undefined,
       positionName: undefined,
       handoverEmployeeId: undefined,
@@ -141,7 +193,9 @@ const LeavePage: React.FC = () => {
     setHandoverKeyword('');
   };
 
-  /** 加载交接人选项，供同部门交接人下拉搜索复用。 */
+  /**
+   * 加载交接人选项，保留原有“同部门交接人”逻辑。
+   */
   const loadHandoverOptions = async (keyword?: string) => {
     if (!currentEmployeeDetail?.deptId || !currentEmployeeDetail?.id) {
       setHandoverOptions([]);
@@ -172,7 +226,9 @@ const LeavePage: React.FC = () => {
     }
   };
 
-  /** 查询离职员工详情，内部调用 `loadHandoverOptions` 自动准备交接人候选列表。 */
+  /**
+   * 根据已选择员工加载详情并回填表单。
+   */
   const handleEmployeeLookup = async (
     rawEmployeeId?: number | string | null,
   ) => {
@@ -185,9 +241,12 @@ const LeavePage: React.FC = () => {
     try {
       const detail = await getEmployeeDetail(employeeId);
       setCurrentEmployeeDetail(detail);
+      appendEmployeeOption(detail);
       leaveForm.setFieldsValue({
+        employeeOptionId: detail.id,
         employeeId: detail.id,
         employeeName: detail.employeeName,
+        employeeNo: detail.employeeNo,
         departmentName: detail.deptName,
         positionName: detail.postName,
         handoverEmployeeId: undefined,
@@ -196,15 +255,68 @@ const LeavePage: React.FC = () => {
       await loadHandoverOptions();
     } catch (error) {
       resetEmployeeRelatedFields();
-      message.error('未找到该员工，请确认员工ID后重试');
+      message.error('未找到匹配员工，请确认姓名或工号后重试');
     } finally {
       setEmployeeLoading(false);
     }
   };
 
-  /** 触发员工信息查询，内部调用 `handleEmployeeLookup` 按输入的员工 ID 回填信息。 */
-  const triggerEmployeeLookup = () => {
-    void handleEmployeeLookup(leaveForm.getFieldValue('employeeId'));
+  /**
+   * 搜索员工，支持按姓名或工号模糊匹配。
+   */
+  const handleEmployeeSearch = (keyword?: string) => {
+    const normalizedKeyword = keyword?.trim() || '';
+    if (employeeSearchTimerRef.current) {
+      clearTimeout(employeeSearchTimerRef.current);
+    }
+    if (!normalizedKeyword) {
+      setEmployeeSearchLoading(false);
+      setEmployeeOptions(
+        currentEmployeeDetail ? [buildEmployeeOption(currentEmployeeDetail)] : [],
+      );
+      return;
+    }
+    employeeSearchTimerRef.current = setTimeout(async () => {
+      const requestId = employeeSearchRequestRef.current + 1;
+      employeeSearchRequestRef.current = requestId;
+      setEmployeeSearchLoading(true);
+      try {
+        const page = await getEmployeeList({
+          keyword: normalizedKeyword,
+          pageNum: 1,
+          pageSize: 20,
+        });
+        if (employeeSearchRequestRef.current !== requestId) {
+          return;
+        }
+        setEmployeeOptions(
+          (page.records || []).map((employee) => buildEmployeeOption(employee)),
+        );
+      } catch (error) {
+        if (employeeSearchRequestRef.current === requestId) {
+          message.error('员工搜索失败，请稍后重试');
+        }
+      } finally {
+        if (employeeSearchRequestRef.current === requestId) {
+          setEmployeeSearchLoading(false);
+        }
+      }
+    }, 300);
+  };
+
+  /**
+   * 选择员工后触发详情回填。
+   */
+  const handleEmployeeSelect = (employeeId?: number) => {
+    if (!employeeId) {
+      resetEmployeeRelatedFields();
+      return;
+    }
+    leaveForm.setFieldsValue({
+      employeeOptionId: employeeId,
+      employeeId,
+    });
+    void handleEmployeeLookup(employeeId);
   };
 
   const columns: ProColumns<LeaveApplication>[] = [
@@ -265,10 +377,8 @@ const LeavePage: React.FC = () => {
             {getInitial(record.employeeName)}
           </Avatar>
           <Space direction="vertical" size={0}>
-            <strong>
-              {record.employeeName || `员工 ${record.employeeId}`}
-            </strong>
-            <Text type="secondary">ID {record.employeeId}</Text>
+            <strong>{record.employeeName || `员工 ${record.employeeId}`}</strong>
+            <Text type="secondary">{record.employeeNo || '--'}</Text>
           </Space>
         </Space>
       ),
@@ -281,8 +391,7 @@ const LeavePage: React.FC = () => {
       search: false,
       renderText: (_, record) =>
         record.leaveTypeName ||
-        leaveTypeOptions.find((item) => item.value === record.leaveType)
-          ?.label ||
+        leaveTypeOptions.find((item) => item.value === record.leaveType)?.label ||
         record.leaveType,
     },
     {
@@ -427,29 +536,41 @@ const LeavePage: React.FC = () => {
             <Space direction="vertical" size={0}>
               <strong>{watchedEmployeeName || '待选择员工'}</strong>
               <Text type="secondary">员工 ID：{watchedEmployeeId || '-'}</Text>
+              <Text type="secondary">员工工号：{watchedEmployeeNo || '-'}</Text>
               <Text type="secondary">
-                部门：{watchedDepartmentName || '-'} 职位：
-                {watchedPositionName || '-'}
+                部门：{watchedDepartmentName || '-'} 职位：{watchedPositionName || '-'}
               </Text>
             </Space>
           </Space>
         </Card>
 
         <ProFormGroup>
+          <ProFormSelect
+            name="employeeOptionId"
+            label="员工姓名/工号"
+            width="md"
+            rules={[{ required: true, message: '请选择离职员工' }]}
+            options={employeeOptions}
+            fieldProps={{
+              showSearch: true,
+              allowClear: true,
+              filterOption: false,
+              loading: employeeSearchLoading,
+              placeholder: '请输入员工姓名或工号搜索',
+              onSearch: handleEmployeeSearch,
+              onChange: (value) => {
+                handleEmployeeSelect(value ? Number(value) : undefined);
+              },
+            }}
+          />
           <ProFormDigit
             name="employeeId"
             label="员工 ID"
             width="sm"
             min={1}
-            rules={[{ required: true, message: '请输入离职员工ID' }]}
             fieldProps={{
-              onBlur: () => {
-                triggerEmployeeLookup();
-              },
-              onPressEnter: (event) => {
-                event.preventDefault();
-                triggerEmployeeLookup();
-              },
+              readOnly: true,
+              placeholder: employeeLoading ? '员工信息加载中...' : '选择员工后自动带出',
             }}
           />
           <ProFormText
@@ -458,9 +579,16 @@ const LeavePage: React.FC = () => {
             width="md"
             fieldProps={{
               readOnly: true,
-              placeholder: employeeLoading
-                ? '员工信息加载中...'
-                : '输入员工ID后自动带出',
+              placeholder: employeeLoading ? '员工信息加载中...' : '选择员工后自动带出',
+            }}
+          />
+          <ProFormText
+            name="employeeNo"
+            label="员工工号"
+            width="md"
+            fieldProps={{
+              readOnly: true,
+              placeholder: employeeLoading ? '员工信息加载中...' : '选择员工后自动带出',
             }}
           />
           <ProFormText
@@ -469,20 +597,16 @@ const LeavePage: React.FC = () => {
             width="md"
             fieldProps={{
               readOnly: true,
-              placeholder: employeeLoading
-                ? '员工信息加载中...'
-                : '输入员工ID后自动带出',
+              placeholder: employeeLoading ? '员工信息加载中...' : '选择员工后自动带出',
             }}
           />
           <ProFormText
             name="positionName"
-            label="当前职位"
+            label="当前岗位"
             width="md"
             fieldProps={{
               readOnly: true,
-              placeholder: employeeLoading
-                ? '员工信息加载中...'
-                : '输入员工ID后自动带出',
+              placeholder: employeeLoading ? '员工信息加载中...' : '选择员工后自动带出',
             }}
           />
         </ProFormGroup>
@@ -512,7 +636,7 @@ const LeavePage: React.FC = () => {
             optionFilterProp: 'label',
             placeholder: currentEmployeeDetail?.deptId
               ? '请输入姓名或工号查询同部门人员'
-              : '请先输入员工ID',
+              : '请先选择员工',
             onDropdownVisibleChange: (open) => {
               if (open && currentEmployeeDetail?.deptId) {
                 void loadHandoverOptions(handoverKeyword);
