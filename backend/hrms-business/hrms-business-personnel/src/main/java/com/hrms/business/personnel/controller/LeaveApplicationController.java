@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -53,6 +54,19 @@ public class LeaveApplicationController {
     public Result<LeaveApplicationCreateVO> createLeaveApplication(
             @Valid @RequestBody LeaveApplicationCreateRequestDTO requestDTO) {
         return Result.success(leaveApplicationService.createLeaveApplication(requestDTO));
+    }
+
+    /**
+     * 快速审批通过离职申请。
+     *
+     * @param id 离职申请ID
+     * @return 操作结果
+     */
+    @PostMapping("/{id}/quick-approve")
+    @Operation(summary = "快速审批通过离职申请")
+    public Result<Void> quickApproveLeaveApplication(@PathVariable Long id) {
+        leaveApplicationService.quickApproveLeaveApplication(id);
+        return Result.success();
     }
 
 }

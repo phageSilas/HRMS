@@ -83,7 +83,7 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
                 .eq(ApprovalTaskEntity::getApproverUserId, userId)
                 .eq(ApprovalTaskEntity::getTaskStatus, TaskStatusEnum.PENDING.getCode())
                 .apply("EXISTS (SELECT 1 FROM hr_approval_instance i WHERE i.id = instance_id AND i.is_deleted = 0)")
-                .orderByAsc(ApprovalTaskEntity::getCreateTime)
+                .orderByDesc(ApprovalTaskEntity::getCreateTime)
         );
 
         // 3. 查询该用户全局待办总数（用于角标）
@@ -360,7 +360,7 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
         } else {
             // pending（默认）：待办任务
             wrapper.eq(ApprovalTaskEntity::getTaskStatus, TaskStatusEnum.PENDING.getCode())
-                    .orderByAsc(ApprovalTaskEntity::getCreateTime);
+                    .orderByDesc(ApprovalTaskEntity::getCreateTime);
         }
 
         mpPage = taskMapper.selectPage(mpPage, wrapper);
@@ -415,6 +415,27 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
                         .eq(ApprovalTaskEntity::getTaskStatus, TaskStatusEnum.PENDING.getCode())
                         .lt(ApprovalTaskEntity::getDeadlineTime, LocalDateTime.now())
         ));
+    }
+
+    /**
+     * 按审批实例ID查询当前待办任务ID。
+     *
+     * @param instanceId 审批实例ID
+     * @return 当前待办任务ID，不存在时返回 null
+     */
+    @Override
+    public Long getCurrentPendingTaskIdByInstanceId(Long instanceId) {
+        if (instanceId == null) {
+            return null;
+        }
+        ApprovalTaskEntity pendingTask = taskMapper.selectOne(
+                Wrappers.lambdaQuery(ApprovalTaskEntity.class)
+                        .eq(ApprovalTaskEntity::getInstanceId, instanceId)
+                        .eq(ApprovalTaskEntity::getTaskStatus, TaskStatusEnum.PENDING.getCode())
+                        .orderByAsc(ApprovalTaskEntity::getSortNo)
+                        .last("LIMIT 1")
+        );
+        return pendingTask == null ? null : pendingTask.getId();
     }
 
     // ========== 内部方法 ==========

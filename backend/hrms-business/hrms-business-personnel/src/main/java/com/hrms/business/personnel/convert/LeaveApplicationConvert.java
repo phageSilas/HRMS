@@ -30,6 +30,7 @@ public final class LeaveApplicationConvert {
                 .id(entity.getId())
                 .employeeId(entity.getEmployeeId())
                 .employeeName(employeeSnapshot == null ? null : employeeSnapshot.getEmployeeName())
+                .employeeNo(employeeSnapshot == null ? null : employeeSnapshot.getEmployeeNo())
                 .departmentName(employeeSnapshot == null ? null : tempResolveDeptName(employeeSnapshot.getDeptId()))
                 .leaveType(LeaveTypeEnum.getValueByCode(entity.getLeaveType()))
                 .leaveTypeName(LeaveTypeEnum.getDescByCode(entity.getLeaveType()))

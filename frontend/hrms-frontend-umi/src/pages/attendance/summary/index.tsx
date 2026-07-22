@@ -328,10 +328,12 @@ const AttendanceSummaryPage: React.FC = () => {
         getAttendanceSummaryDashboard({
           yearMonth: nextFilter.yearMonth,
           deptId: nextFilter.deptId,
+          refreshCache: false,
         }),
         getAttendanceSummaryDashboard({
           yearMonth: previousYearMonth,
           deptId: nextFilter.deptId,
+          refreshCache: false,
         }).catch(() => undefined),
       ]);
       setDashboard(nextDashboard);
@@ -636,7 +638,34 @@ const AttendanceSummaryPage: React.FC = () => {
               <Button
                 type="primary"
                 icon={<SearchOutlined />}
-                onClick={() => void loadDashboard(filter)}
+                onClick={async () => {
+                  setLoading(true);
+                  try {
+                    const previousYearMonth = dayjs(filter.yearMonth, 'YYYY-MM')
+                      .subtract(1, 'month')
+                      .format('YYYY-MM');
+                    const [nextDashboard, nextPreviousDashboard] = await Promise.all([
+                      getAttendanceSummaryDashboard({
+                        yearMonth: filter.yearMonth,
+                        deptId: filter.deptId,
+                        refreshCache: true,
+                      }),
+                      getAttendanceSummaryDashboard({
+                        yearMonth: previousYearMonth,
+                        deptId: filter.deptId,
+                        refreshCache: false,
+                      }).catch(() => undefined),
+                    ]);
+                    setDashboard(nextDashboard);
+                    setPreviousDashboard(nextPreviousDashboard);
+                  } catch (error) {
+                    const messageText =
+                      error instanceof Error ? error.message : '考勤统计加载失败';
+                    message.error(messageText);
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
               >
                 查询
               </Button>

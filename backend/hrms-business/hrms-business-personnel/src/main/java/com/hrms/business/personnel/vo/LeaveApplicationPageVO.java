@@ -38,6 +38,12 @@ public class LeaveApplicationPageVO {
     private String employeeName;
 
     /**
+     * 员工工号
+     */
+    @Schema(description = "员工工号")
+    private String employeeNo;
+
+    /**
      * 部门名称
      */
     @Schema(description = "部门名称")
@@ -96,5 +102,4 @@ public class LeaveApplicationPageVO {
      */
     @Schema(description = "创建时间")
     private LocalDateTime createTime;
-
 }

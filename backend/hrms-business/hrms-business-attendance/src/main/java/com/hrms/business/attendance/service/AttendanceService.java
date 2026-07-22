@@ -103,7 +103,7 @@ public interface AttendanceService {
      * @return 考勤统计看板
      * 本方法使用的工具类: 无
      */
-    AttendanceSummaryDashboardVO getSummaryDashboard(String yearMonth, Long deptId);
+    AttendanceSummaryDashboardVO getSummaryDashboard(String yearMonth, Long deptId, Boolean refreshCache);
 
     /**
      * 分页查询管理侧请假记录。
@@ -113,6 +113,13 @@ public interface AttendanceService {
      * 本方法使用的工具类: PageResult(hrms-common)
      */
     PageResult<AttendanceLeaveManageItemVO> pageLeaveManageList(AttendanceLeaveManageQueryDTO queryDTO);
+
+    /**
+     * 快速审批通过请假申请。
+     *
+     * @param id 请假申请 ID
+     */
+    void quickApproveLeaveRequest(Long id);
 
     /**
      * 创建补卡申请。

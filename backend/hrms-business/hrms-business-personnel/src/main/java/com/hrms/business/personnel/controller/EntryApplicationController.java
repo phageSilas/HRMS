@@ -109,6 +109,19 @@ public class EntryApplicationController {
     }
 
     /**
+     * 快速审批通过入职申请。
+     *
+     * @param id 入职申请ID
+     * @return 操作结果
+     */
+    @PostMapping("/{id}/quick-approve")
+    @Operation(summary = "快速审批通过入职申请")
+    public Result<Void> quickApproveEntryApplication(@PathVariable Long id) {
+        entryApplicationService.quickApproveEntryApplication(id);
+        return Result.success();
+    }
+
+    /**
      * 确认入职并触发员工档案创建。
      *
      * @param id 入职申请ID

@@ -10,6 +10,9 @@ import lombok.Data;
 @Schema(description = "字典数据信息")
 public class DictDataVO {
 
+    @Schema(description = "字典数据ID")
+    private Long id;
+
     @Schema(description = "字典类型编码")
     private String dictType;
 
@@ -27,5 +30,8 @@ public class DictDataVO {
 
     @Schema(description = "状态：1-启用，0-禁用")
     private Integer status;
+
+    @Schema(description = "备注")
+    private String remark;
 
 }

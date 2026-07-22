@@ -3,7 +3,10 @@ import type {
   AttendanceLeaveManageItem,
   AttendanceLeaveManageQuery,
 } from '@/services/attendance';
-import { getAttendanceLeaveManageList } from '@/services/attendance';
+import {
+  getAttendanceLeaveManageList,
+  quickApproveAttendanceLeave,
+} from '@/services/attendance';
 import type { Department } from '@/services/organization';
 import { getDepartmentList } from '@/services/organization';
 import type { UserInfo } from '@/types/user';
@@ -21,6 +24,7 @@ import {
   DatePicker,
   Form,
   Input,
+  Popconfirm,
   Select,
   Space,
   Table,
@@ -31,7 +35,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 const { Text, Title } = Typography;
 
@@ -74,7 +78,9 @@ const approvalStatusMeta: Record<number, { label: string; color: string }> = {
   4: { label: '已撤回', color: 'warning' },
 };
 
-/** 从本地缓存读取当前用户信息，供权限判断和个性化缓存键生成使用。 */
+/**
+ * 从本地缓存读取当前用户信息，用于权限判断和缓存隔离。
+ */
 function getCurrentUserFromStorage() {
   const userInfoText = localStorage.getItem('userInfo');
   if (!userInfoText) {
@@ -88,7 +94,9 @@ function getCurrentUserFromStorage() {
   }
 }
 
-/** 生成请假管理查询缓存键，按用户隔离不同筛选条件。 */
+/**
+ * 生成请假管理缓存键。
+ */
 function resolveStorageKey() {
   const currentUser = getCurrentUserFromStorage();
   const identity =
@@ -96,7 +104,9 @@ function resolveStorageKey() {
   return `${LEAVE_MANAGE_STORAGE_PREFIX}:${identity}`;
 }
 
-/** 读取上次查询条件，供页面回显用户最近一次筛选状态。 */
+/**
+ * 读取上次查询条件。
+ */
 function getStoredQuery() {
   const storedText = sessionStorage.getItem(resolveStorageKey());
   if (!storedText) {
@@ -111,17 +121,23 @@ function getStoredQuery() {
   }
 }
 
-/** 判断当前用户是否具备 HR 或管理员视角。 */
+/**
+ * 判断是否为 HR 或管理员视角。
+ */
 function isHrOrAdmin(currentUser?: UserContext) {
   return HR_ROLE_CODES.has(currentUser?.roleCode || '');
 }
 
-/** 判断当前用户是否为主管角色。 */
+/**
+ * 判断是否为主管角色。
+ */
 function isManager(currentUser?: UserContext) {
   return currentUser?.roleCode === 'MANAGER';
 }
 
-/** 格式化管理侧时间显示。 */
+/**
+ * 格式化时间显示。
+ */
 function formatDateTime(value?: string) {
   if (!value) {
     return '--';
@@ -133,7 +149,9 @@ function formatDateTime(value?: string) {
   return date.format('YYYY-MM-DD HH:mm');
 }
 
-/** 渲染审批状态标签，统一管理侧请假状态样式。 */
+/**
+ * 渲染审批状态标签。
+ */
 function renderApprovalStatusTag(status?: number, label?: string) {
   if (status == null && !label) {
     return <Text type="secondary">--</Text>;
@@ -142,8 +160,13 @@ function renderApprovalStatusTag(status?: number, label?: string) {
   return <Tag color={meta?.color || 'default'}>{label || meta?.label || '--'}</Tag>;
 }
 
-/** 构造请假管理查询参数，供列表请求方法复用。 */
-function buildLeaveManageParams(query: LeaveManageQueryState): AttendanceLeaveManageQuery {
+/**
+ * 构造请假管理查询参数。
+ */
+function buildLeaveManageParams(
+  query: LeaveManageQueryState,
+  refreshCache?: boolean,
+): AttendanceLeaveManageQuery {
   return {
     yearMonth: query.yearMonth,
     deptId: query.deptId,
@@ -151,13 +174,10 @@ function buildLeaveManageParams(query: LeaveManageQueryState): AttendanceLeaveMa
     approvalStatus: query.approvalStatus,
     pageNum: query.pageNum,
     pageSize: query.pageSize,
+    refreshCache,
   };
 }
 
-/**
- * 请假管理页面组件。
- * 负责管理侧请假查询、角色化部门筛选和审批详情跳转。
- */
 const AttendanceLeaveManagePage: React.FC = () => {
   const currentUser = getCurrentUserFromStorage();
   const canSelectDepartment = isHrOrAdmin(currentUser);
@@ -167,6 +187,7 @@ const AttendanceLeaveManagePage: React.FC = () => {
   const [departmentLoading, setDepartmentLoading] = useState(false);
   const [leaveLoading, setLeaveLoading] = useState(false);
   const [leavePageData, setLeavePageData] = useState<PageResult<AttendanceLeaveManageItem>>();
+  const refreshCacheOnNextLoadRef = useRef(false);
   const [query, setQuery] = useState<LeaveManageQueryState>({
     yearMonth: storedQuery.yearMonth || dayjs().format('YYYY-MM'),
     deptId:
@@ -187,7 +208,9 @@ const AttendanceLeaveManagePage: React.FC = () => {
     [departments],
   );
 
-  /** 加载部门列表，供 HR/管理员筛选部门时复用。 */
+  /**
+   * 加载部门列表。
+   */
   const loadDepartments = async () => {
     if (!canSelectDepartment) {
       return departments;
@@ -208,11 +231,18 @@ const AttendanceLeaveManagePage: React.FC = () => {
     }
   };
 
-  /** 加载请假管理列表，内部调用 `buildLeaveManageParams` 统一请求参数。 */
-  const loadLeaveManageList = async (nextQuery: LeaveManageQueryState) => {
+  /**
+   * 加载请假管理列表。
+   */
+  const loadLeaveManageList = async (
+    nextQuery: LeaveManageQueryState,
+    options?: { refreshCache?: boolean },
+  ) => {
     setLeaveLoading(true);
     try {
-      const nextPageData = await getAttendanceLeaveManageList(buildLeaveManageParams(nextQuery));
+      const nextPageData = await getAttendanceLeaveManageList(
+        buildLeaveManageParams(nextQuery, options?.refreshCache),
+      );
       setLeavePageData(nextPageData);
     } catch (error) {
       const messageText =
@@ -239,7 +269,9 @@ const AttendanceLeaveManagePage: React.FC = () => {
   }, [form, query.approvalStatus, query.deptId, query.keyword, query.yearMonth]);
 
   useEffect(() => {
-    void loadLeaveManageList(query);
+    const shouldRefreshCache = refreshCacheOnNextLoadRef.current;
+    refreshCacheOnNextLoadRef.current = false;
+    void loadLeaveManageList(query, { refreshCache: shouldRefreshCache });
   }, [query]);
 
   useEffect(() => {
@@ -279,10 +311,13 @@ const AttendanceLeaveManagePage: React.FC = () => {
         return;
       }
 
-      await loadLeaveManageList({
-        ...query,
-        deptId: nextDeptId,
-      });
+      await loadLeaveManageList(
+        {
+          ...query,
+          deptId: nextDeptId,
+        },
+        { refreshCache: false },
+      );
     })();
   });
 
@@ -367,26 +402,50 @@ const AttendanceLeaveManagePage: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 120,
+      width: 220,
       fixed: 'right',
       render: (_value, record) =>
         record.approvalInstanceId ? (
-          <Button
-            type="link"
-            size="small"
-            icon={<EyeOutlined />}
-            onClick={() => history.push(`/approval/detail/${record.approvalInstanceId}`)}
-          >
-            {record.approvalStatus === 1 ? '去处理' : '查看审批'}
-          </Button>
+          <Space size={4}>
+            {record.approvalStatus === 1 ? (
+              <Popconfirm
+                title="快速审批通过请假申请"
+                description="确认后将直接完成当前请假审批流程。"
+                onConfirm={async () => {
+                  await quickApproveAttendanceLeave(record.id);
+                  message.success('已快速审批通过请假申请');
+                  refreshCacheOnNextLoadRef.current = true;
+                  setQuery((previous) => ({
+                    ...previous,
+                    pageNum: 1,
+                  }));
+                }}
+              >
+                <Button size="small" type="primary">
+                  快速审批
+                </Button>
+              </Popconfirm>
+            ) : null}
+            <Button
+              type="link"
+              size="small"
+              icon={<EyeOutlined />}
+              onClick={() => history.push(`/approval/detail/${record.approvalInstanceId}`)}
+            >
+              {record.approvalStatus === 1 ? '去处理' : '查看审批'}
+            </Button>
+          </Space>
         ) : (
           <Text type="secondary">--</Text>
         ),
     },
   ];
 
-  /** 执行筛选查询并重置分页，从表单值构建新的查询状态。 */
+  /**
+   * 查询并重置到第一页。
+   */
   const handleSearch = (values: LeaveManageFilterValues) => {
+    refreshCacheOnNextLoadRef.current = true;
     setQuery((previous) => ({
       ...previous,
       yearMonth: values.yearMonth?.format('YYYY-MM') || dayjs().format('YYYY-MM'),
@@ -397,7 +456,9 @@ const AttendanceLeaveManagePage: React.FC = () => {
     }));
   };
 
-  /** 重置筛选条件并恢复当前角色下的默认查询范围。 */
+  /**
+   * 重置查询条件。
+   */
   const handleReset = () => {
     setQuery({
       yearMonth: dayjs().format('YYYY-MM'),
@@ -418,7 +479,7 @@ const AttendanceLeaveManagePage: React.FC = () => {
             请假管理
           </Title>
           <Text type="secondary">
-            面向管理员、HR 和部门主管的请假管理台账，支持按月份、部门、员工和审批状态筛选。
+            面向管理者、HR 和部门主管的请假管理台账，支持按月份、部门、员工和审批状态筛选。
           </Text>
         </Space>
       }
@@ -487,7 +548,7 @@ const AttendanceLeaveManagePage: React.FC = () => {
           columns={columns}
           dataSource={leavePageData?.records || []}
           loading={leaveLoading}
-          scroll={{ x: 1640 }}
+          scroll={{ x: 1740 }}
           locale={{ emptyText: '暂无请假管理数据' }}
           pagination={{
             current: leavePageData?.pageNum || query.pageNum,

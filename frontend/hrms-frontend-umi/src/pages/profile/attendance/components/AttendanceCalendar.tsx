@@ -127,15 +127,28 @@ const AttendanceCalendar: React.FC<Props> = ({
           const hasData = day.status !== 'NONE' && day.status !== 'HOLIDAY' && day.status !== '';
 
           // Tooltip 内容
-          const tooltipContent = [
-            `${day.date}${day.statusDesc ? ' ' + day.statusDesc : ''}`,
-            day.clockInTime ? `上班：${day.clockInTime}` : '',
-            day.clockOutTime ? `下班：${day.clockOutTime}` : '',
-            day.leaveTypeDesc ? `请假：${day.leaveTypeDesc}` : '',
-            day.correctionStatus && day.correctionStatus !== 'NONE'
-              ? `补卡：${day.correctionStatus === 'PENDING' ? '审批中' : '已通过'}`
-              : '',
-          ].filter(Boolean).join('\n') || `${day.date}`;
+          let tooltipLines: string[];
+          if (day.status === 'NORMAL' || day.status === 'LATE' || day.status === 'EARLY_LEAVE') {
+            // 正常/迟到/早退：第一行日期，第二行上下班时间
+            const timeParts = [
+              day.clockInTime ? `上班：${day.clockInTime}` : '',
+              day.clockOutTime ? `下班：${day.clockOutTime}` : '',
+            ].filter(Boolean);
+            tooltipLines = [day.date];
+            if (timeParts.length) {
+              tooltipLines.push(timeParts.join('  '));
+            }
+          } else {
+            // 请假、无完整打卡记录等：第一行日期，第二行状态
+            tooltipLines = [day.date, day.statusDesc || ''];
+            if (day.leaveTypeDesc) {
+              tooltipLines.push(day.leaveTypeDesc);
+            }
+          }
+          if (day.correctionStatus && day.correctionStatus !== 'NONE') {
+            tooltipLines.push(`补卡：${day.correctionStatus === 'PENDING' ? '审批中' : '已通过'}`);
+          }
+          const tooltipContent = tooltipLines.filter(Boolean).join('\n');
 
           return (
             <Col key={day.date} style={{ flex: '0 0 calc(100% / 7)', maxWidth: 'calc(100% / 7)' }}>
@@ -221,6 +234,14 @@ const AttendanceCalendar: React.FC<Props> = ({
             <Text type="secondary" style={{ fontSize: 12 }}>{item.label}</Text>
           </div>
         ))}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <Text style={{ fontSize: 12, color: '#52c41a', fontWeight: 500 }}>↑</Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>上班</Text>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <Text style={{ fontSize: 12, color: '#1677ff', fontWeight: 500 }}>↓</Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>下班</Text>
+        </div>
       </div>
     </>
   );

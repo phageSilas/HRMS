@@ -89,4 +89,12 @@ public interface ApprovalTaskService {
      * @return 逾期的待办任务数
      */
     Integer getOverdueCount(Long userId);
+
+    /**
+     * 按审批实例ID查询当前待办任务ID。
+     *
+     * @param instanceId 审批实例ID
+     * @return 当前待办任务ID，不存在时返回 null
+     */
+    Long getCurrentPendingTaskIdByInstanceId(Long instanceId);
 }
