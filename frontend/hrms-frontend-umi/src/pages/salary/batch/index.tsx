@@ -66,8 +66,10 @@ const ADJUSTMENT_ITEM_OPTIONS = [
   { label: '加班费', value: 'OVERTIME_PAY' },
   { label: '迟到扣款', value: 'LATE_DEDUCTION' },
   { label: '请假扣款', value: 'LEAVE_DEDUCTION' },
-  { label: '社保', value: 'SOCIAL_INSURANCE' },
-  { label: '公积金', value: 'HOUSING_FUND' },
+  { label: '养老保险', value: 'PENSION_INSURANCE' },
+  { label: '医疗保险', value: 'MEDICAL_INSURANCE' },
+  { label: '失业保险', value: 'UNEMPLOYMENT_INSURANCE' },
+  { label: '住房公积金', value: 'HOUSING_FUND' },
   { label: '个税', value: 'INCOME_TAX' },
 ];
 
@@ -111,10 +113,18 @@ function resolveStorageKey() {
 /** 读取缓存中的月份值，作为批次工作台默认月份。 */
 function getStoredMonth() {
   const stored = sessionStorage.getItem(resolveStorageKey());
+  const currentMonth = dayjs().format('YYYY-MM');
   if (!stored) {
-    return dayjs().format('YYYY-MM');
+    return currentMonth;
   }
-  return stored;
+  return dayjs(stored, 'YYYY-MM').isAfter(dayjs(), 'month')
+    ? currentMonth
+    : stored;
+}
+
+/** 判断指定月份是否晚于当前月。 */
+function isFutureSalaryMonth(month: string) {
+  return dayjs(month, 'YYYY-MM').isAfter(dayjs(), 'month');
 }
 
 /** 判断当前用户是否属于薪资管理视角。 */
@@ -247,19 +257,27 @@ function buildCompositionData(items: SalaryBatchItem[]) {
     .filter((item) => item.amount > 0);
 }
 
-/** 聚合社保与公积金数据，供成本构成图使用。 */
+/** 聚合社保公积金明细数据，供对比图使用。 */
 function buildSocialFundData(items: SalaryBatchItem[]) {
   const totals = {
-    社保: 0,
-    公积金: 0,
+    养老保险: 0,
+    医疗保险: 0,
+    失业保险: 0,
+    住房公积金: 0,
   };
 
   items.forEach((item) => {
-    totals.社保 += toNumber(item.socialInsurance);
-    totals.公积金 += toNumber(item.housingFund);
+    totals.养老保险 += toNumber(item.pensionInsurance);
+    totals.医疗保险 += toNumber(item.medicalInsurance);
+    totals.失业保险 += toNumber(item.unemploymentInsurance);
+    totals.住房公积金 += toNumber(item.housingFund);
   });
 
-  return Object.entries(totals).map(([type, amount]) => ({ type, amount }));
+  return Object.entries(totals).map(([type, amount], index) => ({
+    type,
+    amount,
+    color: COMPOSITION_COLORS[index % COMPOSITION_COLORS.length],
+  }));
 }
 
 /** 下载导出的薪资批次文件。 */
@@ -438,6 +456,11 @@ const SalaryBatchPage: React.FC = () => {
 
   /** 创建薪资批次，成功后调用 `loadWorkspace` 刷新当前月份工作区。 */
   const handleCreateBatch = async () => {
+    if (isFutureSalaryMonth(month)) {
+      message.warning('未来月份不允许创建薪资核算批次');
+      setMonth(dayjs().format('YYYY-MM'));
+      return;
+    }
     setCreating(true);
     try {
       const batch = await createSalaryBatch({
@@ -685,12 +708,14 @@ const SalaryBatchPage: React.FC = () => {
       render: (value) => <Text strong>{formatCurrency(value)}</Text>,
     },
     {
-      title: '社保/公积金',
+      title: '社保公积金明细',
       key: 'deductionGroup',
-      width: 180,
+      width: 220,
       render: (_value, record) => (
         <Space direction="vertical" size={0}>
-          <Text>社保：{formatCurrency(record.socialInsurance)}</Text>
+          <Text>养老：{formatCurrency(record.pensionInsurance)}</Text>
+          <Text>医疗：{formatCurrency(record.medicalInsurance)}</Text>
+          <Text>失业：{formatCurrency(record.unemploymentInsurance)}</Text>
           <Text>公积金：{formatCurrency(record.housingFund)}</Text>
         </Space>
       ),
@@ -757,11 +782,18 @@ const SalaryBatchPage: React.FC = () => {
                 picker="month"
                 allowClear={false}
                 value={dayjs(month, 'YYYY-MM')}
+                disabledDate={(current) => current.isAfter(dayjs(), 'month')}
                 onChange={(value) => {
                   if (!value) {
                     return;
                   }
-                  setMonth(value.format('YYYY-MM'));
+                  const nextMonth = value.format('YYYY-MM');
+                  if (isFutureSalaryMonth(nextMonth)) {
+                    message.warning('未来月份不允许创建薪资核算批次');
+                    setMonth(dayjs().format('YYYY-MM'));
+                    return;
+                  }
+                  setMonth(nextMonth);
                 }}
                 style={{ width: '100%' }}
               />
@@ -1063,14 +1095,14 @@ const SalaryBatchPage: React.FC = () => {
                     </Card>
                   </Col>
                   <Col xs={24} xl={12}>
-                    <Card bordered={false} style={{ borderRadius: 20 }} title="社保公积金对比">
+                    <Card bordered={false} style={{ borderRadius: 20 }} title="社保公积金明细对比">
                       {socialFundData.length > 0 ? (
                         <Column
                           height={260}
                           data={socialFundData}
                           xField="type"
                           yField="amount"
-                          color="#fa8c16"
+                          colorField="type"
                           yAxis={{ label: { formatter: (value: string) => `¥${Number(value).toLocaleString('zh-CN')}` } }}
                           tooltip={{
                             items: [
@@ -1082,7 +1114,7 @@ const SalaryBatchPage: React.FC = () => {
                           }}
                         />
                       ) : (
-                        <Empty description="暂无社保公积金数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                        <Empty description="暂无社保公积金明细数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
                       )}
                     </Card>
                   </Col>
