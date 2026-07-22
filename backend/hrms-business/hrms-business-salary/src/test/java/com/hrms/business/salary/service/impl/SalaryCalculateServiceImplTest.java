@@ -1,7 +1,10 @@
 package com.hrms.business.salary.service.impl;
 
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import com.hrms.business.attendance.service.AttendanceService;
+import com.hrms.business.attendance.vo.AttendancePayrollSourceVO;
 import com.hrms.business.approval.service.ApprovalEngine;
+import com.hrms.business.salary.dto.SalaryBatchCreateRequestDTO;
 import com.hrms.business.salary.entity.SalaryBatchEntity;
 import com.hrms.business.salary.entity.SalaryBatchItemEntity;
 import com.hrms.business.salary.entity.SalaryEmployeeSnapshotEntity;
@@ -44,9 +47,11 @@ import static com.hrms.business.salary.cache.SalaryCacheKeys.calculateLock;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -85,6 +90,9 @@ class SalaryCalculateServiceImplTest {
     private ObjectProvider<com.hrms.business.attendance.service.AttendanceService> attendanceServiceProvider;
 
     @Mock
+    private AttendanceService attendanceService;
+
+    @Mock
     private SalaryBatchCalculateProducer salaryBatchCalculateProducer;
 
     @Mock
@@ -111,6 +119,7 @@ class SalaryCalculateServiceImplTest {
      */
     @BeforeEach
     void setUp() {
+        initTableInfo(SalaryBatchEntity.class);
         initTableInfo(SalaryBatchItemEntity.class);
         initTableInfo(SalaryEmployeeSnapshotEntity.class);
         salaryCalculateService = new SalaryCalculateServiceImpl(
@@ -136,8 +145,11 @@ class SalaryCalculateServiceImplTest {
         financeRole.setRoleCode("FINANCE");
         lenient().when(roleService.getRolesByUserId(1L)).thenReturn(List.of(financeRole));
         lenient().when(redisTemplateProvider.getIfAvailable()).thenReturn(redisTemplate);
+        lenient().when(attendanceServiceProvider.getIfAvailable()).thenReturn(attendanceService);
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         lenient().when(valueOperations.setIfAbsent(any(), eq("1"), eq(10L), eq(TimeUnit.MINUTES))).thenReturn(Boolean.TRUE);
+        lenient().when(employeeSnapshotMapper.selectList(any())).thenReturn(List.of(buildEmployee(2001L)));
+        lenient().when(attendanceService.getPayrollSource(any(), anyList())).thenReturn(List.of(buildAttendanceWithActivity(2001L)));
     }
 
     /**
@@ -222,9 +234,84 @@ class SalaryCalculateServiceImplTest {
 
         assertThrows(IllegalStateException.class, () -> salaryCalculateService.handleBatchCalculateMessage(message));
 
-        verify(salaryBatchMapper, times(2)).updateById(any(SalaryBatchEntity.class));
-        assertEquals(List.of("CALCULATING", "PENDING_REVIEW"), updatedStatuses);
+        verify(salaryBatchMapper, times(1)).updateById(any(SalaryBatchEntity.class));
+        assertEquals(List.of("PENDING_REVIEW"), updatedStatuses);
         verify(redisTemplate).delete(calculateLock(1003L));
+    }
+
+    /**
+     * 未来月份不允许创建薪资核算批次。
+     */
+    @Test
+    void shouldRejectCreatingBatchForFutureMonth() {
+        SalaryBatchCreateRequestDTO requestDTO = SalaryBatchCreateRequestDTO.builder()
+                .salaryMonth("2030-05")
+                .scopeType("ALL")
+                .build();
+
+        var exception = assertThrows(
+                com.hrms.common.exception.GlobalException.class,
+                () -> salaryCalculateService.createBatch(requestDTO)
+        );
+
+        assertEquals("未来月份不允许创建薪资核算批次", exception.getMessage());
+        verify(salaryBatchMapper, never()).insert(any(SalaryBatchEntity.class));
+    }
+
+    /**
+     * 当前月若完全没有考勤数据，不允许创建薪资核算批次。
+     */
+    @Test
+    void shouldRejectCreatingBatchWhenAttendanceDataMissing() {
+        SalaryBatchCreateRequestDTO requestDTO = SalaryBatchCreateRequestDTO.builder()
+                .salaryMonth("2026-07")
+                .scopeType("ALL")
+                .build();
+        SalaryEmployeeSnapshotEntity employee = new SalaryEmployeeSnapshotEntity();
+        employee.setId(2001L);
+        employee.setEmployeeNo("EMP2001");
+        employee.setEmployeeName("张三");
+        when(employeeSnapshotMapper.selectList(any())).thenReturn(List.of(employee));
+        when(attendanceService.getPayrollSource(eq("2026-07"), anyList())).thenReturn(List.of(
+                AttendancePayrollSourceVO.builder()
+                        .employeeId(2001L)
+                        .employeeNo("EMP2001")
+                        .employeeName("张三")
+                        .shouldAttendDays(23)
+                        .actualAttendDays(0)
+                        .lateCount(0)
+                        .earlyLeaveCount(0)
+                        .leaveDays(BigDecimal.ZERO)
+                        .absenceDays(new BigDecimal("23"))
+                        .overtimeHours(BigDecimal.ZERO)
+                        .build()
+        ));
+
+        var exception = assertThrows(
+                com.hrms.common.exception.GlobalException.class,
+                () -> salaryCalculateService.createBatch(requestDTO)
+        );
+
+        assertEquals("当前月份暂无考勤数据，无法创建薪资核算批次", exception.getMessage());
+        verify(salaryBatchMapper, never()).insert(any(SalaryBatchEntity.class));
+    }
+
+    /**
+     * 已存在的未来月份批次不允许继续触发核算。
+     */
+    @Test
+    void shouldRejectCalculatingFutureBatch() {
+        SalaryBatchEntity batch = buildPendingReviewBatch(1004L);
+        batch.setSalaryMonth("2030-05");
+        when(salaryBatchMapper.selectById(1004L)).thenReturn(batch);
+
+        var exception = assertThrows(
+                com.hrms.common.exception.GlobalException.class,
+                () -> salaryCalculateService.calculateBatch(1004L)
+        );
+
+        assertEquals("未来月份不允许执行薪资核算", exception.getMessage());
+        verify(salaryBatchCalculateProducer, never()).send(any(SalaryBatchCalculateMessage.class));
     }
 
     /**
@@ -260,6 +347,43 @@ class SalaryCalculateServiceImplTest {
         SalaryBatchEntity batch = buildPendingReviewBatch(batchId);
         batch.setBatchStatus("CALCULATING");
         return batch;
+    }
+
+    /**
+     * 构造测试员工快照。
+     *
+     * @param employeeId 员工ID
+     * @return 员工快照
+     */
+    private SalaryEmployeeSnapshotEntity buildEmployee(Long employeeId) {
+        SalaryEmployeeSnapshotEntity employee = new SalaryEmployeeSnapshotEntity();
+        employee.setId(employeeId);
+        employee.setEmployeeNo("EMP" + employeeId);
+        employee.setEmployeeName("测试员工");
+        employee.setEmploymentStatus(1);
+        employee.setIsDeleted(0);
+        return employee;
+    }
+
+    /**
+     * 构造带真实考勤活动的月度考勤汇总。
+     *
+     * @param employeeId 员工ID
+     * @return 月度考勤汇总
+     */
+    private AttendancePayrollSourceVO buildAttendanceWithActivity(Long employeeId) {
+        return AttendancePayrollSourceVO.builder()
+                .employeeId(employeeId)
+                .employeeNo("EMP" + employeeId)
+                .employeeName("测试员工")
+                .shouldAttendDays(23)
+                .actualAttendDays(1)
+                .lateCount(0)
+                .earlyLeaveCount(0)
+                .leaveDays(BigDecimal.ZERO)
+                .absenceDays(new BigDecimal("22"))
+                .overtimeHours(BigDecimal.ZERO)
+                .build();
     }
 
     /**
