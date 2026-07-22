@@ -891,6 +891,32 @@ public class EmployeeServiceImpl implements EmployeeService {
         return !employees.isEmpty();
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int updateDeptIdByDeptId(Long oldDeptId, Long newDeptId) {
+        if (oldDeptId == null || newDeptId == null) {
+            throw new GlobalException(ErrorCode.PARAM_REQUIRED);
+        }
+        if (oldDeptId.equals(newDeptId)) {
+            return 0;
+        }
+
+        // 批量更新所有在职员工的部门ID
+        int updatedCount = employeeMapper.update(null,
+                Wrappers.<EmployeeEntity>lambdaUpdate()
+                        .set(EmployeeEntity::getDeptId, newDeptId)
+                        .eq(EmployeeEntity::getDeptId, oldDeptId)
+                        .eq(EmployeeEntity::getIsDeleted, 0));
+
+        // 如果有更新，发布员工变更事件以触发部门人数同步
+        if (updatedCount > 0) {
+            eventPublisher.publishEvent(new EmployeeChangeEvent(this,
+                    EmployeeChangeEvent.ChangeType.UPDATE, null, oldDeptId, newDeptId));
+        }
+
+        return updatedCount;
+    }
+
     // ==================== 数据权限 ====================
 
     /**
