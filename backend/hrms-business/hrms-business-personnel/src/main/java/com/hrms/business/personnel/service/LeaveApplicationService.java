@@ -29,4 +29,11 @@ public interface LeaveApplicationService {
      */
     LeaveApplicationCreateVO createLeaveApplication(LeaveApplicationCreateRequestDTO requestDTO);
 
+    /**
+     * 快速审批通过离职申请。
+     *
+     * @param id 离职申请ID
+     */
+    void quickApproveLeaveApplication(Long id);
+
 }

@@ -8,6 +8,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hrms.business.approval.enums.ApprovalTypeEnum;
 import com.hrms.business.approval.service.ApprovalEngine;
+import com.hrms.business.approval.service.ApprovalTaskService;
 import com.hrms.business.employee.dto.EmployeeQueryDTO;
 import com.hrms.business.employee.entity.EmployeeEntity;
 import com.hrms.business.employee.service.EmployeeService;
@@ -62,6 +63,8 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
     private final EmployeeService employeeService;
 
     private final ApprovalEngine approvalEngine;
+
+    private final ApprovalTaskService approvalTaskService;
 
     private final DeptService deptService;
 
@@ -162,6 +165,19 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
     }
 
     /**
+     * 快速审批通过离职申请。
+     *
+     * @param id 离职申请ID
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void quickApproveLeaveApplication(Long id) {
+        LeaveApplicationEntity entity = getRequiredLeaveApplication(id);
+        assertApproving(entity.getApprovalStatus(), "当前离职申请不是审批中状态，无法快速审批");
+        processQuickApprove(entity.getApprovalInstanceId(), "当前离职申请无有效审批实例，无法快速审批");
+    }
+
+    /**
      * 临时发起离职审批。
      *
      * @param employeeSnapshot 员工快照
@@ -227,6 +243,49 @@ public class LeaveApplicationServiceImpl implements LeaveApplicationService {
         if (count != null && count > 0) {
             throw new GlobalException(LEAVE_APPLICATION_DUPLICATE);
         }
+    }
+
+    /**
+     * 查询必定存在的离职申请。
+     *
+     * @param id 离职申请ID
+     * @return 离职申请实体
+     */
+    private LeaveApplicationEntity getRequiredLeaveApplication(Long id) {
+        LeaveApplicationEntity entity = leaveApplicationMapper.selectById(id);
+        if (entity == null) {
+            throw new GlobalException(EMPLOYEE_NOT_FOUND, "离职申请不存在");
+        }
+        return entity;
+    }
+
+    /**
+     * 校验申请是否处于审批中。
+     *
+     * @param approvalStatus 审批状态
+     * @param errorMessage 错误提示
+     */
+    private void assertApproving(Integer approvalStatus, String errorMessage) {
+        if (approvalStatus == null || approvalStatus != ApplicationStatusEnum.APPROVING.getCode()) {
+            throw new GlobalException(com.hrms.common.exception.ErrorCode.BUSINESS_ERROR, errorMessage);
+        }
+    }
+
+    /**
+     * 通过审批引擎执行快速审批通过。
+     *
+     * @param approvalInstanceId 审批实例ID
+     * @param missingInstanceMessage 审批实例缺失提示
+     */
+    private void processQuickApprove(Long approvalInstanceId, String missingInstanceMessage) {
+        if (approvalInstanceId == null) {
+            throw new GlobalException(com.hrms.common.exception.ErrorCode.BUSINESS_ERROR, missingInstanceMessage);
+        }
+        Long pendingTaskId = approvalTaskService.getCurrentPendingTaskIdByInstanceId(approvalInstanceId);
+        if (pendingTaskId == null) {
+            throw new GlobalException(com.hrms.common.exception.ErrorCode.BUSINESS_ERROR, "当前审批实例不存在待办审批任务，无法快速审批");
+        }
+        approvalEngine.processAction(pendingTaskId, "approve", "快速审批通过", null);
     }
 
     /**

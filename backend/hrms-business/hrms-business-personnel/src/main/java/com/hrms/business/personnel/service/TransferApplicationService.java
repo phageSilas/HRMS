@@ -29,4 +29,11 @@ public interface TransferApplicationService {
      */
     TransferApplicationCreateVO createTransferApplication(TransferApplicationCreateRequestDTO requestDTO);
 
+    /**
+     * 快速审批通过调岗申请。
+     *
+     * @param id 调岗申请ID
+     */
+    void quickApproveTransferApplication(Long id);
+
 }

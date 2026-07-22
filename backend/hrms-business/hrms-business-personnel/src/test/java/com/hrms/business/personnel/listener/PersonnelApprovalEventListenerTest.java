@@ -6,11 +6,14 @@ import com.hrms.business.approval.service.event.ApprovalCompletedEvent;
 import com.hrms.business.employee.dto.EmployeeApprovalSyncUpdateDTO;
 import com.hrms.business.employee.enums.EmploymentStatusEnum;
 import com.hrms.business.employee.service.EmployeeService;
+import com.hrms.business.personnel.common.cache.PersonnelCacheKeys;
 import com.hrms.business.personnel.common.enums.ApplicationStatusEnum;
 import com.hrms.business.personnel.common.enums.RegularEvaluateResultEnum;
+import com.hrms.business.personnel.entity.EntryApplicationEntity;
 import com.hrms.business.personnel.entity.LeaveApplicationEntity;
 import com.hrms.business.personnel.entity.RegularApplicationEntity;
 import com.hrms.business.personnel.entity.TransferApplicationEntity;
+import com.hrms.business.personnel.mapper.EntryApplicationMapper;
 import com.hrms.business.personnel.mapper.LeaveApplicationMapper;
 import com.hrms.business.personnel.mapper.RegularApplicationMapper;
 import com.hrms.business.personnel.mapper.TransferApplicationMapper;
@@ -20,6 +23,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -35,6 +40,9 @@ import static org.mockito.Mockito.when;
 class PersonnelApprovalEventListenerTest {
 
     @Mock
+    private EntryApplicationMapper entryApplicationMapper;
+
+    @Mock
     private RegularApplicationMapper regularApplicationMapper;
 
     @Mock
@@ -46,16 +54,42 @@ class PersonnelApprovalEventListenerTest {
     @Mock
     private EmployeeService employeeService;
 
+    @Mock
+    private ObjectProvider<StringRedisTemplate> redisTemplateProvider;
+
     private PersonnelApprovalEventListener listener;
 
     @BeforeEach
     void setUp() {
         listener = new PersonnelApprovalEventListener(
+                entryApplicationMapper,
                 regularApplicationMapper,
                 transferApplicationMapper,
                 leaveApplicationMapper,
-                employeeService
+                employeeService,
+                redisTemplateProvider
         );
+        when(redisTemplateProvider.getIfAvailable()).thenReturn(null);
+    }
+
+    /**
+     * 入职审批通过后应同步申请状态为已通过。
+     */
+    @Test
+    void shouldSyncEntryApplicationWhenApproved() {
+        EntryApplicationEntity entity = new EntryApplicationEntity();
+        entity.setId(31001L);
+        when(entryApplicationMapper.selectById(31001L)).thenReturn(entity);
+
+        listener.handleApprovalCompleted(new ApprovalCompletedEvent(
+                931001L,
+                ApprovalTypeEnum.ENTRY.getCode(),
+                31001L,
+                ApprovalStatusEnum.APPROVED.getCode()
+        ));
+
+        verify(entryApplicationMapper).updateById(entity);
+        assertEquals(ApplicationStatusEnum.APPROVED.getCode(), entity.getApprovalStatus());
     }
 
     /**

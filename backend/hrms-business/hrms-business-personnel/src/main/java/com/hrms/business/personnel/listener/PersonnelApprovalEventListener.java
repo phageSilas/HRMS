@@ -6,26 +6,32 @@ import com.hrms.business.approval.service.event.ApprovalCompletedEvent;
 import com.hrms.business.employee.dto.EmployeeApprovalSyncUpdateDTO;
 import com.hrms.business.employee.enums.EmploymentStatusEnum;
 import com.hrms.business.employee.service.EmployeeService;
+import com.hrms.business.personnel.common.cache.PersonnelCacheKeys;
 import com.hrms.business.personnel.common.enums.ApplicationStatusEnum;
 import com.hrms.business.personnel.common.enums.RegularEvaluateResultEnum;
+import com.hrms.business.personnel.entity.EntryApplicationEntity;
 import com.hrms.business.personnel.entity.LeaveApplicationEntity;
 import com.hrms.business.personnel.entity.RegularApplicationEntity;
 import com.hrms.business.personnel.entity.TransferApplicationEntity;
+import com.hrms.business.personnel.mapper.EntryApplicationMapper;
 import com.hrms.business.personnel.mapper.LeaveApplicationMapper;
 import com.hrms.business.personnel.mapper.RegularApplicationMapper;
 import com.hrms.business.personnel.mapper.TransferApplicationMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.event.EventListener;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.Set;
 
 /**
  * 人员审批完成事件监听器
  * <p>
- * 监听转正、调岗、离职审批完成事件，并同步更新申请单状态与员工档案信息。
+ * 监听入职、转正、调岗、离职审批完成事件，并同步更新申请单状态与员工档案信息。
  * </p>
  */
 @Slf4j
@@ -33,10 +39,12 @@ import java.time.LocalDate;
 @RequiredArgsConstructor
 public class PersonnelApprovalEventListener {
 
+    private final EntryApplicationMapper entryApplicationMapper;
     private final RegularApplicationMapper regularApplicationMapper;
     private final TransferApplicationMapper transferApplicationMapper;
     private final LeaveApplicationMapper leaveApplicationMapper;
     private final EmployeeService employeeService;
+    private final ObjectProvider<StringRedisTemplate> redisTemplateProvider;
 
     /**
      * 处理审批完成事件。
@@ -56,11 +64,30 @@ public class PersonnelApprovalEventListener {
         }
 
         switch (approvalType) {
+            case ENTRY -> handleEntryCompleted(event);
             case REGULAR -> handleRegularCompleted(event);
             case TRANSFER -> handleTransferCompleted(event);
             case LEAVE -> handleLeaveCompleted(event);
             default -> log.debug("忽略非人员模块审批事件: {}", event.getApprovalType());
         }
+    }
+
+    /**
+     * 处理入职审批完成联动。
+     *
+     * @param event 审批完成事件
+     */
+    private void handleEntryCompleted(ApprovalCompletedEvent event) {
+        EntryApplicationEntity entity = entryApplicationMapper.selectById(event.getBizId());
+        if (entity == null) {
+            log.warn("入职申请不存在，忽略联动: entryId={}", event.getBizId());
+            return;
+        }
+
+        // 入职审批完成后仅同步申请单状态，正式入职仍需手动执行“确认入职”。
+        entity.setApprovalStatus(resolveApplicationStatus(event.getInstanceStatus()));
+        entryApplicationMapper.updateById(entity);
+        evictEntryCaches(entity.getId());
     }
 
     /**
@@ -89,6 +116,7 @@ public class PersonnelApprovalEventListener {
         }
 
         regularApplicationMapper.updateById(entity);
+        evictCacheByPattern(PersonnelCacheKeys.regularPagePattern());
     }
 
     /**
@@ -118,6 +146,7 @@ public class PersonnelApprovalEventListener {
         }
 
         transferApplicationMapper.updateById(entity);
+        evictCacheByPattern(PersonnelCacheKeys.transferPagePattern());
     }
 
     /**
@@ -144,6 +173,7 @@ public class PersonnelApprovalEventListener {
         }
 
         leaveApplicationMapper.updateById(entity);
+        evictCacheByPattern(PersonnelCacheKeys.leavePagePattern());
     }
 
     /**
@@ -160,5 +190,36 @@ public class PersonnelApprovalEventListener {
             return ApplicationStatusEnum.REJECTED.getCode();
         }
         return ApplicationStatusEnum.APPROVING.getCode();
+    }
+
+    /**
+     * 清理入职申请相关缓存。
+     *
+     * @param entryApplicationId 入职申请ID
+     */
+    private void evictEntryCaches(Long entryApplicationId) {
+        StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+        if (redisTemplate == null) {
+            return;
+        }
+        redisTemplate.delete(PersonnelCacheKeys.entryDetail(entryApplicationId));
+        evictCacheByPattern(PersonnelCacheKeys.entryStatsPattern());
+    }
+
+    /**
+     * 按模式清理缓存，保证审批完成后列表展示立即刷新。
+     *
+     * @param keyPattern Redis Key 模式
+     */
+    private void evictCacheByPattern(String keyPattern) {
+        StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+        if (redisTemplate == null) {
+            return;
+        }
+        Set<String> keys = redisTemplate.keys(keyPattern);
+        if (keys == null || keys.isEmpty()) {
+            return;
+        }
+        redisTemplate.delete(keys);
     }
 }

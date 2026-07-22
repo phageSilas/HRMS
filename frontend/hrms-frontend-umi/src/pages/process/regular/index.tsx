@@ -4,15 +4,17 @@
  */
 
 import { getDeptList } from '@/services/organization';
-import {
-  applyRegularApplication,
-  getRegularApplicationList,
-} from '@/services/process';
 import type {
   RegularApplication,
   RegularApplicationApplyRequest,
 } from '@/services/process';
+import {
+  applyRegularApplication,
+  getRegularApplicationList,
+  quickApproveRegularApplication,
+} from '@/services/process';
 import { FileDoneOutlined } from '@ant-design/icons';
+import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import {
   DrawerForm,
   PageContainer,
@@ -22,8 +24,16 @@ import {
   ProFormTextArea,
   ProTable,
 } from '@ant-design/pro-components';
-import type { ActionType, ProColumns } from '@ant-design/pro-components';
-import { Avatar, Button, Space, Tabs, Tag, Typography, message } from 'antd';
+import {
+  Avatar,
+  Button,
+  Popconfirm,
+  Space,
+  Tabs,
+  Tag,
+  Typography,
+  message,
+} from 'antd';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { formatProcessDateTime } from '../utils';
 
@@ -69,7 +79,9 @@ function renderRemainingDays(days?: number) {
  */
 const RegularPage: React.FC = () => {
   const actionRef = useRef<ActionType>();
-  const [activeTab, setActiveTab] = useState<'pending' | 'evaluated'>('pending');
+  const [activeTab, setActiveTab] = useState<'pending' | 'evaluated'>(
+    'pending',
+  );
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [currentRow, setCurrentRow] = useState<RegularApplication>();
   const [departmentOptions, setDepartmentOptions] = useState<
@@ -94,11 +106,10 @@ const RegularPage: React.FC = () => {
   }, []);
 
   const departmentFilterOption = useMemo(
-    () =>
-      (input: string, option?: { label?: string | number }) =>
-        String(option?.label || '')
-          .toLowerCase()
-          .includes(input.trim().toLowerCase()),
+    () => (input: string, option?: { label?: string | number }) =>
+      String(option?.label || '')
+        .toLowerCase()
+        .includes(input.trim().toLowerCase()),
     [],
   );
 
@@ -133,10 +144,14 @@ const RegularPage: React.FC = () => {
       search: false,
       render: (_, record) => (
         <Space>
-          <Avatar style={{ background: '#2f6fed' }}>{getInitial(record.employeeName)}</Avatar>
+          <Avatar style={{ background: '#2f6fed' }}>
+            {getInitial(record.employeeName)}
+          </Avatar>
           <Space direction="vertical" size={0}>
             <strong>{record.employeeName}</strong>
-            <Text type="secondary">{record.employeeNo || `ID ${record.employeeId}`}</Text>
+            <Text type="secondary">
+              {record.employeeNo || `ID ${record.employeeId}`}
+            </Text>
           </Space>
         </Space>
       ),
@@ -174,7 +189,9 @@ const RegularPage: React.FC = () => {
           text: record.approvalStatusDesc || '待审批',
           color: 'default',
         };
-        return <Tag color={meta.color}>{record.approvalStatusDesc || meta.text}</Tag>;
+        return (
+          <Tag color={meta.color}>{record.approvalStatusDesc || meta.text}</Tag>
+        );
       },
     },
     {
@@ -189,7 +206,24 @@ const RegularPage: React.FC = () => {
       valueType: 'option',
       width: 140,
       render: (_, record) => {
-        const disabled = activeTab !== 'pending' || record.approvalStatus === 1;
+        if (record.approvalStatus === 1 && record.id) {
+          return (
+            <Popconfirm
+              title="快速审批通过转正申请"
+              description="确认后将直接完成当前转正审批流程。"
+              onConfirm={async () => {
+                await quickApproveRegularApplication(record.id!);
+                message.success('已快速审批通过转正申请');
+                actionRef.current?.reload();
+              }}
+            >
+              <Button size="small" type="primary">
+                快速审批
+              </Button>
+            </Popconfirm>
+          );
+        }
+        const disabled = activeTab !== 'pending';
         const buttonText = record.approvalStatus === 1 ? '审批中' : '发起转正';
         return (
           <Button
@@ -233,7 +267,9 @@ const RegularPage: React.FC = () => {
 
       <ProTable<RegularApplication>
         actionRef={actionRef}
-        rowKey={(record) => `${activeTab}-${record.employeeId}-${record.id || 'pending'}`}
+        rowKey={(record) =>
+          `${activeTab}-${record.employeeId}-${record.id || 'pending'}`
+        }
         columns={columns}
         request={async (params) => {
           const result = await getRegularApplicationList({
@@ -251,7 +287,9 @@ const RegularPage: React.FC = () => {
         }}
         search={{ labelWidth: 88, span: 8 }}
         pagination={{ defaultPageSize: 20, showSizeChanger: true }}
-        toolbar={{ title: activeTab === 'pending' ? '待转正员工' : '已评估记录' }}
+        toolbar={{
+          title: activeTab === 'pending' ? '待转正员工' : '已评估记录',
+        }}
       />
 
       <DrawerForm<RegularApplicationApplyRequest>
@@ -280,11 +318,14 @@ const RegularPage: React.FC = () => {
       >
         <Space direction="vertical" size={4} style={{ marginBottom: 16 }}>
           <Space>
-            <Avatar style={{ background: '#2f6fed' }}>{getInitial(currentRow?.employeeName)}</Avatar>
+            <Avatar style={{ background: '#2f6fed' }}>
+              {getInitial(currentRow?.employeeName)}
+            </Avatar>
             <Space direction="vertical" size={0}>
               <strong>{currentRow?.employeeName}</strong>
               <Text type="secondary">
-                {currentRow?.departmentName || '-'} / {currentRow?.positionName || '-'} / 入职：
+                {currentRow?.departmentName || '-'} /{' '}
+                {currentRow?.positionName || '-'} / 入职：
                 {currentRow?.hireDate || '-'}
               </Text>
             </Space>

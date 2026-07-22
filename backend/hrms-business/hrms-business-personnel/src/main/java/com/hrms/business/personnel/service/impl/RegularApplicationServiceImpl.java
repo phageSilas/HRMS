@@ -8,6 +8,7 @@ import cn.hutool.json.JSONUtil;
 import com.hrms.business.personnel.common.cache.PersonnelCacheKeys;
 import com.hrms.business.approval.enums.ApprovalTypeEnum;
 import com.hrms.business.approval.service.ApprovalEngine;
+import com.hrms.business.approval.service.ApprovalTaskService;
 import com.hrms.business.employee.entity.EmployeeEntity;
 import com.hrms.business.employee.service.EmployeeService;
 import com.hrms.business.personnel.convert.RegularApplicationConvert;
@@ -64,6 +65,7 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
     private final EmployeeService employeeService;
     // 审批引擎
     private final ApprovalEngine approvalEngine;
+    private final ApprovalTaskService approvalTaskService;
     // 部门服务
     private final DeptService deptService;
     // 岗位服务
@@ -154,6 +156,19 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
     }
 
     /**
+     * 快速审批通过转正申请。
+     *
+     * @param id 转正申请ID
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void quickApproveRegularApplication(Long id) {
+        RegularApplicationEntity entity = getRequiredRegularApplication(id);
+        assertApproving(entity.getApprovalStatus(), "当前转正申请不是审批中状态，无法快速审批");
+        processQuickApprove(entity.getApprovalInstanceId(), "当前转正申请无有效审批实例，无法快速审批");
+    }
+
+    /**
      * 临时发起转正审批。
      *
      * @param employeeSnapshot 员工快照
@@ -216,6 +231,49 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
         if (count != null && count > 0) {
             throw new GlobalException(REGULAR_APPLICATION_DUPLICATE);
         }
+    }
+
+    /**
+     * 查询必定存在的转正申请。
+     *
+     * @param id 转正申请ID
+     * @return 转正申请实体
+     */
+    private RegularApplicationEntity getRequiredRegularApplication(Long id) {
+        RegularApplicationEntity entity = regularApplicationMapper.selectById(id);
+        if (entity == null) {
+            throw new GlobalException(ErrorCode.NOT_FOUND, "转正申请不存在");
+        }
+        return entity;
+    }
+
+    /**
+     * 校验申请是否处于审批中。
+     *
+     * @param approvalStatus 审批状态
+     * @param errorMessage 错误提示
+     */
+    private void assertApproving(Integer approvalStatus, String errorMessage) {
+        if (approvalStatus == null || approvalStatus != ApplicationStatusEnum.APPROVING.getCode()) {
+            throw new GlobalException(ErrorCode.BUSINESS_ERROR, errorMessage);
+        }
+    }
+
+    /**
+     * 通过审批引擎执行快速审批通过。
+     *
+     * @param approvalInstanceId 审批实例ID
+     * @param missingInstanceMessage 审批实例缺失提示
+     */
+    private void processQuickApprove(Long approvalInstanceId, String missingInstanceMessage) {
+        if (approvalInstanceId == null) {
+            throw new GlobalException(ErrorCode.BUSINESS_ERROR, missingInstanceMessage);
+        }
+        Long pendingTaskId = approvalTaskService.getCurrentPendingTaskIdByInstanceId(approvalInstanceId);
+        if (pendingTaskId == null) {
+            throw new GlobalException(ErrorCode.BUSINESS_ERROR, "当前审批实例不存在待办审批任务，无法快速审批");
+        }
+        approvalEngine.processAction(pendingTaskId, "approve", "快速审批通过", null);
     }
 
     /**

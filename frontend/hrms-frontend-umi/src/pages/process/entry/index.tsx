@@ -3,6 +3,18 @@
  * 对接入职申请列表、创建、更新、提交审批、确认入职接口。
  */
 
+import { getEmployeeList } from '@/services/employee';
+import {
+  getDeptDetail,
+  getDeptList,
+  getPostList,
+} from '@/services/organization';
+import type {
+  EntryApplication,
+  EntryApplicationFormValues,
+  EntryApplicationQuery,
+  EntryApplicationStats,
+} from '@/services/process';
 import {
   ApprovalStatus,
   confirmEntryApplication,
@@ -10,24 +22,17 @@ import {
   getEntryApplication,
   getEntryApplicationList,
   getEntryApplicationStats,
+  quickApproveEntryApplication,
   submitEntryApplication,
   updateEntryApplication,
 } from '@/services/process';
-import type {
-  EntryApplication,
-  EntryApplicationFormValues,
-  EntryApplicationQuery,
-  EntryApplicationStats,
-} from '@/services/process';
-import { getEmployeeList } from '@/services/employee';
-import { getDeptDetail, getDeptList, getPostList } from '@/services/organization';
 import {
   CheckCircleOutlined,
   EditOutlined,
   PlusOutlined,
   SendOutlined,
 } from '@ant-design/icons';
-import { formatProcessDateTime } from '../utils';
+import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import {
   DrawerForm,
   PageContainer,
@@ -39,17 +44,16 @@ import {
   ProFormTextArea,
   ProTable,
 } from '@ant-design/pro-components';
-import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import {
   Avatar,
   Button,
   Card,
+  Col,
   DatePicker,
   Form,
   Modal,
   Popconfirm,
   Row,
-  Col,
   Space,
   Tabs,
   Tag,
@@ -58,6 +62,7 @@ import {
 } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { formatProcessDateTime } from '../utils';
 
 const { Text } = Typography;
 
@@ -106,7 +111,9 @@ function parseFormDateValue(
   return parsedDate.isValid() ? parsedDate : undefined;
 }
 
-function formatDateValue(value?: string | number[] | Dayjs): string | undefined {
+function formatDateValue(
+  value?: string | number[] | Dayjs,
+): string | undefined {
   if (!value) {
     return undefined;
   }
@@ -129,7 +136,9 @@ function buildFormValues(values: EntryApplicationFormValues) {
 }
 
 /** 构建入职表单初始值，内部调用 `parseFormDateValue` 回填日期控件。 */
-function buildEntryFormInitialValues(record?: EntryApplication): Partial<EntryApplicationFormValues> {
+function buildEntryFormInitialValues(
+  record?: EntryApplication,
+): Partial<EntryApplicationFormValues> {
   return {
     candidateName: record?.candidateName,
     gender: record?.gender,
@@ -246,7 +255,10 @@ const EntryPage: React.FC = () => {
 
   /** 加载状态统计卡片数据，供筛选结果变化后同步刷新顶部汇总。 */
   const loadStatusCounts = async (
-    query: Omit<EntryApplicationQuery, 'pageNum' | 'pageSize' | 'approvalStatus'>,
+    query: Omit<
+      EntryApplicationQuery,
+      'pageNum' | 'pageSize' | 'approvalStatus'
+    >,
   ) => {
     const stats = await getEntryApplicationStats(query);
     setStatusCounts(stats);
@@ -264,6 +276,13 @@ const EntryPage: React.FC = () => {
   };
 
   /** 加载并打开草稿编辑表单，内部调用 `getEntryApplication` 获取详情。 */
+  const handleQuickApprove = async (record: EntryApplication) => {
+    await quickApproveEntryApplication(record.id);
+    message.success('已快速审批通过入职申请');
+    await loadStatusCounts(latestBaseQueryRef.current);
+    reloadTable();
+  };
+
   const handleEditRecord = async (recordId: number) => {
     setEditingLoadingId(recordId);
     try {
@@ -452,7 +471,9 @@ const EntryPage: React.FC = () => {
       search: false,
       render: (_, record) => (
         <Space>
-          <Avatar style={{ background: '#2f6fed' }}>{getInitial(record.candidateName)}</Avatar>
+          <Avatar style={{ background: '#2f6fed' }}>
+            {getInitial(record.candidateName)}
+          </Avatar>
           <Space direction="vertical" size={0}>
             <strong>{record.candidateName}</strong>
             <Text type="secondary">{record.phone}</Text>
@@ -481,7 +502,8 @@ const EntryPage: React.FC = () => {
       search: false,
       render: (_, record) => {
         const label =
-          hireTypeOptions.find((item) => item.value === record.hireType)?.label || '全职';
+          hireTypeOptions.find((item) => item.value === record.hireType)
+            ?.label || '全职';
         return <Tag>{label}</Tag>;
       },
     },
@@ -502,7 +524,9 @@ const EntryPage: React.FC = () => {
           text: record.approvalStatusDesc || '未知',
           color: 'default',
         };
-        return <Tag color={meta.color}>{record.approvalStatusDesc || meta.text}</Tag>;
+        return (
+          <Tag color={meta.color}>{record.approvalStatusDesc || meta.text}</Tag>
+        );
       },
     },
     {
@@ -537,6 +561,17 @@ const EntryPage: React.FC = () => {
             >
               <Button size="small" type="link" icon={<SendOutlined />}>
                 提交审批
+              </Button>
+            </Popconfirm>
+          )}
+          {record.approvalStatus === ApprovalStatus.APPROVING && (
+            <Popconfirm
+              title="快速审批通过入职申请"
+              description="确认后将直接完成当前入职审批流程。"
+              onConfirm={() => handleQuickApprove(record)}
+            >
+              <Button size="small" type="primary">
+                快速审批
               </Button>
             </Popconfirm>
           )}
@@ -578,7 +613,9 @@ const EntryPage: React.FC = () => {
             >
               <Space direction="vertical" style={{ width: '100%' }}>
                 <Text strong>{item.label}</Text>
-                <div style={{ color: item.color, fontSize: 30, fontWeight: 700 }}>
+                <div
+                  style={{ color: item.color, fontSize: 30, fontWeight: 700 }}
+                >
                   {item.value}
                 </div>
               </Space>
@@ -603,12 +640,12 @@ const EntryPage: React.FC = () => {
                     item.key === String(ApprovalStatus.DRAFT)
                       ? 'draft'
                       : item.key === String(ApprovalStatus.APPROVING)
-                        ? 'approving'
-                        : item.key === String(ApprovalStatus.APPROVED)
-                          ? 'approved'
-                          : item.key === String(ApprovalStatus.REJECTED)
-                            ? 'rejected'
-                            : 'entered'
+                      ? 'approving'
+                      : item.key === String(ApprovalStatus.APPROVED)
+                      ? 'approved'
+                      : item.key === String(ApprovalStatus.REJECTED)
+                      ? 'rejected'
+                      : 'entered'
                   ] || 0
             }`,
           }))}
@@ -627,7 +664,9 @@ const EntryPage: React.FC = () => {
               dateEnd: params.dateEnd as string,
             };
             const baseQueryKey = JSON.stringify(baseQuery);
-            const previousBaseQueryKey = JSON.stringify(latestBaseQueryRef.current);
+            const previousBaseQueryKey = JSON.stringify(
+              latestBaseQueryRef.current,
+            );
             if (baseQueryKey !== previousBaseQueryKey) {
               latestBaseQueryRef.current = baseQuery;
               await loadStatusCounts(baseQuery);
@@ -695,13 +734,13 @@ const EntryPage: React.FC = () => {
         onFinish={async (values) => {
           try {
             const payload = buildFormValues(values);
-          if (editingRecord) {
-            await updateEntryApplication(editingRecord.id, payload);
-            message.success('入职申请已更新');
-          } else {
-            await createEntryApplication(payload);
-            message.success('入职申请已保存为草稿');
-          }
+            if (editingRecord) {
+              await updateEntryApplication(editingRecord.id, payload);
+              message.success('入职申请已更新');
+            } else {
+              await createEntryApplication(payload);
+              message.success('入职申请已保存为草稿');
+            }
             await loadStatusCounts(latestBaseQueryRef.current);
             setDrawerOpen(false);
             reloadTable();
@@ -763,7 +802,10 @@ const EntryPage: React.FC = () => {
               showSearch: true,
               optionFilterProp: 'label',
               placeholder: '请输入或选择所属部门',
-              filterOption: (input: string, option?: { label?: string | number }) =>
+              filterOption: (
+                input: string,
+                option?: { label?: string | number },
+              ) =>
                 String(option?.label || '')
                   .toLowerCase()
                   .includes(input.trim().toLowerCase()),
@@ -822,7 +864,10 @@ const EntryPage: React.FC = () => {
             name="remark"
             label="备注"
             width="xl"
-            fieldProps={{ rows: 3, placeholder: '填写特殊录用说明、审批备注等' }}
+            fieldProps={{
+              rows: 3,
+              placeholder: '填写特殊录用说明、审批备注等',
+            }}
           />
         </ProFormGroup>
       </DrawerForm>

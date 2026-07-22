@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hrms.business.approval.service.ApprovalEngine;
+import com.hrms.business.approval.service.ApprovalTaskService;
 import com.hrms.business.employee.entity.EmployeeEntity;
 import com.hrms.business.employee.service.EmployeeService;
 import com.hrms.business.personnel.common.enums.ApplicationStatusEnum;
@@ -53,6 +54,9 @@ class RegularApplicationServiceImplTest {
     private ApprovalEngine approvalEngine;
 
     @Mock
+    private ApprovalTaskService approvalTaskService;
+
+    @Mock
     private DeptService deptService;
 
     @Mock
@@ -74,6 +78,7 @@ class RegularApplicationServiceImplTest {
                 employeeSnapshotMapper,
                 employeeService,
                 approvalEngine,
+                approvalTaskService,
                 deptService,
                 postService,
                 redisTemplateProvider

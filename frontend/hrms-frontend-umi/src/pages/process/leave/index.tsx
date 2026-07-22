@@ -9,16 +9,18 @@ import {
   type EmployeeBrief,
 } from '@/services/employee';
 import { getDeptList } from '@/services/organization';
-import {
-  ApprovalStatus,
-  createLeaveApplication,
-  getLeaveApplicationList,
-} from '@/services/process';
 import type {
   LeaveApplication,
   LeaveApplicationCreateRequest,
 } from '@/services/process';
+import {
+  ApprovalStatus,
+  createLeaveApplication,
+  getLeaveApplicationList,
+  quickApproveLeaveApplication,
+} from '@/services/process';
 import { PlusOutlined } from '@ant-design/icons';
+import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import {
   DrawerForm,
   PageContainer,
@@ -30,8 +32,17 @@ import {
   ProFormTextArea,
   ProTable,
 } from '@ant-design/pro-components';
-import type { ActionType, ProColumns } from '@ant-design/pro-components';
-import { Avatar, Button, Card, Form, Space, Tag, Typography, message } from 'antd';
+import {
+  Avatar,
+  Button,
+  Card,
+  Form,
+  Popconfirm,
+  Space,
+  Tag,
+  Typography,
+  message,
+} from 'antd';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { formatProcessDateTime } from '../utils';
 
@@ -76,12 +87,15 @@ function getInitial(name?: string) {
 const LeavePage: React.FC = () => {
   const actionRef = useRef<ActionType>();
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [departmentOptions, setDepartmentOptions] = useState<SelectOption[]>([]);
+  const [departmentOptions, setDepartmentOptions] = useState<SelectOption[]>(
+    [],
+  );
   const [handoverOptions, setHandoverOptions] = useState<SelectOption[]>([]);
   const [employeeLoading, setEmployeeLoading] = useState(false);
   const [handoverLoading, setHandoverLoading] = useState(false);
   const [handoverKeyword, setHandoverKeyword] = useState('');
-  const [currentEmployeeDetail, setCurrentEmployeeDetail] = useState<Employee>();
+  const [currentEmployeeDetail, setCurrentEmployeeDetail] =
+    useState<Employee>();
   const [leaveForm] = Form.useForm<LeaveFormValues>();
 
   const watchedEmployeeId = Form.useWatch('employeeId', leaveForm);
@@ -107,11 +121,10 @@ const LeavePage: React.FC = () => {
   }, []);
 
   const departmentFilterOption = useMemo(
-    () =>
-      (input: string, option?: { label?: string | number }) =>
-        String(option?.label || '')
-          .toLowerCase()
-          .includes(input.trim().toLowerCase()),
+    () => (input: string, option?: { label?: string | number }) =>
+      String(option?.label || '')
+        .toLowerCase()
+        .includes(input.trim().toLowerCase()),
     [],
   );
 
@@ -143,7 +156,9 @@ const LeavePage: React.FC = () => {
         pageSize: 50,
       });
       const options = (page.records || [])
-        .filter((employee: EmployeeBrief) => employee.id !== currentEmployeeDetail.id)
+        .filter(
+          (employee: EmployeeBrief) => employee.id !== currentEmployeeDetail.id,
+        )
         .map((employee: EmployeeBrief) => ({
           label: `${employee.employeeName}（${employee.employeeNo} / ${employee.deptName}）`,
           value: employee.id,
@@ -158,7 +173,9 @@ const LeavePage: React.FC = () => {
   };
 
   /** 查询离职员工详情，内部调用 `loadHandoverOptions` 自动准备交接人候选列表。 */
-  const handleEmployeeLookup = async (rawEmployeeId?: number | string | null) => {
+  const handleEmployeeLookup = async (
+    rawEmployeeId?: number | string | null,
+  ) => {
     const employeeId = Number(rawEmployeeId);
     if (!employeeId || employeeId < 1) {
       resetEmployeeRelatedFields();
@@ -244,9 +261,13 @@ const LeavePage: React.FC = () => {
       search: false,
       render: (_, record) => (
         <Space>
-          <Avatar style={{ background: '#2f6fed' }}>{getInitial(record.employeeName)}</Avatar>
+          <Avatar style={{ background: '#2f6fed' }}>
+            {getInitial(record.employeeName)}
+          </Avatar>
           <Space direction="vertical" size={0}>
-            <strong>{record.employeeName || `员工 ${record.employeeId}`}</strong>
+            <strong>
+              {record.employeeName || `员工 ${record.employeeId}`}
+            </strong>
             <Text type="secondary">ID {record.employeeId}</Text>
           </Space>
         </Space>
@@ -260,7 +281,8 @@ const LeavePage: React.FC = () => {
       search: false,
       renderText: (_, record) =>
         record.leaveTypeName ||
-        leaveTypeOptions.find((item) => item.value === record.leaveType)?.label ||
+        leaveTypeOptions.find((item) => item.value === record.leaveType)
+          ?.label ||
         record.leaveType,
     },
     {
@@ -283,8 +305,12 @@ const LeavePage: React.FC = () => {
       width: 110,
       search: false,
       render: (_, record) => {
-        const meta = statusMeta[record.approvalStatus ?? ApprovalStatus.DRAFT] || statusMeta[0];
-        return <Tag color={meta.color}>{record.approvalStatusDesc || meta.text}</Tag>;
+        const meta =
+          statusMeta[record.approvalStatus ?? ApprovalStatus.DRAFT] ||
+          statusMeta[0];
+        return (
+          <Tag color={meta.color}>{record.approvalStatusDesc || meta.text}</Tag>
+        );
       },
     },
     {
@@ -293,6 +319,27 @@ const LeavePage: React.FC = () => {
       width: 170,
       search: false,
       render: (_, record) => formatProcessDateTime(record.createTime),
+    },
+    {
+      title: '操作',
+      valueType: 'option',
+      width: 120,
+      render: (_, record) =>
+        record.approvalStatus === ApprovalStatus.APPROVING ? (
+          <Popconfirm
+            title="快速审批通过离职申请"
+            description="确认后将直接完成当前离职审批流程。"
+            onConfirm={async () => {
+              await quickApproveLeaveApplication(record.id);
+              message.success('已快速审批通过离职申请');
+              actionRef.current?.reload();
+            }}
+          >
+            <Button size="small" type="primary">
+              快速审批
+            </Button>
+          </Popconfirm>
+        ) : null,
     },
   ];
 
@@ -381,7 +428,8 @@ const LeavePage: React.FC = () => {
               <strong>{watchedEmployeeName || '待选择员工'}</strong>
               <Text type="secondary">员工 ID：{watchedEmployeeId || '-'}</Text>
               <Text type="secondary">
-                部门：{watchedDepartmentName || '-'} 职位：{watchedPositionName || '-'}
+                部门：{watchedDepartmentName || '-'} 职位：
+                {watchedPositionName || '-'}
               </Text>
             </Space>
           </Space>
@@ -410,7 +458,9 @@ const LeavePage: React.FC = () => {
             width="md"
             fieldProps={{
               readOnly: true,
-              placeholder: employeeLoading ? '员工信息加载中...' : '输入员工ID后自动带出',
+              placeholder: employeeLoading
+                ? '员工信息加载中...'
+                : '输入员工ID后自动带出',
             }}
           />
           <ProFormText
@@ -419,7 +469,9 @@ const LeavePage: React.FC = () => {
             width="md"
             fieldProps={{
               readOnly: true,
-              placeholder: employeeLoading ? '员工信息加载中...' : '输入员工ID后自动带出',
+              placeholder: employeeLoading
+                ? '员工信息加载中...'
+                : '输入员工ID后自动带出',
             }}
           />
           <ProFormText
@@ -428,7 +480,9 @@ const LeavePage: React.FC = () => {
             width="md"
             fieldProps={{
               readOnly: true,
-              placeholder: employeeLoading ? '员工信息加载中...' : '输入员工ID后自动带出',
+              placeholder: employeeLoading
+                ? '员工信息加载中...'
+                : '输入员工ID后自动带出',
             }}
           />
         </ProFormGroup>
@@ -476,11 +530,7 @@ const LeavePage: React.FC = () => {
           fieldProps={{ rows: 4, maxLength: 500, showCount: true }}
           rules={[{ required: true, message: '请输入离职原因' }]}
         />
-        <ProFormTextArea
-          name="remark"
-          label="备注"
-          fieldProps={{ rows: 3 }}
-        />
+        <ProFormTextArea name="remark" label="备注" fieldProps={{ rows: 3 }} />
       </DrawerForm>
     </PageContainer>
   );

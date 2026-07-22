@@ -417,6 +417,27 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
         ));
     }
 
+    /**
+     * 按审批实例ID查询当前待办任务ID。
+     *
+     * @param instanceId 审批实例ID
+     * @return 当前待办任务ID，不存在时返回 null
+     */
+    @Override
+    public Long getCurrentPendingTaskIdByInstanceId(Long instanceId) {
+        if (instanceId == null) {
+            return null;
+        }
+        ApprovalTaskEntity pendingTask = taskMapper.selectOne(
+                Wrappers.lambdaQuery(ApprovalTaskEntity.class)
+                        .eq(ApprovalTaskEntity::getInstanceId, instanceId)
+                        .eq(ApprovalTaskEntity::getTaskStatus, TaskStatusEnum.PENDING.getCode())
+                        .orderByAsc(ApprovalTaskEntity::getSortNo)
+                        .last("LIMIT 1")
+        );
+        return pendingTask == null ? null : pendingTask.getId();
+    }
+
     // ========== 内部方法 ==========
 
     /**

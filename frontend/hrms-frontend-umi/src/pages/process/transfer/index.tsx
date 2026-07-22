@@ -14,16 +14,18 @@ import {
   getPostList,
   type PostItem,
 } from '@/services/organization';
-import {
-  ApprovalStatus,
-  createTransferApplication,
-  getTransferApplicationList,
-} from '@/services/process';
 import type {
   TransferApplication,
   TransferApplicationCreateRequest,
 } from '@/services/process';
+import {
+  ApprovalStatus,
+  createTransferApplication,
+  getTransferApplicationList,
+  quickApproveTransferApplication,
+} from '@/services/process';
 import { PlusOutlined } from '@ant-design/icons';
+import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import {
   ModalForm,
   PageContainer,
@@ -35,9 +37,19 @@ import {
   ProFormTextArea,
   ProTable,
 } from '@ant-design/pro-components';
-import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { useSearchParams } from '@umijs/max';
-import { Button, Card, Col, Form, Row, Space, Tag, Typography, message } from 'antd';
+import {
+  Button,
+  Card,
+  Col,
+  Form,
+  Popconfirm,
+  Row,
+  Space,
+  Tag,
+  Typography,
+  message,
+} from 'antd';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { formatProcessDateTime } from '../utils';
 
@@ -140,13 +152,18 @@ function buildJobLevelOptions(post?: PostItem): JobLevelOption[] {
 const TransferPage: React.FC = () => {
   const actionRef = useRef<ActionType>();
   const [modalOpen, setModalOpen] = useState(false);
-  const [departmentOptions, setDepartmentOptions] = useState<SelectOption[]>([]);
+  const [departmentOptions, setDepartmentOptions] = useState<SelectOption[]>(
+    [],
+  );
   const [realPostOptions, setRealPostOptions] = useState<PostItem[]>([]);
-  const [realLeaderOptions, setRealLeaderOptions] = useState<SelectOption[]>([]);
+  const [realLeaderOptions, setRealLeaderOptions] = useState<SelectOption[]>(
+    [],
+  );
   const [employeeLoading, setEmployeeLoading] = useState(false);
   const [postLoading, setPostLoading] = useState(false);
   const [leaderLoading, setLeaderLoading] = useState(false);
-  const [currentEmployeeDetail, setCurrentEmployeeDetail] = useState<Employee>();
+  const [currentEmployeeDetail, setCurrentEmployeeDetail] =
+    useState<Employee>();
   const [form] = Form.useForm<TransferFormValues>();
 
   const selectedToDeptId = Form.useWatch('toDeptId', form);
@@ -174,7 +191,9 @@ const TransferPage: React.FC = () => {
           })),
         );
         setRealPostOptions(
-          (postPage.records || []).filter((item) => item.id !== SYSTEM_ADMIN_POST_ID),
+          (postPage.records || []).filter(
+            (item) => item.id !== SYSTEM_ADMIN_POST_ID,
+          ),
         );
       } catch (error) {
         message.error('部门或岗位数据加载失败，请刷新后重试');
@@ -184,11 +203,10 @@ const TransferPage: React.FC = () => {
   }, []);
 
   const departmentFilterOption = useMemo(
-    () =>
-      (input: string, option?: { label?: string | number }) =>
-        String(option?.label || '')
-          .toLowerCase()
-          .includes(input.trim().toLowerCase()),
+    () => (input: string, option?: { label?: string | number }) =>
+      String(option?.label || '')
+        .toLowerCase()
+        .includes(input.trim().toLowerCase()),
     [],
   );
 
@@ -238,7 +256,9 @@ const TransferPage: React.FC = () => {
   };
 
   /** 加载员工基础信息，内部调用 `resetEmployeeRelatedFields` 处理无效员工场景。 */
-  const handleEmployeeLookup = async (rawEmployeeId?: number | string | null) => {
+  const handleEmployeeLookup = async (
+    rawEmployeeId?: number | string | null,
+  ) => {
     const employeeId = Number(rawEmployeeId);
     if (!employeeId || employeeId < 1) {
       resetEmployeeRelatedFields();
@@ -453,7 +473,8 @@ const TransferPage: React.FC = () => {
       dataIndex: 'employeeName',
       width: 140,
       search: false,
-      renderText: (_, record) => record.employeeName || `员工 ${record.employeeId}`,
+      renderText: (_, record) =>
+        record.employeeName || `员工 ${record.employeeId}`,
     },
     {
       title: '原部门 / 新部门',
@@ -492,8 +513,12 @@ const TransferPage: React.FC = () => {
       width: 110,
       search: false,
       render: (_, record) => {
-        const meta = statusMeta[record.approvalStatus ?? ApprovalStatus.DRAFT] || statusMeta[0];
-        return <Tag color={meta.color}>{record.approvalStatusDesc || meta.text}</Tag>;
+        const meta =
+          statusMeta[record.approvalStatus ?? ApprovalStatus.DRAFT] ||
+          statusMeta[0];
+        return (
+          <Tag color={meta.color}>{record.approvalStatusDesc || meta.text}</Tag>
+        );
       },
     },
     {
@@ -502,6 +527,27 @@ const TransferPage: React.FC = () => {
       width: 170,
       search: false,
       render: (_, record) => formatProcessDateTime(record.createTime),
+    },
+    {
+      title: '操作',
+      valueType: 'option',
+      width: 120,
+      render: (_, record) =>
+        record.approvalStatus === ApprovalStatus.APPROVING ? (
+          <Popconfirm
+            title="快速审批通过调岗申请"
+            description="确认后将直接完成当前调岗审批流程。"
+            onConfirm={async () => {
+              await quickApproveTransferApplication(record.id);
+              message.success('已快速审批通过调岗申请');
+              actionRef.current?.reload();
+            }}
+          >
+            <Button size="small" type="primary">
+              快速审批
+            </Button>
+          </Popconfirm>
+        ) : null,
     },
   ];
 
@@ -611,7 +657,9 @@ const TransferPage: React.FC = () => {
             width="md"
             fieldProps={{
               readOnly: true,
-              placeholder: employeeLoading ? '员工信息加载中...' : '输入员工ID后自动带出',
+              placeholder: employeeLoading
+                ? '员工信息加载中...'
+                : '输入员工ID后自动带出',
             }}
           />
           <ProFormText
@@ -620,14 +668,20 @@ const TransferPage: React.FC = () => {
             width="md"
             fieldProps={{
               readOnly: true,
-              placeholder: employeeLoading ? '员工信息加载中...' : '输入员工ID后自动带出',
+              placeholder: employeeLoading
+                ? '员工信息加载中...'
+                : '输入员工ID后自动带出',
             }}
           />
         </ProFormGroup>
 
         <Row gutter={16}>
           <Col span={12}>
-            <Card size="small" title="原岗位信息（只读）" style={{ minHeight: 252 }}>
+            <Card
+              size="small"
+              title="原岗位信息（只读）"
+              style={{ minHeight: 252 }}
+            >
               <ProFormText
                 name="fromDeptName"
                 label="原部门"
@@ -676,7 +730,9 @@ const TransferPage: React.FC = () => {
                   allowClear: true,
                   showSearch: true,
                   optionFilterProp: 'label',
-                  placeholder: selectedToDeptId ? '请选择新职位' : '请先选择新部门',
+                  placeholder: selectedToDeptId
+                    ? '请选择新职位'
+                    : '请先选择新部门',
                 }}
               />
               <ProFormText
@@ -697,7 +753,9 @@ const TransferPage: React.FC = () => {
                   allowClear: true,
                   showSearch: true,
                   optionFilterProp: 'label',
-                  placeholder: selectedToDeptId ? '请选择新汇报人' : '请先选择新部门',
+                  placeholder: selectedToDeptId
+                    ? '请选择新汇报人'
+                    : '请先选择新部门',
                 }}
               />
             </Card>

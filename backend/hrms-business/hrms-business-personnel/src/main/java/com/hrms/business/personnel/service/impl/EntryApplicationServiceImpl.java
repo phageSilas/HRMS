@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hrms.business.approval.enums.ApprovalTypeEnum;
 import com.hrms.business.approval.service.ApprovalEngine;
+import com.hrms.business.approval.service.ApprovalTaskService;
 import com.hrms.business.employee.dto.EmployeeCreateDTO;
 import com.hrms.business.employee.entity.EmployeeEntity;
 import com.hrms.business.employee.service.EmployeeService;
@@ -58,6 +59,8 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
     private final EntryApplicationMapper entryApplicationMapper;
 
     private final ApprovalEngine approvalEngine;
+
+    private final ApprovalTaskService approvalTaskService;
 
     private final EmployeeService employeeService;
 
@@ -282,6 +285,19 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
     }
 
     /**
+     * 快速审批通过入职申请。
+     *
+     * @param id 入职申请ID
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void quickApproveEntryApplication(Long id) {
+        EntryApplicationEntity entity = getRequiredEntryApplication(id);
+        assertApproving(entity.getApprovalStatus(), "当前入职申请不是审批中状态，无法快速审批");
+        processQuickApprove(entity.getApprovalInstanceId(), "当前入职申请无有效审批实例，无法快速审批");
+    }
+
+    /**
      * 临时构造已确认入职的员工信息。
      *
      * @param entity 入职申请实体
@@ -422,6 +438,35 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         if (entity.getApprovalStatus() == null || entity.getApprovalStatus() != ApplicationStatusEnum.APPROVED.getCode()) {
             throw new GlobalException(ENTRY_APPLICATION_NOT_APPROVED);
         }
+    }
+
+    /**
+     * 校验申请是否处于审批中。
+     *
+     * @param approvalStatus 审批状态
+     * @param errorMessage 错误提示
+     */
+    private void assertApproving(Integer approvalStatus, String errorMessage) {
+        if (approvalStatus == null || approvalStatus != ApplicationStatusEnum.APPROVING.getCode()) {
+            throw new GlobalException(ErrorCode.BUSINESS_ERROR, errorMessage);
+        }
+    }
+
+    /**
+     * 通过审批引擎执行快速审批通过。
+     *
+     * @param approvalInstanceId 审批实例ID
+     * @param missingInstanceMessage 审批实例缺失提示
+     */
+    private void processQuickApprove(Long approvalInstanceId, String missingInstanceMessage) {
+        if (approvalInstanceId == null) {
+            throw new GlobalException(ErrorCode.BUSINESS_ERROR, missingInstanceMessage);
+        }
+        Long pendingTaskId = approvalTaskService.getCurrentPendingTaskIdByInstanceId(approvalInstanceId);
+        if (pendingTaskId == null) {
+            throw new GlobalException(ErrorCode.BUSINESS_ERROR, "当前审批实例不存在待办审批任务，无法快速审批");
+        }
+        approvalEngine.processAction(pendingTaskId, "approve", "快速审批通过", null);
     }
 
     /**
