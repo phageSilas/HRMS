@@ -226,12 +226,14 @@ public class DictServiceImpl implements DictService {
      */
     private DictDataVO convertDataToVO(DictDataEntity entity) {
         DictDataVO vo = new DictDataVO();
+        vo.setId(entity.getId());
         vo.setDictType(entity.getDictType());
         vo.setDictLabel(entity.getDictLabel());
         vo.setDictValue(entity.getDictValue());
         vo.setCssClass(entity.getCssClass());
         vo.setSort(entity.getSort());
         vo.setStatus(entity.getStatus());
+        vo.setRemark(entity.getRemark());
         return vo;
     }
 
