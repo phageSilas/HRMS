@@ -2,6 +2,7 @@ package com.hrms.business.mycenter.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.hrms.business.mycenter.dto.AttendanceCalendarVO;
+import com.hrms.business.mycenter.dto.AttendanceGroupConfigDTO;
 import com.hrms.business.mycenter.dto.AttendanceStatisticsVO;
 import com.hrms.business.mycenter.entity.AttendanceOvertimeEntity;
 import com.hrms.business.mycenter.dto.MakeupRecordVO;
@@ -27,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -211,7 +213,6 @@ public class AttendanceServiceImpl implements AttendanceService {
                 record.setEmployeeId(employeeId);
                 record.setRecordDate(today);
                 record.setClockInTime(LocalDateTime.now());
-                record.setClockInStatus("NORMAL");
                 record.setCorrectionStatus("NONE");
                 // 查询员工所属考勤组
                 Long groupId = attendanceRecordMapper.selectDefaultAttendanceGroupId();
@@ -219,6 +220,8 @@ public class AttendanceServiceImpl implements AttendanceService {
                     throw new GlobalException(ErrorCode.BUSINESS_ERROR, "未配置考勤组，请联系管理员");
                 }
                 record.setGroupId(groupId);
+                // 根据考勤组时间判定打卡状态
+                record.setClockInStatus(determineClockInStatus(groupId, record.getClockInTime().toLocalTime()));
                 attendanceRecordMapper.insert(record);
             } else {
                 throw new GlobalException(ErrorCode.BUSINESS_ERROR, "请先进行上班打卡");
@@ -229,17 +232,57 @@ public class AttendanceServiceImpl implements AttendanceService {
                     throw new GlobalException(ErrorCode.BUSINESS_ERROR, "今日已打卡");
                 }
                 record.setClockInTime(LocalDateTime.now());
-                record.setClockInStatus("NORMAL");
+                record.setClockInStatus(determineClockInStatus(record.getGroupId(), record.getClockInTime().toLocalTime()));
                 attendanceRecordMapper.updateById(record);
             } else {
                 if (record.getClockOutTime() != null) {
                     throw new GlobalException(ErrorCode.BUSINESS_ERROR, "今日已打下班卡");
                 }
                 record.setClockOutTime(LocalDateTime.now());
-                record.setClockOutStatus("NORMAL");
+                record.setClockOutStatus(determineClockOutStatus(record.getGroupId(), record.getClockOutTime().toLocalTime()));
                 attendanceRecordMapper.updateById(record);
             }
         }
+    }
+
+    /**
+     * 根据考勤组配置判定上班打卡状态
+     * <p>
+     * 如果实际打卡时间超过(上班时间 + 迟到阈值)，判定为 LATE，否则为 NORMAL。
+     * </p>
+     *
+     * @param groupId   考勤组ID
+     * @param clockTime 实际打卡时间
+     * @return NORMAL 或 LATE
+     */
+    private String determineClockInStatus(Long groupId, LocalTime clockTime) {
+        AttendanceGroupConfigDTO config = attendanceRecordMapper.selectGroupTimeConfig(groupId);
+        if (config == null || config.getWorkStartTime() == null) {
+            return "NORMAL";
+        }
+        int threshold = config.getLateThresholdMinutes() != null ? config.getLateThresholdMinutes() : 15;
+        LocalTime lateLine = config.getWorkStartTime().plusMinutes(threshold);
+        return clockTime.isAfter(lateLine) ? "LATE" : "NORMAL";
+    }
+
+    /**
+     * 根据考勤组配置判定下班打卡状态
+     * <p>
+     * 如果实际打卡时间早于(下班时间 - 早退阈值)，判定为 EARLY_LEAVE，否则为 NORMAL。
+     * </p>
+     *
+     * @param groupId   考勤组ID
+     * @param clockTime 实际打卡时间
+     * @return NORMAL 或 EARLY_LEAVE
+     */
+    private String determineClockOutStatus(Long groupId, LocalTime clockTime) {
+        AttendanceGroupConfigDTO config = attendanceRecordMapper.selectGroupTimeConfig(groupId);
+        if (config == null || config.getWorkEndTime() == null) {
+            return "NORMAL";
+        }
+        int threshold = config.getEarlyLeaveThresholdMinutes() != null ? config.getEarlyLeaveThresholdMinutes() : 15;
+        LocalTime earlyLine = config.getWorkEndTime().minusMinutes(threshold);
+        return clockTime.isBefore(earlyLine) ? "EARLY_LEAVE" : "NORMAL";
     }
 
     /**
@@ -506,7 +549,13 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     /**
      * 根据上下班状态判定最终考勤状态
-     * 优先级：ABSENCE(请假) > MISSING(缺卡) > LATE(迟到) > EARLY_LEAVE(早退) > NORMAL(正常)
+     * <p>
+     * 优先级：ABSENCE(请假) > 双无记录(旷工) > MISSING(无完整打卡) > LATE(迟到) > EARLY_LEAVE(早退) > NORMAL(正常)
+     * </p>
+     * <p>
+     * 注意：状态字段可能被补卡审批设为 NORMAL 但实际无打卡时间，
+     * 此时仍视为该时段未打卡。
+     * </p>
      */
     private String determineStatus(MyAttendanceRecordEntity record) {
         String inStatus = record.getClockInStatus();
@@ -522,20 +571,22 @@ public class AttendanceServiceImpl implements AttendanceService {
             return "ABSENT";
         }
 
-        // 双方至少一方为 MISSING（指该时段应打卡但未打卡）
-        boolean inMissing = isBlank(inStatus) || "MISSING".equals(inStatus);
-        boolean outMissing = isBlank(outStatus) || "MISSING".equals(outStatus);
-        if (inMissing && outMissing) {
+        // 结合实际打卡时间判定"是否有效打卡"（状态 NORMAL 但无时间 → 视为未打卡）
+        boolean inEffective = isClockEffective(record.getClockInTime(), inStatus);
+        boolean outEffective = isClockEffective(record.getClockOutTime(), outStatus);
+
+        // 双方均未有效打卡 → 缺卡
+        if (!inEffective && !outEffective) {
             return "MISSED";
         }
 
         // 迟到 + 正常下班 → 迟到
-        if ("LATE".equals(inStatus) && "NORMAL".equals(outStatus)) {
+        if ("LATE".equals(inStatus) && outEffective && "NORMAL".equals(outStatus)) {
             return "LATE";
         }
 
         // 正常上班 + 早退 → 早退
-        if ("NORMAL".equals(inStatus) && "EARLY_LEAVE".equals(outStatus)) {
+        if (inEffective && "NORMAL".equals(inStatus) && "EARLY_LEAVE".equals(outStatus)) {
             return "EARLY_LEAVE";
         }
 
@@ -545,12 +596,12 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
 
         // 上班已打卡但下班未打卡
-        if (isBlank(outStatus) || "MISSING".equals(outStatus)) {
+        if (!outEffective) {
             return "MISSED";
         }
 
         // 下班已打卡但上班未打卡
-        if (isBlank(inStatus) || "MISSING".equals(inStatus)) {
+        if (!inEffective) {
             return "MISSED";
         }
 
@@ -562,6 +613,25 @@ public class AttendanceServiceImpl implements AttendanceService {
      */
     private boolean isBlank(String str) {
         return str == null || str.trim().isEmpty();
+    }
+
+    /**
+     * 判断某时段的打卡是否"有效"
+     * <p>
+     * 状态非空、非 MISSING、且有实际打卡时间才算有效。
+     * 补卡审批通过后可能状态为 NORMAL 但无实际时间，此时视为无效（未打卡）。
+     * </p>
+     *
+     * @param clockTime 实际打卡时间（可为 null）
+     * @param status    打卡状态（可为 null）
+     * @return true-有效打卡；false-未打卡
+     */
+    private boolean isClockEffective(LocalDateTime clockTime, String status) {
+        if (isBlank(status) || "MISSING".equals(status)) {
+            return false;
+        }
+        // 状态有值（NORMAL/LATE/EARLY_LEAVE）但无实际打卡时间 → 无效（例如补卡只改了状态没改时间）
+        return clockTime != null;
     }
 
     private String getStatusDesc(String status) {

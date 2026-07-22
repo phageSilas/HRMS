@@ -83,7 +83,7 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
                 .eq(ApprovalTaskEntity::getApproverUserId, userId)
                 .eq(ApprovalTaskEntity::getTaskStatus, TaskStatusEnum.PENDING.getCode())
                 .apply("EXISTS (SELECT 1 FROM hr_approval_instance i WHERE i.id = instance_id AND i.is_deleted = 0)")
-                .orderByAsc(ApprovalTaskEntity::getCreateTime)
+                .orderByDesc(ApprovalTaskEntity::getCreateTime)
         );
 
         // 3. 查询该用户全局待办总数（用于角标）
@@ -360,7 +360,7 @@ public class ApprovalTaskServiceImpl implements ApprovalTaskService {
         } else {
             // pending（默认）：待办任务
             wrapper.eq(ApprovalTaskEntity::getTaskStatus, TaskStatusEnum.PENDING.getCode())
-                    .orderByAsc(ApprovalTaskEntity::getCreateTime);
+                    .orderByDesc(ApprovalTaskEntity::getCreateTime);
         }
 
         mpPage = taskMapper.selectPage(mpPage, wrapper);
