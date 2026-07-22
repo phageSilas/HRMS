@@ -45,11 +45,12 @@ public class ApproverResolverImpl implements ApproverResolver {
      * <p>
      * 根据审批人类型从组织架构或角色中查找对应的用户 ID。
      * 支持类型：DEPT_HEAD（部门负责人）、SUPERIOR_DEPT_HEAD（直接上级）、
-     * HR_HEAD（HR 负责人）、FINANCE_HEAD（财务负责人）、BOSS（老板）。
+     * PARENT_DEPT_HEAD（上级部门负责人）、HR_HEAD（HR 负责人）、
+     * FINANCE_HEAD（财务负责人）、BOSS（老板）。
      * </p>
      *
      * @param approverType    审批人类型编码
-     * @param applicantDeptId 申请人部门 ID（DEPT_HEAD 类型时需要）
+     * @param applicantDeptId 申请人部门 ID（DEPT_HEAD / PARENT_DEPT_HEAD 类型时需要）
      * @param bizId           业务主键 ID（SUPERIOR_DEPT_HEAD 类型时需要）
      * @return 审批人用户 ID，无法解析时返回 null
      */
@@ -58,6 +59,7 @@ public class ApproverResolverImpl implements ApproverResolver {
         Long userId = switch (approverType) {
             case "DEPT_HEAD" -> resolveDeptHead(applicantDeptId);
             case "SUPERIOR_DEPT_HEAD" -> resolveSuperiorDeptHead(bizId);
+            case "PARENT_DEPT_HEAD" -> resolveParentDeptHead(applicantDeptId);
             case "HR_HEAD" -> resolveRoleUser("HR_HEAD");
             case "FINANCE_HEAD" -> resolveRoleUser("FINANCE_HEAD");
             case "BOSS" -> resolveRoleUser("BOSS");
@@ -88,6 +90,50 @@ public class ApproverResolverImpl implements ApproverResolver {
             return null;
         }
         return dept.getLeaderUserId();
+    }
+
+    /**
+     * 解析上级部门负责人：查询当前部门的上级部门（parent_id）的负责人
+     * <p>
+     * 链路：申请人部门 → 上级部门（parent_id）→ 上级部门的 leader_user_id
+     * 若无上级部门（如顶层部门），则返回 null，由调用方提示"无上级审批人"。
+     * </p>
+     */
+    private Long resolveParentDeptHead(Long deptId) {
+        if (deptId == null) {
+            log.warn("解析上级部门负责人失败: deptId 为空");
+            return null;
+        }
+
+        // 1. 查询当前部门
+        DeptEntity dept = deptMapper.selectById(deptId);
+        if (dept == null) {
+            log.warn("解析上级部门负责人失败: 部门不存在, deptId={}", deptId);
+            return null;
+        }
+
+        // 2. 查询上级部门
+        Long parentId = dept.getParentId();
+        if (parentId == null || parentId == 0) {
+            log.warn("解析上级部门负责人失败: 当前部门无上级部门, deptId={}, deptName={}", deptId, dept.getDeptName());
+            return null;
+        }
+
+        DeptEntity parentDept = deptMapper.selectById(parentId);
+        if (parentDept == null) {
+            log.warn("解析上级部门负责人失败: 上级部门不存在, parentDeptId={}", parentId);
+            return null;
+        }
+
+        if (parentDept.getLeaderUserId() == null) {
+            log.warn("解析上级部门负责人失败: 上级部门未设置负责人, parentDeptId={}, parentDeptName={}",
+                    parentId, parentDept.getDeptName());
+            return null;
+        }
+
+        log.info("解析上级部门负责人成功: deptId={}, parentDeptId={}, leaderUserId={}",
+                deptId, parentId, parentDept.getLeaderUserId());
+        return parentDept.getLeaderUserId();
     }
 
     /**

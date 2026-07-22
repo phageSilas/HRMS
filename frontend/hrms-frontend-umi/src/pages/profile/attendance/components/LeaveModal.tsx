@@ -1,7 +1,7 @@
 /**
  * 请假申请弹窗
  */
-import { DatePicker, Form, Input, Modal, Select } from 'antd';
+import { DatePicker, Form, Input, Modal, Select, message } from 'antd';
 import dayjs from 'dayjs';
 import React from 'react';
 import { LEAVE_TYPE_OPTIONS } from '../constants';
@@ -20,8 +20,9 @@ const LeaveModal: React.FC<Props> = ({ open, onClose, onSubmit }) => {
       const values = await form.validateFields();
       await onSubmit(values);
       form.resetFields();
-    } catch {
-      // 校验失败或提交异常
+    } catch (err: any) {
+      // 校验失败或提交异常 - 显示错误信息
+      if (err?.message) message.error(err.message);
     }
   };
 
@@ -59,7 +60,7 @@ const LeaveModal: React.FC<Props> = ({ open, onClose, onSubmit }) => {
           rules={[{ required: true, message: '请选择请假时间范围' }]}
         >
           <DatePicker.RangePicker showTime style={{ width: '100%' }} format="YYYY-MM-DD HH:mm"
-            disabledDate={(current) => current && current.isAfter(dayjs().endOf('day'))}
+            disabledDate={(current) => current && current.isBefore(dayjs().startOf('day'))}
           />
         </Form.Item>
         <Form.Item

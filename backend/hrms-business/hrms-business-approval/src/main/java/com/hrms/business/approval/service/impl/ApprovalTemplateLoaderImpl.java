@@ -21,9 +21,9 @@ import java.util.Map;
  * │ REGULAR       │ HR       │ 部门负责人 → HR负责人                │
  * │ TRANSFER      │ HR       │ 原部门负责人 → 新部门负责人 → HR负责人 │
  * │ LEAVE         │ HR       │ 部门负责人 → HR负责人                │
- * │ LEAVE_REQUEST │ 员工     │ ≤3天：直接上级 / >3天：直接上级→部门负责人 │
- * │ CORRECTION    │ 员工     │ 直接上级                             │
- * │ OVERTIME      │ 员工     │ 直接上级（与补卡审批规则一致）        │
+ * │ LEAVE_REQUEST │ 员工     │ 上级部门负责人（无上级则提示"无上级审批人"）│
+ * │ CORRECTION    │ 员工     │ 上级部门负责人（无上级则提示"无上级审批人"）│
+ * │ OVERTIME      │ 员工     │ 上级部门负责人（无上级则提示"无上级审批人"）│
  * │ SALARY        │ HR       │ 财务专员 → [老板可选]                │
  * └───────────────┴──────────┴──────────────────────────────────────┘
  * </p>
@@ -68,20 +68,19 @@ public class ApprovalTemplateLoaderImpl implements ApprovalTemplateLoader {
                 new ApprovalNodeDef("HR_HEAD", "HR负责人审批", "HR_HEAD", 2, false)
         ));
 
-        // LEAVE_REQUEST 请假审批：≤3天直接上级 / >3天直接上级 → 部门负责人
+        // LEAVE_REQUEST 请假审批：上级部门负责人审批
         TEMPLATES.put("LEAVE_REQUEST", List.of(
-                new ApprovalNodeDef("SUPERIOR", "直接上级审批", "SUPERIOR_DEPT_HEAD", 1, false),
-                new ApprovalNodeDef("DEPT_HEAD", "部门负责人审批", "DEPT_HEAD", 2, true)
+                new ApprovalNodeDef("PARENT_DEPT_HEAD", "上级部门负责人审批", "PARENT_DEPT_HEAD", 1, false)
         ));
 
-        // CORRECTION 补卡审批：直接上级
+        // CORRECTION 补卡审批：上级部门负责人
         TEMPLATES.put("CORRECTION", List.of(
-                new ApprovalNodeDef("SUPERIOR", "直接上级审批", "SUPERIOR_DEPT_HEAD", 1, false)
+                new ApprovalNodeDef("PARENT_DEPT_HEAD", "上级部门负责人审批", "PARENT_DEPT_HEAD", 1, false)
         ));
 
-        // OVERTIME 加班审批：直接上级（与补卡审批规则一致）
+        // OVERTIME 加班审批：上级部门负责人
         TEMPLATES.put("OVERTIME", List.of(
-                new ApprovalNodeDef("SUPERIOR", "直接上级审批", "SUPERIOR_DEPT_HEAD", 1, false)
+                new ApprovalNodeDef("PARENT_DEPT_HEAD", "上级部门负责人审批", "PARENT_DEPT_HEAD", 1, false)
         ));
 
         // SALARY 薪资批次审批：财务专员 → [老板可选]

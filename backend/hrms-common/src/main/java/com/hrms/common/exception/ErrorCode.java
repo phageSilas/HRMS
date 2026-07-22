@@ -119,6 +119,11 @@ public class ErrorCode implements Serializable {
     public static final ErrorCode EMPLOYEE_CANNOT_DELETE = new ErrorCode(40035, "该员工已转正，无法删除");
     public static final ErrorCode EMPLOYEE_HAS_BUSINESS = new ErrorCode(40036, "该员工存在业务记录，无法删除");
 
+    /**
+     * 审批错误系列 (40303-40309)
+     */
+    public static final ErrorCode NO_SUPERIOR_APPROVER = new ErrorCode(40303, "无上级审批人");
+
     public static final ErrorCode BUSINESS_ERROR = new ErrorCode(50100, "业务处理失败");
 
 }

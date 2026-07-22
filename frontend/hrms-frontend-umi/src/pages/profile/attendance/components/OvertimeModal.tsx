@@ -1,7 +1,8 @@
 /**
  * 加班申请弹窗
  */
-import { DatePicker, Form, Input, InputNumber, Modal } from 'antd';
+import { DatePicker, Form, Input, InputNumber, Modal, message } from 'antd';
+import dayjs from 'dayjs';
 import React from 'react';
 
 interface Props {
@@ -18,8 +19,9 @@ const OvertimeModal: React.FC<Props> = ({ open, onClose, onSubmit }) => {
       const values = await form.validateFields();
       await onSubmit(values);
       form.resetFields();
-    } catch {
+    } catch (err: any) {
       // 校验失败或提交异常
+      if (err?.message) message.error(err.message);
     }
   };
 
@@ -42,7 +44,9 @@ const OvertimeModal: React.FC<Props> = ({ open, onClose, onSubmit }) => {
           label="加班日期"
           rules={[{ required: true, message: '请选择加班日期' }]}
         >
-          <DatePicker showTime style={{ width: '100%' }} />
+          <DatePicker showTime style={{ width: '100%' }}
+            disabledDate={(current) => current && !current.isSame(dayjs(), 'day')}
+          />
         </Form.Item>
         <Form.Item
           name="duration"

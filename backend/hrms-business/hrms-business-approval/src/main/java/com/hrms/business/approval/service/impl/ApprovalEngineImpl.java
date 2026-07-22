@@ -292,6 +292,9 @@ public class ApprovalEngineImpl implements ApprovalEngine {
 
             // 非可选节点且无审批人 → 不可跳过，抛异常
             if (approverUserId == null) {
+                if ("PARENT_DEPT_HEAD".equals(node.getApproverType())) {
+                    throw new GlobalException(ErrorCode.NO_SUPERIOR_APPROVER, "无上级审批人");
+                }
                 throw new GlobalException(ErrorCode.BUSINESS_ERROR,
                         "无法解析审批人：" + node.getNodeName());
             }
