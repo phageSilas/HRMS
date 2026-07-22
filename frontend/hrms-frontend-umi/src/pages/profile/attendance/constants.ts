@@ -41,7 +41,7 @@ export const LEGEND_ITEMS = [
   { label: '正常出勤', color: '#52c41a' },
   { label: '迟到', color: '#fa8c16' },
   { label: '早退', color: '#faad14' },
-  { label: '未打卡记录', color: '#d9d9d9' },
+  { label: '无完整打卡记录', color: '#d9d9d9' },
   { label: '请假', color: '#1677ff' },
   { label: '休息日', color: '#d9d9d9' },
   { label: '今日', color: '#1677ff', isBorder: true },
