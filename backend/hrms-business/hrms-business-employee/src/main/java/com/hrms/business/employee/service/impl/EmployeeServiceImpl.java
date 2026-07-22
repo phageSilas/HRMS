@@ -75,7 +75,7 @@ public class EmployeeServiceImpl implements EmployeeService {
     /** ???? */
     private static final String CACHE_PREFIX = "employee:list:";
     private static final int CACHE_MAX_PAGES = 9;
-    private static final long CACHE_TTL_MINUTES = 5;
+    private static final long CACHE_TTL_MINUTES = 30;
     private static final long EMPTY_TTL_MINUTES = 1;
     private static final String EMPTY_MARKER = "__EMPTY__";
 
