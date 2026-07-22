@@ -136,6 +136,7 @@ export interface SalaryBatchItem {
   id: number;
   batchId: number;
   employeeId: number;
+  deptId?: number;
   employeeNo?: string;
   employeeName?: string;
   deptName?: string;
@@ -184,6 +185,7 @@ export interface SalaryBatchTrendQuery {
   months?: number;
   scopeType?: string;
   scopeValue?: string;
+  deptIds?: number[];
 }
 
 export interface SalaryBatchCurrentQuery {
