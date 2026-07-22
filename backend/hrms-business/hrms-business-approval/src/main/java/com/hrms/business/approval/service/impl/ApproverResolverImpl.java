@@ -96,7 +96,8 @@ public class ApproverResolverImpl implements ApproverResolver {
      * 解析上级部门负责人：查询当前部门的上级部门（parent_id）的负责人
      * <p>
      * 链路：申请人部门 → 上级部门（parent_id）→ 上级部门的 leader_user_id
-     * 若无上级部门（如顶层部门），则返回 null，由调用方提示"无上级审批人"。
+     * 若无上级部门，或上级部门负责人与申请人相同时，返回 null，
+     * 由调用方提示"无上级审批人"。
      * </p>
      */
     private Long resolveParentDeptHead(Long deptId) {
@@ -128,6 +129,14 @@ public class ApproverResolverImpl implements ApproverResolver {
         if (parentDept.getLeaderUserId() == null) {
             log.warn("解析上级部门负责人失败: 上级部门未设置负责人, parentDeptId={}, parentDeptName={}",
                     parentId, parentDept.getDeptName());
+            return null;
+        }
+
+        // 3. 如果上级部门负责人与申请人相同，则视为无上级审批人
+        Long currentUserId = com.hrms.common.security.SecurityContextHolder.getUserId();
+        if (currentUserId != null && currentUserId.equals(parentDept.getLeaderUserId())) {
+            log.warn("解析上级部门负责人失败: 上级部门负责人与申请人相同, userId={}, parentDeptId={}, parentDeptName={}",
+                    currentUserId, parentId, parentDept.getDeptName());
             return null;
         }
 
