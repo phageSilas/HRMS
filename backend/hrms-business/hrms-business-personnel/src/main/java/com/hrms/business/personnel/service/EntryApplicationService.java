@@ -71,4 +71,11 @@ public interface EntryApplicationService {
      */
     EntryApplicationConfirmVO confirmEntryApplication(Long id, EntryApplicationConfirmRequestDTO requestDTO);
 
+    /**
+     * 快速审批通过入职申请。
+     *
+     * @param id 入职申请ID
+     */
+    void quickApproveEntryApplication(Long id);
+
 }

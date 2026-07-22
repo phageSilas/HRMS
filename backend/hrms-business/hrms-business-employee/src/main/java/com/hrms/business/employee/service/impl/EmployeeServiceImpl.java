@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hrms.business.employee.convert.EmployeeConvert;
+import com.hrms.business.employee.dto.EmployeeApprovalSyncUpdateDTO;
 import com.hrms.business.employee.dto.EmployeeCreateDTO;
 import com.hrms.business.employee.dto.EmployeeQueryDTO;
 import com.hrms.business.employee.dto.EmployeeUpdateDTO;
@@ -32,6 +33,7 @@ import com.hrms.system.auth.vo.UserCreateResultVO;
 import com.hrms.system.organization.service.DeptService;
 import com.hrms.system.organization.service.PostService;
 import com.hrms.system.organization.vo.DeptDetailVO;
+import com.hrms.system.organization.vo.DeptListVO;
 import com.hrms.system.organization.vo.PostVO;
 import com.hrms.business.employee.event.EmployeeChangeEvent;
 import lombok.extern.slf4j.Slf4j;
@@ -45,6 +47,7 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import java.util.concurrent.CompletableFuture;
@@ -71,9 +74,9 @@ public class EmployeeServiceImpl implements EmployeeService {
     private final StringRedisTemplate stringRedisTemplate;
 
     /** ???? */
-    private static final String CACHE_PREFIX = "employee:list:";
+    private static final String CACHE_PREFIX = "employee:list:v2:";
     private static final int CACHE_MAX_PAGES = 9;
-    private static final long CACHE_TTL_MINUTES = 5;
+    private static final long CACHE_TTL_MINUTES = 30;
     private static final long EMPTY_TTL_MINUTES = 1;
     private static final String EMPTY_MARKER = "__EMPTY__";
 
@@ -153,7 +156,12 @@ public class EmployeeServiceImpl implements EmployeeService {
             return PageResult.of(List.of(), 0, queryDTO.getPageNum(), queryDTO.getPageSize());
         }
         Page<EmployeeEntity> resultPage = employeeMapper.selectPage(page, wrapper);
-        return buildPageResult(resultPage, queryDTO.getPageNum(), queryDTO.getPageSize());
+        return buildPageResult(
+                resultPage,
+                queryDTO.getPageNum(),
+                queryDTO.getPageSize(),
+                buildDeptNameMap()
+        );
     }
 
     /**
@@ -229,9 +237,10 @@ public class EmployeeServiceImpl implements EmployeeService {
      * @param pageSize   每页条数
      * @return PageResult
      */
-    private PageResult<EmployeeListVO> buildPageResult(Page<EmployeeEntity> resultPage, int pageNum, int pageSize) {
+    private PageResult<EmployeeListVO> buildPageResult(Page<EmployeeEntity> resultPage, int pageNum, int pageSize,
+                                                       java.util.Map<Long, String> deptNameMap) {
         List<EmployeeListVO> records = resultPage.getRecords().stream()
-                .map(this::convertToListVO)
+                .map(entity -> convertToListVO(entity, deptNameMap))
                 .collect(Collectors.toList());
 
         PageResult<EmployeeListVO> pageResult = new PageResult<>();
@@ -265,9 +274,10 @@ public class EmployeeServiceImpl implements EmployeeService {
 
         Page<EmployeeEntity> page1Query = new Page<>(1, pageSize + 1);
         Page<EmployeeEntity> resultPage = employeeMapper.selectPage(page1Query, wrapper);
+        java.util.Map<Long, String> deptNameMap = buildDeptNameMap();
 
         List<EmployeeListVO> records = resultPage.getRecords().stream()
-                .map(this::convertToListVO)
+                .map(entity -> convertToListVO(entity, deptNameMap))
                 .collect(Collectors.toList());
 
         long total = resultPage.getTotal();
@@ -284,6 +294,9 @@ public class EmployeeServiceImpl implements EmployeeService {
         page1.setPageSize(pageSize);
         page1.setPages(totalPages);
 
+        // 先清理旧的员工列表缓存，避免命中修复前写入的错误分页数据。
+        evictEmployeeListCache();
+
         // ???1?
         Long userId = SecurityContextHolder.getUserId();
         stringRedisTemplate.opsForValue().set(
@@ -291,7 +304,7 @@ public class EmployeeServiceImpl implements EmployeeService {
 
         // ?????2-9??Redis
         if (hasMore && totalPages > 1) {
-            asyncCacheEmployeePages(queryDTO, pageSize, total, totalPages);
+            asyncCacheEmployeePages(queryDTO, pageSize, total, totalPages, deptNameMap);
         }
 
         return page1;
@@ -306,7 +319,8 @@ public class EmployeeServiceImpl implements EmployeeService {
      * @param totalPages ???
      * ??????????StringRedisTemplate(spring-data-redis), JSONUtil(hutool), CompletableFuture(JDK)
      */
-    private void asyncCacheEmployeePages(EmployeeQueryDTO queryDTO, int pageSize, long total, int totalPages) {
+    private void asyncCacheEmployeePages(EmployeeQueryDTO queryDTO, int pageSize, long total, int totalPages,
+                                         java.util.Map<Long, String> deptNameMap) {
         EmployeeQueryDTO cacheQuery = new EmployeeQueryDTO();
         cacheQuery.setKeyword(queryDTO.getKeyword());
         cacheQuery.setDeptIds(queryDTO.getDeptIds());
@@ -341,7 +355,7 @@ public class EmployeeServiceImpl implements EmployeeService {
                     Page<EmployeeEntity> page = new Page<>(pageNum, pageSize);
                     Page<EmployeeEntity> result = employeeMapper.selectPage(page, wrapper);
                     List<EmployeeListVO> pageRecords = result.getRecords().stream()
-                            .map(this::convertToListVO)
+                            .map(entity -> convertToListVO(entity, deptNameMap))
                             .collect(Collectors.toList());
 
                     PageResult<EmployeeListVO> pageResult = new PageResult<>();
@@ -526,8 +540,9 @@ public class EmployeeServiceImpl implements EmployeeService {
             entities = entities.subList(0, pageSize);
         }
 
+        java.util.Map<Long, String> deptNameMap = buildDeptNameMap();
         List<EmployeeListVO> records = entities.stream()
-                .map(this::convertToListVO)
+                .map(entity -> convertToListVO(entity, deptNameMap))
                 .collect(Collectors.toList());
 
         Long nextLastId = records.isEmpty() ? null : records.get(records.size() - 1).getId();
@@ -1022,10 +1037,16 @@ public class EmployeeServiceImpl implements EmployeeService {
      * 转换为列表 VO
      */
     private EmployeeListVO convertToListVO(EmployeeEntity entity) {
+        return convertToListVO(entity, null);
+    }
+
+    private EmployeeListVO convertToListVO(EmployeeEntity entity, java.util.Map<Long, String> deptNameMap) {
         EmployeeListVO vo = EmployeeConvert.INSTANCE.toListVO(entity);
 
         // 填充部门名称
-        if (entity.getDeptId() != null) {
+        if (entity.getDeptId() != null && deptNameMap != null) {
+            vo.setDeptName(resolveDeptNameWithoutScope(entity.getDeptId(), deptNameMap));
+        } else if (entity.getDeptId() != null) {
             try {
                 DeptDetailVO dept = deptService.getDeptById(entity.getDeptId());
                 if (dept != null) {
@@ -1318,5 +1339,141 @@ public class EmployeeServiceImpl implements EmployeeService {
         sb.append(queryDTO.getPageSize() != null ? queryDTO.getPageSize() : 20).append("|");
         sb.append(pageNum);
         return sb.toString();
+    }
+
+    /**
+     * 构建当前用户可见部门名称映射。
+     *
+     * @return 部门ID到名称映射
+     */
+    private java.util.Map<Long, String> buildDeptNameMap() {
+        try {
+            return deptService.getDeptList().stream()
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toMap(
+                            DeptListVO::getId,
+                            DeptListVO::getDeptName,
+                            (left, right) -> left,
+                            java.util.HashMap::new
+                    ));
+        } catch (Exception e) {
+            log.warn("构建员工列表部门映射失败", e);
+            return new java.util.HashMap<>();
+        }
+    }
+
+    /**
+     * 使用预构建映射解析部门名称。
+     *
+     * @param deptId 部门ID
+     * @param deptNameMap 部门名称映射
+     * @return 部门名称
+     */
+    private String resolveDeptNameWithoutScope(Long deptId, java.util.Map<Long, String> deptNameMap) {
+        if (deptId == null || deptNameMap == null || deptNameMap.isEmpty()) {
+            return null;
+        }
+        return deptNameMap.get(deptId);
+    }
+
+    /**
+     * 清理员工列表缓存。
+     */
+    private void evictEmployeeListCache() {
+        if (stringRedisTemplate == null) {
+            return;
+        }
+        try {
+            java.util.Set<String> keys = stringRedisTemplate.keys(CACHE_PREFIX + "*");
+            if (keys == null || keys.isEmpty()) {
+                return;
+            }
+            stringRedisTemplate.delete(keys);
+        } catch (Exception e) {
+            log.warn("清理员工列表缓存失败", e);
+        }
+    }
+
+    /**
+     * 审批通过后同步员工档案字段。
+     *
+     * @param employeeId 员工ID
+     * @param updateDTO 审批联动更新参数
+     * @return 更新后的员工实体
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public EmployeeEntity syncEmployeeForApproval(Long employeeId, EmployeeApprovalSyncUpdateDTO updateDTO) {
+        EmployeeEntity entity = employeeMapper.selectById(employeeId);
+        if (entity == null) {
+            throw new GlobalException(ErrorCode.EMPLOYEE_NOT_FOUND);
+        }
+        if (updateDTO == null) {
+            return entity;
+        }
+
+        Long oldDeptId = entity.getDeptId();
+        Long newDeptId = updateDTO.getDeptId();
+
+        // 审批联动前先校验基础组织信息，避免写入不存在的部门或职位。
+        if (newDeptId != null && !Objects.equals(newDeptId, entity.getDeptId())) {
+            validateDeptExists(newDeptId);
+        }
+        if (updateDTO.getPostId() != null && !Objects.equals(updateDTO.getPostId(), entity.getPostId())) {
+            validatePostExists(updateDTO.getPostId());
+        }
+
+        // 仅更新审批联动涉及的字段，避免覆盖员工档案其他业务字段。
+        LambdaUpdateWrapper<EmployeeEntity> updateWrapper = Wrappers.lambdaUpdate(EmployeeEntity.class)
+                .eq(EmployeeEntity::getId, employeeId);
+        boolean hasUpdate = false;
+
+        if (updateDTO.getEmploymentStatus() != null
+                && !Objects.equals(updateDTO.getEmploymentStatus(), entity.getEmploymentStatus())) {
+            updateWrapper.set(EmployeeEntity::getEmploymentStatus, updateDTO.getEmploymentStatus());
+            entity.setEmploymentStatus(updateDTO.getEmploymentStatus());
+            hasUpdate = true;
+        }
+        if (newDeptId != null && !Objects.equals(newDeptId, entity.getDeptId())) {
+            updateWrapper.set(EmployeeEntity::getDeptId, newDeptId);
+            entity.setDeptId(newDeptId);
+            hasUpdate = true;
+        }
+        if (updateDTO.getPostId() != null && !Objects.equals(updateDTO.getPostId(), entity.getPostId())) {
+            updateWrapper.set(EmployeeEntity::getPostId, updateDTO.getPostId());
+            entity.setPostId(updateDTO.getPostId());
+            hasUpdate = true;
+        }
+        if (updateDTO.getJobLevel() != null && !Objects.equals(updateDTO.getJobLevel(), entity.getJobLevel())) {
+            updateWrapper.set(EmployeeEntity::getJobLevel, updateDTO.getJobLevel());
+            entity.setJobLevel(updateDTO.getJobLevel());
+            hasUpdate = true;
+        }
+        if (updateDTO.getLeaderId() != null && !Objects.equals(updateDTO.getLeaderId(), entity.getLeaderId())) {
+            updateWrapper.set(EmployeeEntity::getLeaderId, updateDTO.getLeaderId());
+            entity.setLeaderId(updateDTO.getLeaderId());
+            hasUpdate = true;
+        }
+
+        if (!hasUpdate) {
+            return entity;
+        }
+
+        employeeMapper.update(null, updateWrapper);
+
+        // 部门变更后同步用户归属部门，保证账号侧组织信息与员工档案一致。
+        if (newDeptId != null && !Objects.equals(newDeptId, oldDeptId)) {
+            syncUserDeptId(entity.getUserId(), newDeptId);
+            // 发布员工变更事件，触发部门人数刷新等现有联动逻辑。
+            eventPublisher.publishEvent(new EmployeeChangeEvent(
+                    this,
+                    EmployeeChangeEvent.ChangeType.UPDATE,
+                    employeeId,
+                    oldDeptId,
+                    newDeptId
+            ));
+        }
+
+        return entity;
     }
 }

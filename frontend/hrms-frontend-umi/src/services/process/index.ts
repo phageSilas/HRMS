@@ -219,7 +219,10 @@ export async function getEntryApplication(
 
 /** 查询入职申请状态统计，供入职管理页顶部统计卡片展示。 */
 export async function getEntryApplicationStats(
-  params: Omit<EntryApplicationQuery, 'pageNum' | 'pageSize' | 'approvalStatus'>,
+  params: Omit<
+    EntryApplicationQuery,
+    'pageNum' | 'pageSize' | 'approvalStatus'
+  >,
 ): Promise<EntryApplicationStats> {
   return request.get('/api/v1/entry-applications/stats', { params });
 }
@@ -246,6 +249,11 @@ export async function submitEntryApplication(
   return request.post(`/api/v1/entry-applications/${id}/submit`);
 }
 
+/** 快速审批通过入职申请，供入职列表“快速审批”按钮调用。 */
+export async function quickApproveEntryApplication(id: number): Promise<void> {
+  return request.post(`/api/v1/entry-applications/${id}/quick-approve`);
+}
+
 /** 确认员工实际入职，用于审批通过后的正式入职落库。 */
 export async function confirmEntryApplication(
   id: number,
@@ -269,6 +277,13 @@ export async function applyRegularApplication(
   return request.post(`/api/v1/regular-applications/${employeeId}/apply`, data);
 }
 
+/** 快速审批通过转正申请，供转正列表“快速审批”按钮调用。 */
+export async function quickApproveRegularApplication(
+  id: number,
+): Promise<void> {
+  return request.post(`/api/v1/regular-applications/${id}/quick-approve`);
+}
+
 /** 查询调岗申请分页列表，供调岗管理页筛选和展示。 */
 export async function getTransferApplicationList(
   params: TransferApplicationQuery,
@@ -283,6 +298,13 @@ export async function createTransferApplication(
   return request.post('/api/v1/transfer-applications', data);
 }
 
+/** 快速审批通过调岗申请，供调岗列表“快速审批”按钮调用。 */
+export async function quickApproveTransferApplication(
+  id: number,
+): Promise<void> {
+  return request.post(`/api/v1/transfer-applications/${id}/quick-approve`);
+}
+
 /** 查询离职申请分页列表，供离职管理页筛选和展示。 */
 export async function getLeaveApplicationList(
   params: LeaveApplicationQuery,
@@ -295,4 +317,9 @@ export async function createLeaveApplication(
   data: LeaveApplicationCreateRequest,
 ): Promise<LeaveApplicationCreateResult> {
   return request.post('/api/v1/leave-applications', data);
+}
+
+/** 快速审批通过离职申请，供离职列表“快速审批”按钮调用。 */
+export async function quickApproveLeaveApplication(id: number): Promise<void> {
+  return request.post(`/api/v1/leave-applications/${id}/quick-approve`);
 }

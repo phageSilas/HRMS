@@ -11,12 +11,12 @@ import lombok.Data;
 public class AttendanceLeaveManageQueryDTO {
 
     /**
-     * 月份，格式yyyy-MM。
+     * 月份，格式为 yyyy-MM。
      */
     private String yearMonth;
 
     /**
-     * 部门ID。
+     * 部门 ID。
      */
     private Long deptId;
 
@@ -42,4 +42,9 @@ public class AttendanceLeaveManageQueryDTO {
     @Min(value = 1, message = "每页数量必须大于0")
     @Max(value = 100, message = "每页数量不能超过100")
     private Integer pageSize = 10;
+
+    /**
+     * 是否强制刷新当前查询条件对应缓存。
+     */
+    private Boolean refreshCache;
 }

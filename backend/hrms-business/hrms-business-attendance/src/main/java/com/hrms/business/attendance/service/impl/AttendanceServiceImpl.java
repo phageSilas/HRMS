@@ -1,5 +1,6 @@
 package com.hrms.business.attendance.service.impl;
 
+import cn.hutool.core.lang.TypeReference;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONArray;
@@ -158,6 +159,16 @@ public class AttendanceServiceImpl implements AttendanceService {
      */
     @Override
     public PageResult<AttendanceGroupPageVO> pageAttendanceGroups(AttendanceGroupQueryDTO queryDTO) {
+        String cacheKey = AttendanceCacheKeys.attendanceGroupPage(buildAttendanceGroupPageCacheKey(queryDTO));
+        try {
+            String cached = stringRedisTemplate.opsForValue().get(cacheKey);
+            if (StrUtil.isNotBlank(cached)) {
+                return JSONUtil.toBean(cached, PageResult.class);
+            }
+        } catch (Exception ex) {
+            log.warn("load attendance group page cache failed, cacheKey={}", cacheKey, ex);
+        }
+
         Page<AttendanceGroupEntity> page = Page.of(queryDTO.getPageNum(), queryDTO.getPageSize());
         LambdaQueryWrapper<AttendanceGroupEntity> wrapper = new LambdaQueryWrapper<AttendanceGroupEntity>()
                 .like(StrUtil.isNotBlank(queryDTO.getGroupName()), AttendanceGroupEntity::getGroupName, queryDTO.getGroupName())
@@ -169,7 +180,19 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .map(AttendanceGroupConvert::toPageVO)
                 .map(this::fillAttendanceGroupScope)
                 .toList();
-        return PageResult.of(records, resultPage.getTotal(), queryDTO.getPageNum(), queryDTO.getPageSize());
+        PageResult<AttendanceGroupPageVO> result = PageResult.of(
+                records,
+                resultPage.getTotal(),
+                queryDTO.getPageNum(),
+                queryDTO.getPageSize()
+        );
+
+        try {
+            stringRedisTemplate.opsForValue().set(cacheKey, JSONUtil.toJsonStr(result), Duration.ofDays(2));
+        } catch (Exception ex) {
+            log.warn("save attendance group page cache failed, cacheKey={}", cacheKey, ex);
+        }
+        return result;
     }
 
     /**
@@ -186,6 +209,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         attendanceGroupMapper.insert(entity);
         rebuildGroupMembers(entity.getId(), requestDTO.getMemberRange());
         evictGroupRuleCache(entity.getId());
+        evictAttendanceGroupPageCache();
         return fillAttendanceGroupScope(AttendanceGroupConvert.toPageVO(entity));
 
     }
@@ -210,6 +234,7 @@ public class AttendanceServiceImpl implements AttendanceService {
             rebuildGroupMembers(id, requestDTO.getMemberRange());
         }
         evictGroupRuleCache(id);
+        evictAttendanceGroupPageCache();
         return fillAttendanceGroupScope(AttendanceGroupConvert.toPageVO(entity));
     }
 
@@ -235,6 +260,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
         attendanceGroupMapper.deleteById(entity.getId());
         evictGroupRuleCache(id);
+        evictAttendanceGroupPageCache();
     }
 
     /**
@@ -249,13 +275,33 @@ public class AttendanceServiceImpl implements AttendanceService {
     public PageResult<AttendanceGroupRecordPageVO> pageGroupAttendanceRecords(Long groupId,
                                                                               AttendanceGroupRecordQueryDTO queryDTO) {
         getRequiredAttendanceGroup(groupId);
-        AttendanceDateRange dateRange = resolveGroupRecordDateRange(queryDTO);
-        int pageNum = normalizePageNum(queryDTO == null ? null : queryDTO.getPageNum());
-        int pageSize = normalizePageSize(queryDTO == null ? null : queryDTO.getPageSize());
+        AttendanceGroupRecordQueryDTO safeQuery = queryDTO == null ? new AttendanceGroupRecordQueryDTO() : queryDTO;
+        AttendanceDateRange dateRange = resolveGroupRecordDateRange(safeQuery);
+        int pageNum = normalizePageNum(safeQuery.getPageNum());
+        int pageSize = normalizePageSize(safeQuery.getPageSize());
+        String cacheKey = AttendanceCacheKeys.attendanceGroupRecordPage(
+                buildAttendanceGroupRecordPageCacheKey(groupId, safeQuery, dateRange, pageNum, pageSize)
+        );
+
+        if (Boolean.TRUE.equals(safeQuery.getRefreshCache())) {
+            deleteCacheKey(cacheKey, "delete attendance group record page cache failed, cacheKey={}");
+        } else {
+            PageResult<AttendanceGroupRecordPageVO> cachedResult = loadCacheValue(
+                    cacheKey,
+                    new TypeReference<PageResult<AttendanceGroupRecordPageVO>>() {
+                    },
+                    "load attendance group record page cache failed, cacheKey={}"
+            );
+            if (cachedResult != null) {
+                return cachedResult;
+            }
+        }
 
         List<AttendanceGroupMemberEntity> members = listEffectiveGroupMembers(groupId, dateRange.startDate(), dateRange.endDate());
         if (members.isEmpty()) {
-            return PageResult.of(List.of(), 0, pageNum, pageSize);
+            PageResult<AttendanceGroupRecordPageVO> emptyResult = PageResult.of(List.of(), 0, pageNum, pageSize);
+            saveCacheValue(cacheKey, emptyResult, "save attendance group record page cache failed, cacheKey={}");
+            return emptyResult;
         }
         List<Long> employeeIds = members.stream()
                 .map(AttendanceGroupMemberEntity::getEmployeeId)
@@ -266,7 +312,9 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .stream()
                 .collect(Collectors.toMap(EmployeeSnapshotEntity::getId, employee -> employee, (a, b) -> a));
         if (employeeMap.isEmpty()) {
-            return PageResult.of(List.of(), 0, pageNum, pageSize);
+            PageResult<AttendanceGroupRecordPageVO> emptyResult = PageResult.of(List.of(), 0, pageNum, pageSize);
+            saveCacheValue(cacheKey, emptyResult, "save attendance group record page cache failed, cacheKey={}");
+            return emptyResult;
         }
         Map<String, AttendanceRecordEntity> recordMap = attendanceRecordMapper
                 .selectByGroupAndEmployeesAndDateRange(groupId, employeeIds, dateRange.startDate(), dateRange.endDate())
@@ -275,12 +323,19 @@ public class AttendanceServiceImpl implements AttendanceService {
                         record -> record, (a, b) -> a));
         Map<Long, String> deptNameCache = new HashMap<>();
         List<AttendanceGroupRecordPageVO> allRecords = buildGroupRecordRows(
-                members, employeeMap, recordMap, deptNameCache, dateRange, queryDTO);
+                members, employeeMap, recordMap, deptNameCache, dateRange, safeQuery);
         allRecords.sort(Comparator.comparing(AttendanceGroupRecordPageVO::getRecordDate).reversed()
                 .thenComparing(AttendanceGroupRecordPageVO::getEmployeeId));
         int fromIndex = Math.min((pageNum - 1) * pageSize, allRecords.size());
         int toIndex = Math.min(fromIndex + pageSize, allRecords.size());
-        return PageResult.of(allRecords.subList(fromIndex, toIndex), allRecords.size(), pageNum, pageSize);
+        PageResult<AttendanceGroupRecordPageVO> result = PageResult.of(
+                allRecords.subList(fromIndex, toIndex),
+                allRecords.size(),
+                pageNum,
+                pageSize
+        );
+        saveCacheValue(cacheKey, result, "save attendance group record page cache failed, cacheKey={}");
+        return result;
     }
 
     /**
@@ -1346,7 +1401,22 @@ public class AttendanceServiceImpl implements AttendanceService {
      * 本方法使用的工具类: YearMonth(JDK),SecurityContextHolder(hrms-common),RoleService(hrms-system-auth)
      */
     @Override
-    public AttendanceSummaryDashboardVO getSummaryDashboard(String yearMonth, Long deptId) {
+    public AttendanceSummaryDashboardVO getSummaryDashboard(String yearMonth, Long deptId, Boolean refreshCache) {
+        String cacheKey = AttendanceCacheKeys.summaryDashboard(
+                buildAttendanceSummaryDashboardCacheKey(yearMonth, deptId)
+        );
+        if (Boolean.TRUE.equals(refreshCache)) {
+            deleteCacheKey(cacheKey, "delete attendance summary dashboard cache failed, cacheKey={}");
+        } else {
+            AttendanceSummaryDashboardVO cachedResult = loadCacheValue(
+                    cacheKey,
+                    AttendanceSummaryDashboardVO.class,
+                    "load attendance summary dashboard cache failed, cacheKey={}"
+            );
+            if (cachedResult != null) {
+                return cachedResult;
+            }
+        }
         YearMonth parsedMonth = parseDashboardYearMonth(yearMonth);
         LocalDate startDate = parsedMonth.atDay(1);
         LocalDate endDate = parsedMonth.atEndOfMonth();
@@ -1356,13 +1426,17 @@ public class AttendanceServiceImpl implements AttendanceService {
         List<EmployeeSnapshotEntity> employees = listDashboardEmployees(scope.targetDeptIds());
         //如果部门下没有员工则返回空看板
         if (employees.isEmpty()) {
-            return emptyDashboard(workdays);
+            AttendanceSummaryDashboardVO emptyResult = emptyDashboard(workdays);
+            saveCacheValue(cacheKey, emptyResult, "save attendance summary dashboard cache failed, cacheKey={}");
+            return emptyResult;
         }
         List<Long> employeeIds = employees.stream().map(EmployeeSnapshotEntity::getId).distinct().toList();
         List<AttendanceGroupMemberEntity> members = listDashboardMembers(employeeIds, startDate, endDate);
         //如果部门下没有成员则返回空看板
         if (members.isEmpty()) {
-            return emptyDashboard(workdays);
+            AttendanceSummaryDashboardVO emptyResult = emptyDashboard(workdays);
+            saveCacheValue(cacheKey, emptyResult, "save attendance summary dashboard cache failed, cacheKey={}");
+            return emptyResult;
         }
         Set<Long> memberEmployeeIds = members.stream()
                 .map(AttendanceGroupMemberEntity::getEmployeeId)
@@ -1372,7 +1446,9 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .toList();
         //如果成员中没有需要统计的员工则返回空看板
         if (statEmployees.isEmpty()) {
-            return emptyDashboard(workdays);
+            AttendanceSummaryDashboardVO emptyResult = emptyDashboard(workdays);
+            saveCacheValue(cacheKey, emptyResult, "save attendance summary dashboard cache failed, cacheKey={}");
+            return emptyResult;
         }
         List<Long> statEmployeeIds = statEmployees.stream().map(EmployeeSnapshotEntity::getId).distinct().toList();
         //查询考勤统计打卡记录
@@ -1388,7 +1464,9 @@ public class AttendanceServiceImpl implements AttendanceService {
         //构建考勤统计累加器
         AttendanceDashboardAccumulator accumulator = buildDashboardAccumulator(
                 statEmployees, members, recordMap, leaveDateKeys, workdays);
-        return buildDashboardVO(accumulator, leaveCount, deptNameCache);
+        AttendanceSummaryDashboardVO result = buildDashboardVO(accumulator, leaveCount, deptNameCache);
+        saveCacheValue(cacheKey, result, "save attendance summary dashboard cache failed, cacheKey={}");
+        return result;
     }
 
     /**
@@ -1416,8 +1494,26 @@ public class AttendanceServiceImpl implements AttendanceService {
         int pageNum = normalizePageNum(safeQuery.getPageNum());
         //解析每页大小
         int pageSize = normalizePageSize(safeQuery.getPageSize());
+        String cacheKey = AttendanceCacheKeys.leaveManagePage(
+                buildAttendanceLeaveManagePageCacheKey(safeQuery, yearMonth, pageNum, pageSize)
+        );
+        if (Boolean.TRUE.equals(safeQuery.getRefreshCache())) {
+            deleteCacheKey(cacheKey, "delete attendance leave manage page cache failed, cacheKey={}");
+        } else {
+            PageResult<AttendanceLeaveManageItemVO> cachedResult = loadCacheValue(
+                    cacheKey,
+                    new TypeReference<PageResult<AttendanceLeaveManageItemVO>>() {
+                    },
+                    "load attendance leave manage page cache failed, cacheKey={}"
+            );
+            if (cachedResult != null) {
+                return cachedResult;
+            }
+        }
         if (employees.isEmpty()) {
-            return PageResult.of(List.of(), 0, pageNum, pageSize);
+            PageResult<AttendanceLeaveManageItemVO> emptyResult = PageResult.of(List.of(), 0, pageNum, pageSize);
+            saveCacheValue(cacheKey, emptyResult, "save attendance leave manage page cache failed, cacheKey={}");
+            return emptyResult;
         }
         //构建员工ID到员工信息的映射
         Map<Long, EmployeeSnapshotEntity> employeeMap = employees.stream()
@@ -1444,7 +1540,9 @@ public class AttendanceServiceImpl implements AttendanceService {
                 .map(leave -> buildLeaveManageItemVO(leave, employeeMap.get(leave.getEmployeeId()),
                         deptNameCache, leaveTypeDescMap, approvalBriefCache, currentUserId))
                 .toList();
-        return PageResult.of(records, resultPage.getTotal(), pageNum, pageSize);
+        PageResult<AttendanceLeaveManageItemVO> result = PageResult.of(records, resultPage.getTotal(), pageNum, pageSize);
+        saveCacheValue(cacheKey, result, "save attendance leave manage page cache failed, cacheKey={}");
+        return result;
     }
 
 
@@ -1695,6 +1793,33 @@ public class AttendanceServiceImpl implements AttendanceService {
      * @param requestDTO 生成参数
      * @return 月度统计结果
      */
+    /**
+     * 快速审批通过请假申请。
+     *
+     * @param id 请假申请 ID
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void quickApproveLeaveRequest(Long id) {
+        LeaveRequestEntity entity = leaveRequestMapper.selectById(id);
+        if (entity == null) {
+            throw new GlobalException(ErrorCode.NOT_FOUND, "请假申请不存在");
+        }
+        if (entity.getApprovalStatus() == null || entity.getApprovalStatus() != 1) {
+            throw new GlobalException(ErrorCode.BUSINESS_ERROR, "当前请假申请不是审批中状态，无法快速审批");
+        }
+        if (entity.getApprovalInstanceId() == null) {
+            throw new GlobalException(ErrorCode.BUSINESS_ERROR, "当前请假申请无有效审批实例，无法快速审批");
+        }
+        Long pendingTaskId = approvalTaskService.getCurrentPendingTaskIdByInstanceId(entity.getApprovalInstanceId());
+        if (pendingTaskId == null) {
+            throw new GlobalException(ErrorCode.BUSINESS_ERROR, "当前审批实例不存在待办审批任务，无法快速审批");
+        }
+        approvalEngine.processAction(pendingTaskId, "approve", "快速审批通过", null);
+        // 审批成功后清理相关查询缓存，避免页面继续展示旧状态。
+        evictAttendanceQueryCachesForLeaveApproval();
+    }
+
     @Override
     public MonthlyStatGenerateVO generateMonthlyStat(MonthlyStatGenerateRequestDTO requestDTO) {
         String lockKey = AttendanceCacheKeys.monthStatGenerateLock(requestDTO.getMonth());
@@ -3102,6 +3227,207 @@ public class AttendanceServiceImpl implements AttendanceService {
             stringRedisTemplate.delete(AttendanceCacheKeys.groupRule(groupId));
         } catch (Exception ex) {
             log.warn("delete attendance group rule cache failed, groupId={}", groupId, ex);
+        }
+    }
+
+    /**
+     * 删除考勤组分页缓存。
+     */
+    private void evictAttendanceGroupPageCache() {
+        try {
+            Set<String> keys = stringRedisTemplate.keys(AttendanceCacheKeys.attendanceGroupPagePattern());
+            if (keys == null || keys.isEmpty()) {
+                return;
+            }
+            stringRedisTemplate.delete(keys);
+        } catch (Exception ex) {
+            log.warn("delete attendance group page cache failed");
+        }
+    }
+
+    /**
+     * 构建考勤组分页缓存查询键。
+     *
+     * @param queryDTO 查询参数
+     * @return 查询键
+     */
+    private String buildAttendanceGroupPageCacheKey(AttendanceGroupQueryDTO queryDTO) {
+        return String.join(":",
+                String.valueOf(queryDTO.getPageNum()),
+                String.valueOf(queryDTO.getPageSize()),
+                normalizeCacheValue(queryDTO.getGroupName()),
+                String.valueOf(queryDTO.getStatus() == null ? "null" : queryDTO.getStatus()));
+    }
+
+    /**
+     * 构建考勤记录分页缓存查询键。
+     *
+     * @param groupId 考勤组 ID
+     * @param queryDTO 查询参数
+     * @param dateRange 日期范围
+     * @param pageNum 页码
+     * @param pageSize 每页大小
+     * @return 查询键
+     */
+    private String buildAttendanceGroupRecordPageCacheKey(Long groupId,
+                                                          AttendanceGroupRecordQueryDTO queryDTO,
+                                                          AttendanceDateRange dateRange,
+                                                          int pageNum,
+                                                          int pageSize) {
+        return String.join(":",
+                String.valueOf(groupId),
+                normalizeCacheValue(queryDTO.getYearMonth()),
+                String.valueOf(dateRange.startDate()),
+                String.valueOf(dateRange.endDate()),
+                String.valueOf(queryDTO.getDepartmentId() == null ? "null" : queryDTO.getDepartmentId()),
+                normalizeCacheValue(queryDTO.getKeyword()),
+                normalizeCacheValue(queryDTO.getStatus()),
+                String.valueOf(pageNum),
+                String.valueOf(pageSize));
+    }
+
+    /**
+     * 构建请假管理分页缓存查询键。
+     *
+     * @param queryDTO 查询参数
+     * @param yearMonth 查询月份
+     * @param pageNum 页码
+     * @param pageSize 每页大小
+     * @return 查询键
+     */
+    private String buildAttendanceLeaveManagePageCacheKey(AttendanceLeaveManageQueryDTO queryDTO,
+                                                          YearMonth yearMonth,
+                                                          int pageNum,
+                                                          int pageSize) {
+        return String.join(":",
+                yearMonth.toString(),
+                String.valueOf(queryDTO.getDeptId() == null ? "null" : queryDTO.getDeptId()),
+                normalizeCacheValue(queryDTO.getKeyword()),
+                String.valueOf(queryDTO.getApprovalStatus() == null ? "null" : queryDTO.getApprovalStatus()),
+                String.valueOf(pageNum),
+                String.valueOf(pageSize));
+    }
+
+    /**
+     * 构建考勤统计看板缓存查询键。
+     *
+     * @param yearMonth 月份
+     * @param deptId 部门 ID
+     * @return 查询键
+     */
+    private String buildAttendanceSummaryDashboardCacheKey(String yearMonth, Long deptId) {
+        return String.join(":",
+                normalizeCacheValue(yearMonth),
+                String.valueOf(deptId == null ? "null" : deptId));
+    }
+
+    /**
+     * 标准化缓存字段值，避免空值和空白值生成不同 key。
+     *
+     * @param value 原始值
+     * @return 标准化后的值
+     */
+    private String normalizeCacheValue(String value) {
+        return StrUtil.isBlank(value) ? "blank" : value.trim();
+    }
+
+    /**
+     * 读取普通对象缓存。
+     *
+     * @param cacheKey 缓存键
+     * @param beanClass 目标类型
+     * @param warnMessage 告警日志
+     * @param <T> 返回类型
+     * @return 缓存结果
+     */
+    private <T> T loadCacheValue(String cacheKey, Class<T> beanClass, String warnMessage) {
+        try {
+            String cached = stringRedisTemplate.opsForValue().get(cacheKey);
+            if (StrUtil.isBlank(cached)) {
+                return null;
+            }
+            return JSONUtil.toBean(cached, beanClass);
+        } catch (Exception ex) {
+            log.warn(warnMessage, cacheKey, ex);
+            return null;
+        }
+    }
+
+    /**
+     * 读取泛型对象缓存。
+     *
+     * @param cacheKey 缓存键
+     * @param typeReference 目标泛型
+     * @param warnMessage 告警日志
+     * @param <T> 返回类型
+     * @return 缓存结果
+     */
+    private <T> T loadCacheValue(String cacheKey, TypeReference<T> typeReference, String warnMessage) {
+        try {
+            String cached = stringRedisTemplate.opsForValue().get(cacheKey);
+            if (StrUtil.isBlank(cached)) {
+                return null;
+            }
+            return JSONUtil.toBean(cached, typeReference, false);
+        } catch (Exception ex) {
+            log.warn(warnMessage, cacheKey, ex);
+            return null;
+        }
+    }
+
+    /**
+     * 写入查询缓存。
+     *
+     * @param cacheKey 缓存键
+     * @param value 缓存值
+     * @param warnMessage 告警日志
+     */
+    private void saveCacheValue(String cacheKey, Object value, String warnMessage) {
+        try {
+            stringRedisTemplate.opsForValue().set(cacheKey, JSONUtil.toJsonStr(value), Duration.ofDays(2));
+        } catch (Exception ex) {
+            log.warn(warnMessage, cacheKey, ex);
+        }
+    }
+
+    /**
+     * 删除指定缓存键。
+     *
+     * @param cacheKey 缓存键
+     * @param warnMessage 告警日志
+     */
+    private void deleteCacheKey(String cacheKey, String warnMessage) {
+        try {
+            stringRedisTemplate.delete(cacheKey);
+        } catch (Exception ex) {
+            log.warn(warnMessage, cacheKey, ex);
+        }
+    }
+
+    /**
+     * 删除请假审批相关的查询缓存。
+     */
+    private void evictAttendanceQueryCachesForLeaveApproval() {
+        deleteCacheByPattern(AttendanceCacheKeys.leaveManagePagePattern(), "delete attendance leave manage page cache failed");
+        deleteCacheByPattern(AttendanceCacheKeys.summaryDashboardPattern(), "delete attendance summary dashboard cache failed");
+        deleteCacheByPattern(AttendanceCacheKeys.attendanceGroupRecordPagePattern(), "delete attendance group record page cache failed");
+    }
+
+    /**
+     * 按模式批量删除缓存。
+     *
+     * @param pattern 缓存模式
+     * @param warnMessage 告警日志
+     */
+    private void deleteCacheByPattern(String pattern, String warnMessage) {
+        try {
+            Set<String> keys = stringRedisTemplate.keys(pattern);
+            if (keys == null || keys.isEmpty()) {
+                return;
+            }
+            stringRedisTemplate.delete(keys);
+        } catch (Exception ex) {
+            log.warn(warnMessage, ex);
         }
     }
 

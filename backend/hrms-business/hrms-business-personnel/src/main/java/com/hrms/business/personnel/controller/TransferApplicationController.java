@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -53,6 +54,19 @@ public class TransferApplicationController {
     public Result<TransferApplicationCreateVO> createTransferApplication(
             @Valid @RequestBody TransferApplicationCreateRequestDTO requestDTO) {
         return Result.success(transferApplicationService.createTransferApplication(requestDTO));
+    }
+
+    /**
+     * 快速审批通过调岗申请。
+     *
+     * @param id 调岗申请ID
+     * @return 操作结果
+     */
+    @PostMapping("/{id}/quick-approve")
+    @Operation(summary = "快速审批通过调岗申请")
+    public Result<Void> quickApproveTransferApplication(@PathVariable Long id) {
+        transferApplicationService.quickApproveTransferApplication(id);
+        return Result.success();
     }
 
 }

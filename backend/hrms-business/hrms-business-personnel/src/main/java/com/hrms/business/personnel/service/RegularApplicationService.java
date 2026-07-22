@@ -30,4 +30,11 @@ public interface RegularApplicationService {
      */
     RegularApplicationApplyVO applyRegular(Long employeeId, RegularApplicationApplyRequestDTO requestDTO);
 
+    /**
+     * 快速审批通过转正申请。
+     *
+     * @param id 转正申请ID
+     */
+    void quickApproveRegularApplication(Long id);
+
 }

@@ -57,4 +57,17 @@ public class RegularApplicationController {
         return Result.success(regularApplicationService.applyRegular(employeeId, requestDTO));
     }
 
+    /**
+     * 快速审批通过转正申请。
+     *
+     * @param id 转正申请ID
+     * @return 操作结果
+     */
+    @PostMapping("/{id}/quick-approve")
+    @Operation(summary = "快速审批通过转正申请")
+    public Result<Void> quickApproveRegularApplication(@PathVariable Long id) {
+        regularApplicationService.quickApproveRegularApplication(id);
+        return Result.success();
+    }
+
 }

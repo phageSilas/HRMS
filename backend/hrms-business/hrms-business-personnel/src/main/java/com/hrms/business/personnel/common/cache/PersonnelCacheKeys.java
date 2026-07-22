@@ -37,6 +37,15 @@ public final class PersonnelCacheKeys {
     }
 
     /**
+     * 入职统计缓存 Key 模式
+     *
+     * @return Redis Key 模式
+     */
+    public static String entryStatsPattern() {
+        return PREFIX + "entry:stats:*";
+    }
+
+    /**
      * 入职提交防重 token Key
      *
      * @param id 入职申请ID
@@ -78,6 +87,15 @@ public final class PersonnelCacheKeys {
         return PREFIX + "leave:page:" + queryHash;
     }
 
+    /**
+     * 离职分页缓存 Key 模式
+     *
+     * @return Redis Key 模式
+     */
+    public static String leavePagePattern() {
+        return PREFIX + "leave:page:*";
+    }
+
     // ==================== 转正 ====================
 
     /**
@@ -100,6 +118,15 @@ public final class PersonnelCacheKeys {
         return PREFIX + "regular:page:" + queryHash;
     }
 
+    /**
+     * 转正分页缓存 Key 模式
+     *
+     * @return Redis Key 模式
+     */
+    public static String regularPagePattern() {
+        return PREFIX + "regular:page:*";
+    }
+
     // ==================== 调岗 ====================
 
     /**
@@ -120,5 +147,14 @@ public final class PersonnelCacheKeys {
      */
     public static String transferPage(String queryHash) {
         return PREFIX + "transfer:page:" + queryHash;
+    }
+
+    /**
+     * 调岗分页缓存 Key 模式
+     *
+     * @return Redis Key 模式
+     */
+    public static String transferPagePattern() {
+        return PREFIX + "transfer:page:*";
     }
 }

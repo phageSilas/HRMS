@@ -166,8 +166,8 @@ export interface AttendanceGroup {
   id: number;
   groupName: string;
   shiftType: 'FIXED' | 'FLEXIBLE' | 'SCHEDULED' | string;
-  workStartTime?: string | number[];
-  workEndTime?: string | number[];
+  workStartTime?: string | number[] | number;
+  workEndTime?: string | number[] | number;
   lateThresholdMinutes?: number;
   earlyLeaveThresholdMinutes?: number;
   monthlyCorrectionLimit?: number;
@@ -216,6 +216,7 @@ export interface AttendanceGroupRecordQuery extends Partial<PageQuery> {
   keyword?: string;
   departmentId?: number;
   status?: string;
+  refreshCache?: boolean;
 }
 
 export interface AttendanceGroupRecord {
@@ -239,6 +240,7 @@ export interface AttendanceLeaveManageQuery extends Partial<PageQuery> {
   deptId?: number;
   keyword?: string;
   approvalStatus?: number;
+  refreshCache?: boolean;
 }
 
 export interface AttendanceLeaveManageItem {
@@ -299,16 +301,22 @@ export async function getAttendanceGroups(params: AttendanceGroupQuery) {
 
 /** 获取指定年份的考勤日历配置，供考勤组页面的工作日设置面板使用。 */
 export async function getAttendanceCalendarConfig(year: number) {
-  return request.get<AttendanceCalendarConfig>('/api/v1/attendance/calendar-config', {
-    params: { year },
-  });
+  return request.get<AttendanceCalendarConfig>(
+    '/api/v1/attendance/calendar-config',
+    {
+      params: { year },
+    },
+  );
 }
 
 /** 更新考勤日历配置，供考勤组页面保存节假日和工作日规则时调用。 */
 export async function updateAttendanceCalendarConfig(
   data: AttendanceCalendarConfig,
 ) {
-  return request.put<AttendanceCalendarConfig>('/api/v1/attendance/calendar-config', data);
+  return request.put<AttendanceCalendarConfig>(
+    '/api/v1/attendance/calendar-config',
+    data,
+  );
 }
 
 /**
@@ -453,6 +461,7 @@ export async function getAttendanceStatistics(params: {
 export async function getAttendanceSummaryDashboard(params: {
   yearMonth: string;
   deptId?: number;
+  refreshCache?: boolean;
 }) {
   return request.get<AttendanceSummaryDashboard>(
     '/api/v1/attendance/summary/dashboard',
@@ -460,4 +469,11 @@ export async function getAttendanceSummaryDashboard(params: {
       params,
     },
   );
+}
+
+/**
+ * 快速审批通过请假申请
+ */
+export async function quickApproveAttendanceLeave(id: number) {
+  return request.post<void>(`/api/v1/attendance/leaves/${id}/quick-approve`);
 }
