@@ -16,6 +16,8 @@ import com.hrms.business.salary.mapper.SalaryEmployeeSnapshotMapper;
 import com.hrms.business.salary.mq.event.SalaryBatchCalculateMessage;
 import com.hrms.business.salary.mq.event.SalaryBatchCalculateTriggerTypeEnum;
 import com.hrms.business.salary.mq.producer.SalaryBatchCalculateProducer;
+import com.hrms.business.salary.vo.SalaryBatchPreviewVO;
+import com.hrms.business.salary.vo.SalaryBatchTrendVO;
 import com.hrms.business.salary.vo.SalaryBatchVO;
 import com.hrms.common.security.SecurityContextHolder;
 import com.hrms.common.security.UserContext;
@@ -45,6 +47,7 @@ import java.util.concurrent.TimeUnit;
 
 import static com.hrms.business.salary.cache.SalaryCacheKeys.calculateLock;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -321,6 +324,106 @@ class SalaryCalculateServiceImplTest {
      * @return 薪资批次实体
      * 本方法使用的工具类: BigDecimal(JDK)
      */
+    /**
+     * 未传部门筛选时应保持原有按批次汇总口径。
+     */
+    @Test
+    void shouldKeepExistingTrendAggregationWhenDeptIdsMissing() {
+        SalaryBatchEntity febBatch = buildTrendBatch(2001L, "2026-02", "ALL", new BigDecimal("1200"), new BigDecimal("980"), 3);
+        SalaryBatchEntity marBatch = buildTrendBatch(2002L, "2026-03", "ALL", new BigDecimal("1600"), new BigDecimal("1300"), 4);
+        when(salaryBatchMapper.selectList(any())).thenReturn(List.of(febBatch, marBatch));
+
+        List<SalaryBatchTrendVO> result = salaryCalculateService.listBatchTrend("2026-03", 2, "ALL", null, null);
+
+        assertEquals(2, result.size());
+        assertEquals("2026-02", result.get(0).getMonth());
+        assertBigDecimalEquals("1200", result.get(0).getGrossSalary());
+        assertBigDecimalEquals("980", result.get(0).getNetSalary());
+        assertEquals(3, result.get(0).getEmployeeCount());
+        assertEquals("2026-03", result.get(1).getMonth());
+        assertBigDecimalEquals("1600", result.get(1).getGrossSalary());
+        assertBigDecimalEquals("1300", result.get(1).getNetSalary());
+        assertEquals(4, result.get(1).getEmployeeCount());
+    }
+
+    /**
+     * 传多个部门时应按部门命中的明细重新聚合趋势。
+     */
+    @Test
+    void shouldAggregateTrendBySelectedDepartments() {
+        SalaryBatchEntity febBatch = buildTrendBatch(2101L, "2026-02", "ALL", BigDecimal.ZERO, BigDecimal.ZERO, 0);
+        SalaryBatchEntity marBatch = buildTrendBatch(2102L, "2026-03", "ALL", BigDecimal.ZERO, BigDecimal.ZERO, 0);
+        when(salaryBatchMapper.selectList(any())).thenReturn(List.of(febBatch, marBatch));
+        when(salaryBatchItemMapper.selectList(any())).thenReturn(List.of(
+                buildTrendItem(2101L, 3001L, new BigDecimal("100"), new BigDecimal("90")),
+                buildTrendItem(2101L, 3002L, new BigDecimal("200"), new BigDecimal("180")),
+                buildTrendItem(2102L, 3003L, new BigDecimal("300"), new BigDecimal("260")),
+                buildTrendItem(2102L, 3004L, new BigDecimal("400"), new BigDecimal("350"))
+        ));
+        when(employeeSnapshotMapper.selectList(any())).thenReturn(List.of(
+                buildEmployee(3001L, 1L),
+                buildEmployee(3002L, 2L),
+                buildEmployee(3003L, 1L),
+                buildEmployee(3004L, 3L)
+        ));
+
+        List<SalaryBatchTrendVO> result = salaryCalculateService.listBatchTrend("2026-03", 2, "ALL", null, List.of(1L, 3L));
+
+        assertEquals(2, result.size());
+        assertBigDecimalEquals("100", result.get(0).getGrossSalary());
+        assertBigDecimalEquals("90", result.get(0).getNetSalary());
+        assertEquals(1, result.get(0).getEmployeeCount());
+        assertBigDecimalEquals("700", result.get(1).getGrossSalary());
+        assertBigDecimalEquals("610", result.get(1).getNetSalary());
+        assertEquals(2, result.get(1).getEmployeeCount());
+    }
+
+    /**
+     * 某个月没有命中部门明细时应返回零值趋势点。
+     */
+    @Test
+    void shouldReturnZeroTrendPointWhenDepartmentHasNoItemsForMonth() {
+        SalaryBatchEntity febBatch = buildTrendBatch(2201L, "2026-02", "ALL", BigDecimal.ZERO, BigDecimal.ZERO, 0);
+        SalaryBatchEntity marBatch = buildTrendBatch(2202L, "2026-03", "ALL", BigDecimal.ZERO, BigDecimal.ZERO, 0);
+        when(salaryBatchMapper.selectList(any())).thenReturn(List.of(febBatch, marBatch));
+        when(salaryBatchItemMapper.selectList(any())).thenReturn(List.of(
+                buildTrendItem(2201L, 3101L, new BigDecimal("180"), new BigDecimal("160")),
+                buildTrendItem(2202L, 3102L, new BigDecimal("260"), new BigDecimal("230"))
+        ));
+        when(employeeSnapshotMapper.selectList(any())).thenReturn(List.of(
+                buildEmployee(3101L, 2L),
+                buildEmployee(3102L, 1L)
+        ));
+
+        List<SalaryBatchTrendVO> result = salaryCalculateService.listBatchTrend("2026-03", 2, "ALL", null, List.of(2L));
+
+        assertEquals(2, result.size());
+        assertBigDecimalEquals("180", result.get(0).getGrossSalary());
+        assertBigDecimalEquals("160", result.get(0).getNetSalary());
+        assertEquals(1, result.get(0).getEmployeeCount());
+        assertBigDecimalEquals("0", result.get(1).getGrossSalary());
+        assertBigDecimalEquals("0", result.get(1).getNetSalary());
+        assertEquals(0, result.get(1).getEmployeeCount());
+    }
+
+    /**
+     * 预览明细应返回部门ID，供前端按部门过滤图表。
+     */
+    @Test
+    void shouldIncludeDeptIdInPreviewItems() {
+        SalaryBatchEntity batch = buildPendingReviewBatch(2301L);
+        SalaryBatchItemEntity item = buildTrendItem(2301L, 3201L, new BigDecimal("500"), new BigDecimal("420"));
+        when(salaryBatchMapper.selectById(2301L)).thenReturn(batch);
+        when(salaryBatchItemMapper.selectList(any())).thenReturn(List.of(item));
+        when(employeeSnapshotMapper.selectList(any())).thenReturn(List.of(buildEmployee(3201L, 88L)));
+
+        SalaryBatchPreviewVO result = salaryCalculateService.previewBatch(2301L);
+
+        assertNotNull(result);
+        assertEquals(1, result.getItems().size());
+        assertEquals(88L, result.getItems().get(0).getDeptId());
+    }
+
     private SalaryBatchEntity buildPendingReviewBatch(Long batchId) {
         SalaryBatchEntity batch = new SalaryBatchEntity();
         batch.setId(batchId);
@@ -355,6 +458,66 @@ class SalaryCalculateServiceImplTest {
      * @param employeeId 员工ID
      * @return 员工快照
      */
+    /**
+     * 构造趋势图测试批次数据。
+     *
+     * @param batchId 批次ID
+     * @param salaryMonth 薪资月份
+     * @param scopeType 范围类型
+     * @param grossSalary 应发总额
+     * @param netSalary 实发总额
+     * @param employeeCount 员工人数
+     * @return 薪资批次实体
+     */
+    private SalaryBatchEntity buildTrendBatch(Long batchId, String salaryMonth, String scopeType,
+                                              BigDecimal grossSalary, BigDecimal netSalary, Integer employeeCount) {
+        SalaryBatchEntity batch = buildPendingReviewBatch(batchId);
+        batch.setSalaryMonth(salaryMonth);
+        batch.setScopeType(scopeType);
+        batch.setTotalGrossSalary(grossSalary);
+        batch.setTotalNetSalary(netSalary);
+        batch.setTotalCount(employeeCount);
+        return batch;
+    }
+
+    /**
+     * 构造趋势图测试明细数据。
+     *
+     * @param batchId 批次ID
+     * @param employeeId 员工ID
+     * @param grossSalary 应发总额
+     * @param netSalary 实发总额
+     * @return 薪资明细实体
+     */
+    private SalaryBatchItemEntity buildTrendItem(Long batchId, Long employeeId, BigDecimal grossSalary, BigDecimal netSalary) {
+        SalaryBatchItemEntity item = new SalaryBatchItemEntity();
+        item.setBatchId(batchId);
+        item.setEmployeeId(employeeId);
+        item.setGrossSalary(grossSalary);
+        item.setNetSalary(netSalary);
+        item.setBaseSalary(grossSalary);
+        item.setDeductionTotal(grossSalary.subtract(netSalary));
+        return item;
+    }
+
+    /**
+     * 构造带部门信息的测试员工快照。
+     *
+     * @param employeeId 员工ID
+     * @param deptId 部门ID
+     * @return 员工快照
+     */
+    private SalaryEmployeeSnapshotEntity buildEmployee(Long employeeId, Long deptId) {
+        SalaryEmployeeSnapshotEntity employee = new SalaryEmployeeSnapshotEntity();
+        employee.setId(employeeId);
+        employee.setEmployeeNo("EMP" + employeeId);
+        employee.setEmployeeName("娴嬭瘯鍛樺伐");
+        employee.setDeptId(deptId);
+        employee.setEmploymentStatus(1);
+        employee.setIsDeleted(0);
+        return employee;
+    }
+
     private SalaryEmployeeSnapshotEntity buildEmployee(Long employeeId) {
         SalaryEmployeeSnapshotEntity employee = new SalaryEmployeeSnapshotEntity();
         employee.setId(employeeId);
@@ -384,6 +547,17 @@ class SalaryCalculateServiceImplTest {
                 .absenceDays(new BigDecimal("22"))
                 .overtimeHours(BigDecimal.ZERO)
                 .build();
+    }
+
+    /**
+     * 按金额数值比较 BigDecimal，忽略小数位差异。
+     *
+     * @param expected 期望值
+     * @param actual 实际值
+     */
+    private void assertBigDecimalEquals(String expected, BigDecimal actual) {
+        assertNotNull(actual);
+        assertEquals(0, new BigDecimal(expected).compareTo(actual));
     }
 
     /**

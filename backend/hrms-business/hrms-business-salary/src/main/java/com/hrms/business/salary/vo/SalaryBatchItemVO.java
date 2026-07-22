@@ -16,16 +16,39 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 public class SalaryBatchItemVO {
 
+    /**
+     * 明细ID
+     */
     private Long id;
 
+    /**
+     * 批次ID
+     */
     private Long batchId;
 
+    /**
+     * 员工ID
+     */
     private Long employeeId;
 
+    /**
+     * 部门ID
+     */
+    private Long deptId;
+
+    /**
+     * 员工编号
+     */
     private String employeeNo;
 
+    /**
+     * 员工姓名
+     */
     private String employeeName;
 
+    /**
+     * 部门名称
+     */
     private String deptName;
 
     private BigDecimal baseSalary;
