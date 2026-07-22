@@ -56,6 +56,11 @@ import static com.hrms.business.personnel.common.enums.ServiceErrorCodeEnum.*;
 @RequiredArgsConstructor
 public class EntryApplicationServiceImpl implements EntryApplicationService {
 
+    /**
+     * personnel 分页缓存 TTL（分钟）
+     */
+    private static final long PAGE_CACHE_TTL_MINUTES = 2L;
+
     private final EntryApplicationMapper entryApplicationMapper;
 
     private final ApprovalEngine approvalEngine;
@@ -79,6 +84,11 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
     public PageResult<EntryApplicationPageVO> pageEntryApplications(EntryApplicationQueryDTO queryDTO) {
         int pageNum = normalizePageNum(queryDTO.getPageNum());
         int pageSize = normalizePageSize(queryDTO.getPageSize());
+        String cacheKey = PersonnelCacheKeys.entryPage(buildEntryPageCacheKey(queryDTO, pageNum, pageSize));
+        PageResult<EntryApplicationPageVO> cachedResult = getCachedEntryPage(cacheKey);
+        if (cachedResult != null) {
+            return cachedResult;
+        }
         PersonnelDisplayEnricher displayEnricher = new PersonnelDisplayEnricher(deptService, postService);
         Page<EntryApplicationEntity> page = entryApplicationMapper.selectPage(
                 Page.of(pageNum, pageSize),
@@ -88,7 +98,9 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
                 .map(EntryApplicationConvert::toPageVO)// 转换为页面VO
                 .map(displayEnricher::enrichEntryApplication)// 填充关联信息
                 .toList();
-        return PageResult.of(records, page.getTotal(), pageNum, pageSize);
+        PageResult<EntryApplicationPageVO> pageResult = PageResult.of(records, page.getTotal(), pageNum, pageSize);
+        cacheEntryPage(cacheKey, pageResult);
+        return pageResult;
     }
 
     /**
@@ -156,6 +168,8 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         EntryApplicationEntity entity = EntryApplicationConvert.toEntity(requestDTO);
         entity.setApprovalStatus(ApplicationStatusEnum.DRAFT.getCode());
         entryApplicationMapper.insert(entity);
+        evictEntryPageCache();
+        evictEntryStatsCache();
         // 转换为页面VO并填充关联信息
         return new PersonnelDisplayEnricher(deptService, postService)
                 .enrichEntryApplication(EntryApplicationConvert.toPageVO(entity));
@@ -186,6 +200,9 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         // 填充更新内容
         EntryApplicationConvert.fillEntity(entity, requestDTO);
         entryApplicationMapper.updateById(entity);
+        evictEntryDetailCache(id);
+        evictEntryPageCache();
+        evictEntryStatsCache();
         return enrichEntryApplication(entity);
     }
 
@@ -222,6 +239,9 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         entity.setApprovalInstanceId(approvalInstanceId);
         entity.setApprovalStatus(ApplicationStatusEnum.APPROVING.getCode());
         entryApplicationMapper.updateById(entity);
+        evictEntryDetailCache(id);
+        evictEntryPageCache();
+        evictEntryStatsCache();
 
         return EntryApplicationSubmitVO.builder()
                 .approvalInstanceId(approvalInstanceId)
@@ -275,6 +295,8 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
             entity.setApprovalStatus(ApplicationStatusEnum.ENTERED.getCode());
             entryApplicationMapper.updateById(entity);
             evictEntryDetailCache(id);
+            evictEntryPageCache();
+            evictEntryStatsCache();
 
             return buildConfirmVO(employeeId, employeeNo);
         } finally {
@@ -295,6 +317,8 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         EntryApplicationEntity entity = getRequiredEntryApplication(id);
         assertApproving(entity.getApprovalStatus(), "当前入职申请不是审批中状态，无法快速审批");
         processQuickApprove(entity.getApprovalInstanceId(), "当前入职申请无有效审批实例，无法快速审批");
+        evictEntryPageCache();
+        evictEntryStatsCache();
     }
 
     /**
@@ -575,5 +599,103 @@ public class EntryApplicationServiceImpl implements EntryApplicationService {
         if (redisTemplate != null) {
             redisTemplate.delete(PersonnelCacheKeys.entryDetail(id));
         }
+    }
+
+    /**
+     * 读取入职分页缓存。
+     *
+     * @param cacheKey 缓存 Key
+     * @return 分页结果
+     */
+    @SuppressWarnings("unchecked")
+    private PageResult<EntryApplicationPageVO> getCachedEntryPage(String cacheKey) {
+        StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+        if (redisTemplate == null) {
+            return null;
+        }
+        String cached = redisTemplate.opsForValue().get(cacheKey);
+        if (StrUtil.isBlank(cached)) {
+            return null;
+        }
+        return JSONUtil.toBean(cached, PageResult.class);
+    }
+
+    /**
+     * 写入入职分页缓存。
+     *
+     * @param cacheKey 缓存 Key
+     * @param pageResult 分页结果
+     */
+    private void cacheEntryPage(String cacheKey, PageResult<EntryApplicationPageVO> pageResult) {
+        StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+        if (redisTemplate == null) {
+            return;
+        }
+        redisTemplate.opsForValue().set(cacheKey, JSONUtil.toJsonStr(pageResult), PAGE_CACHE_TTL_MINUTES, TimeUnit.MINUTES);
+    }
+
+    /**
+     * 清理入职分页缓存。
+     */
+    private void evictEntryPageCache() {
+        StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+        if (redisTemplate == null) {
+            return;
+        }
+        Set<String> keys = redisTemplate.keys(PersonnelCacheKeys.entryPagePattern());
+        if (keys == null || keys.isEmpty()) {
+            return;
+        }
+        redisTemplate.delete(keys);
+    }
+
+    /**
+     * 清理入职统计缓存。
+     */
+    private void evictEntryStatsCache() {
+        StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+        if (redisTemplate == null) {
+            return;
+        }
+        Set<String> keys = redisTemplate.keys(PersonnelCacheKeys.entryStatsPattern());
+        if (keys == null || keys.isEmpty()) {
+            return;
+        }
+        redisTemplate.delete(keys);
+    }
+
+    /**
+     * 构建稳定的入职分页缓存 Key。
+     *
+     * @param queryDTO 查询参数
+     * @param pageNum 页码
+     * @param pageSize 页大小
+     * @return 规范化缓存 Key
+     */
+    private String buildEntryPageCacheKey(EntryApplicationQueryDTO queryDTO, int pageNum, int pageSize) {
+        return StrUtil.join("|",
+                normalizeCacheValue(queryDTO.getKeyword()),
+                normalizeCacheValue(queryDTO.getApprovalStatus()),
+                normalizeCacheValue(queryDTO.getDepartmentId()),
+                normalizeCacheValue(queryDTO.getDateStart()),
+                normalizeCacheValue(queryDTO.getDateEnd()),
+                pageNum,
+                pageSize);
+    }
+
+    /**
+     * 规范化缓存维度，避免等价查询生成不同 Key。
+     *
+     * @param value 原始值
+     * @return 规范化后的值
+     */
+    private String normalizeCacheValue(Object value) {
+        if (value == null) {
+            return "null";
+        }
+        if (value instanceof String str) {
+            return StrUtil.isBlank(str) ? "blank" : str.trim();
+        }
+        return String.valueOf(value);
     }
 }
