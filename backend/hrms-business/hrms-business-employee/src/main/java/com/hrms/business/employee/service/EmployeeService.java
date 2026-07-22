@@ -1,5 +1,6 @@
 package com.hrms.business.employee.service;
 
+import com.hrms.business.employee.dto.EmployeeApprovalSyncUpdateDTO;
 import com.hrms.business.employee.dto.EmployeeCreateDTO;
 import com.hrms.business.employee.dto.EmployeeQueryDTO;
 import com.hrms.business.employee.dto.EmployeeUpdateDTO;
@@ -112,5 +113,17 @@ public interface EmployeeService {
      * @return true-有员工，false-无员工
      */
     boolean hasEmployeesInPost(Long postId);
+
+    /**
+     * 审批通过后同步员工档案字段。
+     * <p>
+     * 供人员模块等跨模块审批回调使用，仅按参数中非空字段执行更新。
+     * </p>
+     *
+     * @param employeeId 员工ID
+     * @param updateDTO 审批联动更新参数
+     * @return 更新后的员工实体
+     */
+    EmployeeEntity syncEmployeeForApproval(Long employeeId, EmployeeApprovalSyncUpdateDTO updateDTO);
 
 }

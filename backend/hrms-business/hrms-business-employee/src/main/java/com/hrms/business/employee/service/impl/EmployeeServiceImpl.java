@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hrms.business.employee.convert.EmployeeConvert;
+import com.hrms.business.employee.dto.EmployeeApprovalSyncUpdateDTO;
 import com.hrms.business.employee.dto.EmployeeCreateDTO;
 import com.hrms.business.employee.dto.EmployeeQueryDTO;
 import com.hrms.business.employee.dto.EmployeeUpdateDTO;
@@ -45,6 +46,7 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import java.util.concurrent.CompletableFuture;
@@ -1292,5 +1294,88 @@ public class EmployeeServiceImpl implements EmployeeService {
         sb.append(queryDTO.getPageSize() != null ? queryDTO.getPageSize() : 20).append("|");
         sb.append(pageNum);
         return sb.toString();
+    }
+
+    /**
+     * 审批通过后同步员工档案字段。
+     *
+     * @param employeeId 员工ID
+     * @param updateDTO 审批联动更新参数
+     * @return 更新后的员工实体
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public EmployeeEntity syncEmployeeForApproval(Long employeeId, EmployeeApprovalSyncUpdateDTO updateDTO) {
+        EmployeeEntity entity = employeeMapper.selectById(employeeId);
+        if (entity == null) {
+            throw new GlobalException(ErrorCode.EMPLOYEE_NOT_FOUND);
+        }
+        if (updateDTO == null) {
+            return entity;
+        }
+
+        Long oldDeptId = entity.getDeptId();
+        Long newDeptId = updateDTO.getDeptId();
+
+        // 审批联动前先校验基础组织信息，避免写入不存在的部门或职位。
+        if (newDeptId != null && !Objects.equals(newDeptId, entity.getDeptId())) {
+            validateDeptExists(newDeptId);
+        }
+        if (updateDTO.getPostId() != null && !Objects.equals(updateDTO.getPostId(), entity.getPostId())) {
+            validatePostExists(updateDTO.getPostId());
+        }
+
+        // 仅更新审批联动涉及的字段，避免覆盖员工档案其他业务字段。
+        LambdaUpdateWrapper<EmployeeEntity> updateWrapper = Wrappers.lambdaUpdate(EmployeeEntity.class)
+                .eq(EmployeeEntity::getId, employeeId);
+        boolean hasUpdate = false;
+
+        if (updateDTO.getEmploymentStatus() != null
+                && !Objects.equals(updateDTO.getEmploymentStatus(), entity.getEmploymentStatus())) {
+            updateWrapper.set(EmployeeEntity::getEmploymentStatus, updateDTO.getEmploymentStatus());
+            entity.setEmploymentStatus(updateDTO.getEmploymentStatus());
+            hasUpdate = true;
+        }
+        if (newDeptId != null && !Objects.equals(newDeptId, entity.getDeptId())) {
+            updateWrapper.set(EmployeeEntity::getDeptId, newDeptId);
+            entity.setDeptId(newDeptId);
+            hasUpdate = true;
+        }
+        if (updateDTO.getPostId() != null && !Objects.equals(updateDTO.getPostId(), entity.getPostId())) {
+            updateWrapper.set(EmployeeEntity::getPostId, updateDTO.getPostId());
+            entity.setPostId(updateDTO.getPostId());
+            hasUpdate = true;
+        }
+        if (updateDTO.getJobLevel() != null && !Objects.equals(updateDTO.getJobLevel(), entity.getJobLevel())) {
+            updateWrapper.set(EmployeeEntity::getJobLevel, updateDTO.getJobLevel());
+            entity.setJobLevel(updateDTO.getJobLevel());
+            hasUpdate = true;
+        }
+        if (updateDTO.getLeaderId() != null && !Objects.equals(updateDTO.getLeaderId(), entity.getLeaderId())) {
+            updateWrapper.set(EmployeeEntity::getLeaderId, updateDTO.getLeaderId());
+            entity.setLeaderId(updateDTO.getLeaderId());
+            hasUpdate = true;
+        }
+
+        if (!hasUpdate) {
+            return entity;
+        }
+
+        employeeMapper.update(null, updateWrapper);
+
+        // 部门变更后同步用户归属部门，保证账号侧组织信息与员工档案一致。
+        if (newDeptId != null && !Objects.equals(newDeptId, oldDeptId)) {
+            syncUserDeptId(entity.getUserId(), newDeptId);
+            // 发布员工变更事件，触发部门人数刷新等现有联动逻辑。
+            eventPublisher.publishEvent(new EmployeeChangeEvent(
+                    this,
+                    EmployeeChangeEvent.ChangeType.UPDATE,
+                    employeeId,
+                    oldDeptId,
+                    newDeptId
+            ));
+        }
+
+        return entity;
     }
 }
