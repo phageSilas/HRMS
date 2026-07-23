@@ -4,14 +4,19 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.hrms.business.approval.service.event.ApprovalCompletedEvent;
 import com.hrms.business.mycenter.entity.AttendanceCorrectionEntity;
 import com.hrms.business.mycenter.entity.AttendanceOvertimeEntity;
+import com.hrms.business.mycenter.entity.LeaveBalanceEntity;
 import com.hrms.business.mycenter.entity.LeaveRequestEntity;
 import com.hrms.business.mycenter.entity.MyAttendanceRecordEntity;
 import com.hrms.business.mycenter.mapper.AttendanceOvertimeMapper;
 import com.hrms.business.mycenter.mapper.MyAttendanceRecordMapper;
 import com.hrms.business.mycenter.mapper.MyCenterAttendanceCorrectionMapper;
+import com.hrms.business.mycenter.mapper.MyCenterLeaveBalanceMapper;
 import com.hrms.business.mycenter.mapper.MyCenterLeaveRequestMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +38,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ApprovalEventListener {
 
     private final MyCenterLeaveRequestMapper leaveRequestMapper;
+    private final MyCenterLeaveBalanceMapper leaveBalanceMapper;
     private final MyCenterAttendanceCorrectionMapper correctionMapper;
     private final AttendanceOvertimeMapper overtimeMapper;
     private final MyAttendanceRecordMapper attendanceRecordMapper;
@@ -52,7 +58,7 @@ public class ApprovalEventListener {
     }
 
     /**
-     * 处理请假审批完成：根据审批结果更新请假记录状态
+     * 处理请假审批完成：根据审批结果更新请假记录状态，通过时扣减假期余额
      */
     private void handleLeaveCompleted(ApprovalCompletedEvent event) {
         LeaveRequestEntity leave = leaveRequestMapper.selectById(event.getBizId());
@@ -66,7 +72,50 @@ public class ApprovalEventListener {
         leave.setApprovalStatus(newStatus);
         leaveRequestMapper.updateById(leave);
 
+        // 审批通过 → 扣减假期余额
+        if (newStatus == 2) {
+            deductLeaveBalance(leave);
+        }
+
         log.info("请假审批完成: leaveId={}, newStatus={}", event.getBizId(), newStatus);
+    }
+
+    /**
+     * 扣减假期余额：根据请假天数更新对应假期类型的已用/剩余天数
+     */
+    private void deductLeaveBalance(LeaveRequestEntity leave) {
+        int year = leave.getStartTime() != null
+                ? leave.getStartTime().getYear()
+                : LocalDate.now().getYear();
+        BigDecimal days = leave.getTotalDays();
+        if (days == null || days.compareTo(BigDecimal.ZERO) <= 0) {
+            log.warn("请假天数为0或空，跳过扣减: leaveId={}", leave.getId());
+            return;
+        }
+
+        LeaveBalanceEntity balance = leaveBalanceMapper.selectOne(
+                new LambdaQueryWrapper<LeaveBalanceEntity>()
+                        .eq(LeaveBalanceEntity::getEmployeeId, leave.getEmployeeId())
+                        .eq(LeaveBalanceEntity::getLeaveType, leave.getLeaveType())
+                        .eq(LeaveBalanceEntity::getBalanceYear, year)
+                        .eq(LeaveBalanceEntity::getStatus, 1)
+        );
+
+        if (balance == null) {
+            log.warn("假期余额记录不存在，无法扣减: employeeId={}, leaveType={}, year={}",
+                    leave.getEmployeeId(), leave.getLeaveType(), year);
+            return;
+        }
+
+        balance.setUsedDays(balance.getUsedDays().add(days));
+        balance.setRemainingDays(balance.getTotalDays()
+                .subtract(balance.getUsedDays())
+                .subtract(balance.getFrozenDays()));
+        leaveBalanceMapper.updateById(balance);
+
+        log.info("假期余额扣减成功: employeeId={}, leaveType={}, used={}, remaining={}",
+                leave.getEmployeeId(), leave.getLeaveType(),
+                balance.getUsedDays(), balance.getRemainingDays());
     }
 
     /**

@@ -45,7 +45,20 @@ const OvertimeModal: React.FC<Props> = ({ open, onClose, onSubmit }) => {
           rules={[{ required: true, message: '请选择加班日期' }]}
         >
           <DatePicker showTime style={{ width: '100%' }}
-            disabledDate={(current) => current && !current.isSame(dayjs(), 'day')}
+            disabledDate={(current) => current && current.isBefore(dayjs(), 'day')}
+            disabledTime={(current) => {
+              if (current && current.isSame(dayjs(), 'day')) {
+                const now = dayjs();
+                return {
+                  disabledHours: () => Array.from({ length: now.hour() }, (_, i) => i),
+                  disabledMinutes: (hour: number) =>
+                    hour === now.hour()
+                      ? Array.from({ length: now.minute() }, (_, i) => i)
+                      : [],
+                };
+              }
+              return {};
+            }}
           />
         </Form.Item>
         <Form.Item

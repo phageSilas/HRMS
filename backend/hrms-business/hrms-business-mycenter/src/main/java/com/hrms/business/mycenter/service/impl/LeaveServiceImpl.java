@@ -68,8 +68,11 @@ public class LeaveServiceImpl implements LeaveService {
             leaveRequestMapper.updateById(entity);
 
             log.info("请假提交并发起审批成功: leaveId={}, instanceId={}", entity.getId(), instanceId);
-        } catch (Exception e) {
+        } catch (GlobalException e) {
             log.error("请假发起审批失败: leaveId={}, error={}", entity.getId(), e.getMessage(), e);
+            if (ErrorCode.NO_SUPERIOR_APPROVER.getCode() == e.getErrorCode().getCode()) {
+                throw new GlobalException(ErrorCode.NO_SUPERIOR_APPROVER, "提交失败：没有上级审批人");
+            }
             throw new GlobalException(ErrorCode.BUSINESS_ERROR, "发起审批失败：" + e.getMessage());
         }
     }

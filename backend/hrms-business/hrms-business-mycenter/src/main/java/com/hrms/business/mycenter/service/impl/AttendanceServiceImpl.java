@@ -340,8 +340,11 @@ public class AttendanceServiceImpl implements AttendanceService {
             correctionMapper.updateById(entity);
 
             log.info("补卡提交并发起审批成功: correctionId={}, instanceId={}", entity.getId(), instanceId);
-        } catch (Exception e) {
+        } catch (GlobalException e) {
             log.error("补卡发起审批失败: correctionId={}, error={}", entity.getId(), e.getMessage(), e);
+            if (ErrorCode.NO_SUPERIOR_APPROVER.getCode() == e.getErrorCode().getCode()) {
+                throw new GlobalException(ErrorCode.NO_SUPERIOR_APPROVER, "提交失败：没有上级审批人");
+            }
             throw new GlobalException(ErrorCode.BUSINESS_ERROR, "发起审批失败：" + e.getMessage());
         }
     }
@@ -436,8 +439,11 @@ public class AttendanceServiceImpl implements AttendanceService {
             overtimeMapper.updateById(entity);
 
             log.info("加班提交并发起审批成功: overtimeId={}, instanceId={}", entity.getId(), instanceId);
-        } catch (Exception e) {
+        } catch (GlobalException e) {
             log.error("加班发起审批失败: overtimeId={}, error={}", entity.getId(), e.getMessage(), e);
+            if (ErrorCode.NO_SUPERIOR_APPROVER.getCode() == e.getErrorCode().getCode()) {
+                throw new GlobalException(ErrorCode.NO_SUPERIOR_APPROVER, "提交失败：没有上级审批人");
+            }
             throw new GlobalException(ErrorCode.BUSINESS_ERROR, "发起审批失败：" + e.getMessage());
         }
     }

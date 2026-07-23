@@ -44,6 +44,7 @@ const STATUS_TAG_MAP: Record<number, { text: string; color: string }> = {
   1: { text: '审批中', color: 'gold' },
   2: { text: '已批准', color: 'green' },
   3: { text: '已拒绝', color: 'red' },
+  4: { text: '已取消', color: 'default' },
 };
 
 /** 余额卡片配置 */
@@ -88,7 +89,7 @@ const BalanceCard: React.FC<{
   const total = balance[config.totalField] ?? 0;
   const used = balance[config.usedField] ?? 0;
   const remaining = balance[config.remainingField] ?? 0;
-  const percent = total > 0 ? Math.round((used / total) * 100) : 0;
+  const percent = total > 0 ? Math.round((remaining / total) * 100) : 0;
 
   return (
     <Col xs={24} sm={8}>
@@ -114,7 +115,7 @@ const BalanceCard: React.FC<{
               size="small"
             />
             <Text type="secondary" style={{ fontSize: 12 }}>
-              已用 {used} 天 / 共 {total} 天
+              剩余 {remaining} 天 / 共 {total} 天
             </Text>
           </div>
         )}
@@ -243,9 +244,9 @@ const ProfileLeavePage: React.FC = () => {
     loadData();
   }, [loadData]);
 
-  // 过滤：不展示草稿(0)和已撤回(4)
+  // 过滤：不展示草稿(0)，已取消(4)仍展示
   const displayLeaves = useMemo(() => {
-    return leaveList.filter((l) => l.approvalStatus !== 0 && l.approvalStatus !== 4);
+    return leaveList.filter((l) => l.approvalStatus !== 0);
   }, [leaveList]);
 
   // ============ 提交请假 ============
@@ -257,8 +258,8 @@ const ProfileLeavePage: React.FC = () => {
 
     const payload: LeaveRequestDTO = {
       leaveType: values.leaveType,
-      startTime: startTime.format('YYYY-MM-DDTHH:mm:ss'),
-      endTime: endTime.format('YYYY-MM-DDTHH:mm:ss'),
+      startTime: startTime.format('YYYY-MM-DD HH:mm:ss'),
+      endTime: endTime.format('YYYY-MM-DD HH:mm:ss'),
       totalDays,
       leaveReason: values.leaveReason,
     };

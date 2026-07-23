@@ -292,7 +292,7 @@ public class ApprovalEngineImpl implements ApprovalEngine {
 
             // 非可选节点且无审批人 → 不可跳过，抛异常
             if (approverUserId == null) {
-                if ("PARENT_DEPT_HEAD".equals(node.getApproverType())) {
+                if ("PARENT_DEPT_HEAD".equals(node.getApproverType()) || "DEPT_HEAD".equals(node.getApproverType())) {
                     throw new GlobalException(ErrorCode.NO_SUPERIOR_APPROVER, "无上级审批人");
                 }
                 throw new GlobalException(ErrorCode.BUSINESS_ERROR,
@@ -302,6 +302,14 @@ public class ApprovalEngineImpl implements ApprovalEngine {
             // 检查委托关系
             Long delegateUserId = approverResolver.checkDelegation(approverUserId);
             boolean isDelegate = delegateUserId != null;
+
+            // 自审批拦截：审批人与申请人相同时，视为无上级审批人
+            if (!isDelegate && instance.getApplicantUserId() != null
+                    && approverUserId.equals(instance.getApplicantUserId())) {
+                log.warn("自审批拦截: node={}, 审批人={} 与申请人相同",
+                        node.getNodeName(), approverUserId);
+                throw new GlobalException(ErrorCode.NO_SUPERIOR_APPROVER, "提交失败：没有上级审批人");
+            }
 
             // 创建任务
             ApprovalTaskEntity task = new ApprovalTaskEntity();
