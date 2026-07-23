@@ -59,24 +59,11 @@ body {
 }
 
 .hrms-art-logo {
-  position: relative;
   width: 34px;
-  height: 28px;
+  height: 34px;
   flex: 0 0 34px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #43d6ff 0%, #4b7cff 62%, #8d7cff 100%);
-  clip-path: polygon(8% 86%, 40% 14%, 62% 58%, 76% 30%, 96% 86%);
-}
-
-.hrms-art-logo::after {
-  position: absolute;
-  top: 2px;
-  right: -1px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #42d6ff;
-  content: '';
+  /* 使用新的 HRMS 团队图标，统一侧边栏品牌标识 */
+  background: url('/hrms-logo.png') center / contain no-repeat;
 }
 
 .hrms-art-brand-text {
