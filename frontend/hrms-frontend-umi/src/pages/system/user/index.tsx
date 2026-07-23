@@ -34,6 +34,7 @@ import {
   resetPassword,
   getRoleList,
 } from '@/services/system';
+import dayjs from 'dayjs';
 import type { UserItem, RoleItem } from '@/types/system';
 
 const { Text } = Typography;
@@ -139,9 +140,23 @@ const UserPage: React.FC = () => {
     {
       title: '最后登录',
       dataIndex: 'lastLoginTime',
-      width: 140,
+      width: 160,
       search: false,
-      render: (text) => (text ? (text as string) : '-'),
+      render: (text) => {
+        if (!text) return '-';
+
+        // 处理数组格式的时间 [year, month, day, hour, minute, second]
+        if (Array.isArray(text)) {
+          const [year, month, day, hour = 0, minute = 0, second = 0] = text;
+          if (!year || !month || !day) return '-';
+          const date = dayjs(new Date(year, month - 1, day, hour, minute, second));
+          return date.isValid() ? date.format('YYYY-MM-DD HH:mm:ss') : '-';
+        }
+
+        // 处理字符串格式的时间
+        const date = dayjs(text as string);
+        return date.isValid() ? date.format('YYYY-MM-DD HH:mm:ss') : '-';
+      },
     },
     // {
     //   title: '创建时间',
@@ -476,11 +491,41 @@ const UserPage: React.FC = () => {
             </p>
             <p>
               <strong>最后登录时间：</strong>
-              {currentUser.lastLoginTime || '-'}
+              {(() => {
+                if (!currentUser.lastLoginTime) return '-';
+                const text = currentUser.lastLoginTime;
+
+                // 处理数组格式
+                if (Array.isArray(text)) {
+                  const [year, month, day, hour = 0, minute = 0, second = 0] = text;
+                  if (!year || !month || !day) return '-';
+                  const date = dayjs(new Date(year, month - 1, day, hour, minute, second));
+                  return date.isValid() ? date.format('YYYY-MM-DD HH:mm:ss') : '-';
+                }
+
+                // 处理字符串格式
+                const date = dayjs(text);
+                return date.isValid() ? date.format('YYYY-MM-DD HH:mm:ss') : '-';
+              })()}
             </p>
             <p>
               <strong>创建时间：</strong>
-              {currentUser.createTime || '-'}
+              {(() => {
+                if (!currentUser.createTime) return '-';
+                const text = currentUser.createTime;
+
+                // 处理数组格式
+                if (Array.isArray(text)) {
+                  const [year, month, day, hour = 0, minute = 0, second = 0] = text;
+                  if (!year || !month || !day) return '-';
+                  const date = dayjs(new Date(year, month - 1, day, hour, minute, second));
+                  return date.isValid() ? date.format('YYYY-MM-DD HH:mm:ss') : '-';
+                }
+
+                // 处理字符串格式
+                const date = dayjs(text);
+                return date.isValid() ? date.format('YYYY-MM-DD HH:mm:ss') : '-';
+              })()}
             </p>
           </div>
         )}

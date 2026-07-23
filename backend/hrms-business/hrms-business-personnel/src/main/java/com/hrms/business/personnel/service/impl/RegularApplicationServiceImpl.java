@@ -56,6 +56,11 @@ import static com.hrms.business.personnel.common.enums.ServiceErrorCodeEnum.*;
 @RequiredArgsConstructor
 public class RegularApplicationServiceImpl implements RegularApplicationService {
 
+    /**
+     * personnel 分页缓存 TTL（分钟）
+     */
+    private static final long PAGE_CACHE_TTL_MINUTES = 2L;
+
 
     // 转正申请Mapper
     private final RegularApplicationMapper regularApplicationMapper;
@@ -80,18 +85,17 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
      */
     @Override
     public PageResult<RegularApplicationPageVO> pageRegularApplications(RegularApplicationQueryDTO queryDTO) {
-        String queryHash = queryDTO.hashCode() + "_" + queryDTO.getPageNum() + "_" + queryDTO.getPageSize();
-        StringRedisTemplate rt = redisTemplateProvider.getIfAvailable();
-        if (rt != null) {
-            String cached = rt.opsForValue().get(PersonnelCacheKeys.regularPage(queryHash));
-            if (StrUtil.isNotBlank(cached)) {
-                return JSONUtil.toBean(cached, PageResult.class);
-            }
+        int pageNum = normalizePageNum(queryDTO.getPageNum());
+        int pageSize = normalizePageSize(queryDTO.getPageSize());
+        String cacheKey = PersonnelCacheKeys.regularPage(buildRegularPageCacheKey(queryDTO, pageNum, pageSize));
+        PageResult<RegularApplicationPageVO> cachedResult = getCachedRegularPage(cacheKey);
+        if (cachedResult != null) {
+            return cachedResult;
         }
         if (TAB_EVALUATED.equals(queryDTO.getTab())) {
-            return pageEvaluatedRegularApplications(queryDTO);
+            return pageEvaluatedRegularApplications(queryDTO, cacheKey, pageNum, pageSize);
         }
-        return pagePendingRegularEmployees(queryDTO);
+        return pagePendingRegularEmployees(queryDTO, cacheKey, pageNum, pageSize);
     }
 
     /**
@@ -148,6 +152,7 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
         );
         entity.setApprovalInstanceId(approvalInstanceId);
         regularApplicationMapper.updateById(entity);
+        evictRegularPageCache();
 
         return RegularApplicationApplyVO.builder()
                 .success(Boolean.TRUE)
@@ -166,6 +171,7 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
         RegularApplicationEntity entity = getRequiredRegularApplication(id);
         assertApproving(entity.getApprovalStatus(), "当前转正申请不是审批中状态，无法快速审批");
         processQuickApprove(entity.getApprovalInstanceId(), "当前转正申请无有效审批实例，无法快速审批");
+        evictRegularPageCache();
     }
 
     /**
@@ -283,17 +289,10 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
      * @return 转正申请分页结果
      * 本方法使用的工具类: StrUtil(hutool)
      */
-    private PageResult<RegularApplicationPageVO> pagePendingRegularEmployees(RegularApplicationQueryDTO queryDTO) {
-        String queryHash = queryDTO.hashCode() + "_" + queryDTO.getPageNum() + "_" + queryDTO.getPageSize();
-        StringRedisTemplate rt = redisTemplateProvider.getIfAvailable();
-        if (rt != null) {
-            String cached = rt.opsForValue().get(PersonnelCacheKeys.regularPage(queryHash));
-            if (StrUtil.isNotBlank(cached)) {
-                return JSONUtil.toBean(cached, PageResult.class);
-            }
-        }
-        int pageNum = normalizePageNum(queryDTO.getPageNum());
-        int pageSize = normalizePageSize(queryDTO.getPageSize());
+    private PageResult<RegularApplicationPageVO> pagePendingRegularEmployees(RegularApplicationQueryDTO queryDTO,
+                                                                              String cacheKey,
+                                                                              int pageNum,
+                                                                              int pageSize) {
         PersonnelDisplayEnricher displayEnricher = new PersonnelDisplayEnricher(deptService, postService);
         List<EmployeeSnapshotEntity> matchedEmployees = employeeSnapshotMapper.selectList(
                 buildPendingEmployeeWrapper(queryDTO)
@@ -315,7 +314,9 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
                         processingApplicationMap.get(employee.getId())))
                 .map(displayEnricher::enrichRegularApplication)
                 .toList();
-        return PageResult.of(records, eligibleEmployees.size(), pageNum, pageSize);
+        PageResult<RegularApplicationPageVO> pageResult = PageResult.of(records, eligibleEmployees.size(), pageNum, pageSize);
+        cacheRegularPage(cacheKey, pageResult);
+        return pageResult;
     }
 
     /**
@@ -325,23 +326,18 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
      * @return 转正申请分页结果
      * 本方法使用的工具类: CollUtil(hutool)
      */
-    private PageResult<RegularApplicationPageVO> pageEvaluatedRegularApplications(RegularApplicationQueryDTO queryDTO) {
-        String queryHash = queryDTO.hashCode() + "_" + queryDTO.getPageNum() + "_" + queryDTO.getPageSize();
-        StringRedisTemplate rt = redisTemplateProvider.getIfAvailable();
-        if (rt != null) {
-            String cached = rt.opsForValue().get(PersonnelCacheKeys.regularPage(queryHash));
-            if (StrUtil.isNotBlank(cached)) {
-                return JSONUtil.toBean(cached, PageResult.class);
-            }
-        }
-        int pageNum = normalizePageNum(queryDTO.getPageNum());
-        int pageSize = normalizePageSize(queryDTO.getPageSize());
+    private PageResult<RegularApplicationPageVO> pageEvaluatedRegularApplications(RegularApplicationQueryDTO queryDTO,
+                                                                                   String cacheKey,
+                                                                                   int pageNum,
+                                                                                   int pageSize) {
         // 筛选待转正员工ID列表
         List<Long> targetEmployeeIds = listFilteredEmployeeIds(queryDTO, false);
         // 如果查询条件不为空且待转正员工ID列表为空，则返回空结果
         if ((queryDTO.getDepartmentId() != null || StrUtil.isNotBlank(queryDTO.getKeyword()))
                 && CollUtil.isEmpty(targetEmployeeIds)) {
-            return PageResult.of(Collections.emptyList(), 0, pageNum, pageSize);
+            PageResult<RegularApplicationPageVO> emptyResult = PageResult.of(Collections.emptyList(), 0, pageNum, pageSize);
+            cacheRegularPage(cacheKey, emptyResult);
+            return emptyResult;
         }
         // 类型转换,VO增强
         PersonnelDisplayEnricher displayEnricher = new PersonnelDisplayEnricher(deptService, postService);
@@ -361,7 +357,9 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
                 .map(entity -> RegularApplicationConvert.toEvaluatedVO(entity, employeeSnapshotMap.get(entity.getEmployeeId())))
                 .map(displayEnricher::enrichRegularApplication)
                 .toList();
-        return PageResult.of(records, page.getTotal(), pageNum, pageSize);
+        PageResult<RegularApplicationPageVO> pageResult = PageResult.of(records, page.getTotal(), pageNum, pageSize);
+        cacheRegularPage(cacheKey, pageResult);
+        return pageResult;
     }
 
     /**
@@ -559,6 +557,87 @@ public class RegularApplicationServiceImpl implements RegularApplicationService 
             return DEFAULT_PAGE_SIZE;
         }
         return Math.min(pageSize, MAX_PAGE_SIZE);
+    }
+
+    /**
+     * 读取转正分页缓存。
+     *
+     * @param cacheKey 缓存 Key
+     * @return 分页结果
+     */
+    @SuppressWarnings("unchecked")
+    private PageResult<RegularApplicationPageVO> getCachedRegularPage(String cacheKey) {
+        StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+        if (redisTemplate == null) {
+            return null;
+        }
+        String cached = redisTemplate.opsForValue().get(cacheKey);
+        if (StrUtil.isBlank(cached)) {
+            return null;
+        }
+        return JSONUtil.toBean(cached, PageResult.class);
+    }
+
+    /**
+     * 写入转正分页缓存。
+     *
+     * @param cacheKey 缓存 Key
+     * @param pageResult 分页结果
+     */
+    private void cacheRegularPage(String cacheKey, PageResult<RegularApplicationPageVO> pageResult) {
+        StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+        if (redisTemplate == null) {
+            return;
+        }
+        redisTemplate.opsForValue().set(cacheKey, JSONUtil.toJsonStr(pageResult), PAGE_CACHE_TTL_MINUTES, TimeUnit.MINUTES);
+    }
+
+    /**
+     * 清理转正分页缓存。
+     */
+    private void evictRegularPageCache() {
+        StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
+        if (redisTemplate == null) {
+            return;
+        }
+        Set<String> keys = redisTemplate.keys(PersonnelCacheKeys.regularPagePattern());
+        if (keys == null || keys.isEmpty()) {
+            return;
+        }
+        redisTemplate.delete(keys);
+    }
+
+    /**
+     * 构建稳定的转正分页缓存 Key。
+     *
+     * @param queryDTO 查询参数
+     * @param pageNum 页码
+     * @param pageSize 页大小
+     * @return 规范化缓存 Key
+     */
+    private String buildRegularPageCacheKey(RegularApplicationQueryDTO queryDTO, int pageNum, int pageSize) {
+        return StrUtil.join("|",
+                normalizeCacheValue(queryDTO.getTab()),
+                normalizeCacheValue(queryDTO.getKeyword()),
+                normalizeCacheValue(queryDTO.getDepartmentId()),
+                pageNum,
+                pageSize);
+    }
+
+    /**
+     * 规范化缓存维度，避免等价查询生成不同 Key。
+     *
+     * @param value 原始值
+     * @return 规范化后的值
+     */
+    private String normalizeCacheValue(Object value) {
+        if (value == null) {
+            return "null";
+        }
+        if (value instanceof String str) {
+            return StrUtil.isBlank(str) ? "blank" : str.trim();
+        }
+        return String.valueOf(value);
     }
 
 }

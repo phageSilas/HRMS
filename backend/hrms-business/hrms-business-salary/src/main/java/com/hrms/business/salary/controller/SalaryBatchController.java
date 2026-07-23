@@ -77,8 +77,9 @@ public class SalaryBatchController {
     public Result<List<SalaryBatchTrendVO>> listBatchTrend(@RequestParam String anchorMonth,
                                                            @RequestParam(required = false) Integer months,
                                                            @RequestParam(required = false) String scopeType,
-                                                           @RequestParam(required = false) String scopeValue) {
-        return Result.success(salaryCalculateService.listBatchTrend(anchorMonth, months, scopeType, scopeValue));
+                                                           @RequestParam(required = false) String scopeValue,
+                                                           @RequestParam(required = false) List<Long> deptIds) {
+        return Result.success(salaryCalculateService.listBatchTrend(anchorMonth, months, scopeType, scopeValue, deptIds));
     }
 
     /**

@@ -60,8 +60,10 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -118,6 +120,7 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
         // 校验薪资批次是否重复
         String scopeType = normalizeScopeType(requestDTO.getScopeType());
         String scopeValue = normalizeScopeValue(scopeType, requestDTO);
+        validateBatchMonthAndAttendanceForCreate(month, scopeType, scopeValue);
 
         Long duplicateCount = salaryBatchMapper.selectCount(Wrappers.lambdaQuery(SalaryBatchEntity.class)
                 .eq(SalaryBatchEntity::getSalaryMonth, month)// 薪资月份
@@ -187,7 +190,8 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
      * 本方法使用的工具类: YearMonth(JDK),Wrappers(MyBatis-Plus),Collectors(JDK)
      */
     @Override
-    public List<SalaryBatchTrendVO> listBatchTrend(String anchorMonth, Integer months, String scopeType, String scopeValue) {
+    public List<SalaryBatchTrendVO> listBatchTrend(String anchorMonth, Integer months, String scopeType, String scopeValue,
+                                                   List<Long> deptIds) {
         assertSalaryManagerRole();
         //YearMonth.parse() 方法解析字符串为标准格式（如 "2024-01"）
         YearMonth endMonth = YearMonth.parse(normalizeMonth(anchorMonth));
@@ -206,6 +210,10 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
                 .eq(SalaryBatchEntity::getScopeType, normalizedScopeType)
                 .eq(StrUtil.isNotBlank(normalizedScopeValue), SalaryBatchEntity::getScopeValue, normalizedScopeValue)
                 .notIn(SalaryBatchEntity::getBatchStatus, SalaryBatchStatusEnum.ARCHIVED.name()));
+        List<Long> normalizedDeptIds = normalizeDeptIds(deptIds);
+        if (CollUtil.isNotEmpty(normalizedDeptIds)) {
+            return buildDepartmentBatchTrends(startMonth, monthCount, batches, normalizedDeptIds);
+        }
         Map<String, List<SalaryBatchEntity>> monthBatchMap = batches.stream()
                 .collect(Collectors.groupingBy(SalaryBatchEntity::getSalaryMonth)// 按月份分组
                 );
@@ -302,6 +310,7 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
                     .contains(batch.getBatchStatus())) {
                 throw new GlobalException(ErrorCode.BUSINESS_ERROR, "鍙湁鑽夌鎴栧緟澶嶆牳鎵规鍙互閲嶆柊璁＄畻");
             }
+            validateBatchMonthAndAttendanceForExecution(batch);
             StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
             String lockKey = SalaryCacheKeys.calculateLock(batchId);
             Boolean locked = redisTemplate == null ? Boolean.TRUE :
@@ -325,6 +334,7 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
                 .contains(batch.getBatchStatus())) {
             throw new GlobalException(ErrorCode.BUSINESS_ERROR, "只有草稿或待复核批次可以重新计算");
         }
+        validateBatchMonthAndAttendanceForExecution(batch);
         StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
         // 尝试获取锁
         String lockKey = SalaryCacheKeys.calculateLock(batchId);
@@ -362,6 +372,7 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
             if (!SalaryBatchStatusEnum.canCalculate(batch.getBatchStatus())) {
                 throw new GlobalException(ErrorCode.BUSINESS_ERROR, "褰撳墠鎵规鐘舵€佷笉鍙牳绠?");
             }
+            validateBatchMonthAndAttendanceForExecution(batch);
             StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
             String lockKey = SalaryCacheKeys.calculateLock(batchId);
             Boolean locked = redisTemplate == null ? Boolean.TRUE :
@@ -382,6 +393,7 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
         if (!SalaryBatchStatusEnum.canCalculate(batch.getBatchStatus())) {
             throw new GlobalException(ErrorCode.BUSINESS_ERROR, "当前批次状态不可核算");
         }
+        validateBatchMonthAndAttendanceForExecution(batch);
         StringRedisTemplate redisTemplate = redisTemplateProvider.getIfAvailable();
         String lockKey = SalaryCacheKeys.calculateLock(batchId);
         Boolean locked = redisTemplate == null ? Boolean.TRUE :
@@ -659,6 +671,7 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
         SalaryBatchEntity batch = getBatchRequired(batchId);
 
         batch.setBatchStatus(SalaryBatchStatusEnum.CALCULATING.name());// 设置批次状态为核算中
+        validateBatchMonthAndAttendanceForExecution(batch);
         salaryBatchMapper.updateById(batch);
         salaryBatchItemMapper.delete(Wrappers.lambdaQuery(SalaryBatchItemEntity.class)
                 .eq(SalaryBatchItemEntity::getBatchId, batchId));
@@ -666,8 +679,10 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
         Map<Long, EmployeeSalaryProfileEntity> profileMap = listProfiles(employees.stream()
                 .map(SalaryEmployeeSnapshotEntity::getId).toList());
         // 获取考勤数据
-        Map<Long, AttendancePayrollSourceVO> attendanceMap = getAttendanceSummary(
-                batch.getSalaryMonth(), employees.stream().map(SalaryEmployeeSnapshotEntity::getId).toList());
+        Map<Long, AttendancePayrollSourceVO> attendanceMap = loadAttendanceSummaryRequired(
+                batch.getSalaryMonth(),
+                employees,
+                "当前月份暂无考勤数据，无法执行薪资核算");
         int yellow = 0;
         int red = 0;
         int block = 0;
@@ -894,13 +909,23 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
      * @return 员工列表
      */
     private List<SalaryEmployeeSnapshotEntity> resolveBatchEmployees(SalaryBatchEntity batch) {
+        return resolveBatchEmployees(batch.getScopeType(), batch.getScopeValue());
+    }
+
+    /**
+     * 按核算范围解析参与批次的员工。
+     * @param scopeType 核算范围类型
+     * @param scopeValue 核算范围值
+     * @return 员工列表
+     */
+    private List<SalaryEmployeeSnapshotEntity> resolveBatchEmployees(String scopeType, String scopeValue) {
         LambdaQueryWrapper<SalaryEmployeeSnapshotEntity> wrapper = Wrappers.lambdaQuery(SalaryEmployeeSnapshotEntity.class)
                 .eq(SalaryEmployeeSnapshotEntity::getIsDeleted, 0)
                 .ne(SalaryEmployeeSnapshotEntity::getEmploymentStatus, 4);
-        if ("DEPT".equals(batch.getScopeType()) && StrUtil.isNotBlank(batch.getScopeValue())) {
-            wrapper.in(SalaryEmployeeSnapshotEntity::getDeptId, parseLongList(batch.getScopeValue()));
-        } else if ("EMPLOYEE".equals(batch.getScopeType()) && StrUtil.isNotBlank(batch.getScopeValue())) {
-            wrapper.in(SalaryEmployeeSnapshotEntity::getId, parseLongList(batch.getScopeValue()));
+        if ("DEPT".equals(scopeType) && StrUtil.isNotBlank(scopeValue)) {
+            wrapper.in(SalaryEmployeeSnapshotEntity::getDeptId, parseLongList(scopeValue));
+        } else if ("EMPLOYEE".equals(scopeType) && StrUtil.isNotBlank(scopeValue)) {
+            wrapper.in(SalaryEmployeeSnapshotEntity::getId, parseLongList(scopeValue));
         }
         return employeeSnapshotMapper.selectList(wrapper);
     }
@@ -958,6 +983,100 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
      * @param employeeIds 员工ID列表
      * @return 考勤月度汇总
      */
+    /**
+     * 创建批次前校验月份和考勤数据是否满足核算条件。
+     * @param month 薪资月份
+     * @param scopeType 核算范围类型
+     * @param scopeValue 核算范围值
+     */
+    private void validateBatchMonthAndAttendanceForCreate(String month, String scopeType, String scopeValue) {
+        validateSalaryMonthNotFuture(month, "未来月份不允许创建薪资核算批次");
+        List<SalaryEmployeeSnapshotEntity> employees = resolveBatchEmployees(scopeType, scopeValue);
+        loadAttendanceSummaryRequired(month, employees, "当前月份暂无考勤数据，无法创建薪资核算批次");
+    }
+
+    /**
+     * 计算或重算前校验批次月份和考勤数据是否满足核算条件。
+     * @param batch 薪资批次
+     */
+    private void validateBatchMonthAndAttendanceForExecution(SalaryBatchEntity batch) {
+        validateSalaryMonthNotFuture(batch.getSalaryMonth(), "未来月份不允许执行薪资核算");
+        List<SalaryEmployeeSnapshotEntity> employees = resolveBatchEmployees(batch);
+        loadAttendanceSummaryRequired(batch.getSalaryMonth(), employees, "当前月份暂无考勤数据，无法执行薪资核算");
+    }
+
+    /**
+     * 校验薪资月份不能晚于当前月份。
+     * @param month 薪资月份
+     * @param errorMessage 错误提示
+     */
+    private void validateSalaryMonthNotFuture(String month, String errorMessage) {
+        if (YearMonth.parse(month).isAfter(YearMonth.from(LocalDate.now()))) {
+            throw new GlobalException(ErrorCode.BUSINESS_ERROR, errorMessage);
+        }
+    }
+
+    /**
+     * 读取并校验薪资核算所需的考勤汇总。
+     * @param month 薪资月份
+     * @param employees 参与核算员工
+     * @param errorMessage 错误提示
+     * @return 考勤汇总映射
+     */
+    private Map<Long, AttendancePayrollSourceVO> loadAttendanceSummaryRequired(String month,
+                                                                               List<SalaryEmployeeSnapshotEntity> employees,
+                                                                               String errorMessage) {
+        if (CollUtil.isEmpty(employees)) {
+            throw new GlobalException(ErrorCode.BUSINESS_ERROR, errorMessage);
+        }
+        Map<Long, AttendancePayrollSourceVO> attendanceMap = getAttendanceSummary(
+                month,
+                employees.stream().map(SalaryEmployeeSnapshotEntity::getId).toList());
+        if (!hasAnyAttendanceData(attendanceMap.values())) {
+            throw new GlobalException(ErrorCode.BUSINESS_ERROR, errorMessage);
+        }
+        return attendanceMap;
+    }
+
+    /**
+     * 判断该月是否存在真实考勤来源。
+     * @param summaries 考勤汇总集合
+     * @return 是否存在真实考勤数据
+     */
+    private boolean hasAnyAttendanceData(Collection<AttendancePayrollSourceVO> summaries) {
+        return summaries.stream()
+                .filter(Objects::nonNull)
+                .anyMatch(this::hasAttendanceActivity);
+    }
+
+    /**
+     * 判断单个员工的考勤汇总是否包含真实业务数据。
+     * @param summary 员工考勤汇总
+     * @return 是否存在真实考勤数据
+     */
+    private boolean hasAttendanceActivity(AttendancePayrollSourceVO summary) {
+        if (summary.getActualAttendDays() != null && summary.getActualAttendDays() > 0) {
+            return true;
+        }
+        if (summary.getLateCount() != null && summary.getLateCount() > 0) {
+            return true;
+        }
+        if (summary.getEarlyLeaveCount() != null && summary.getEarlyLeaveCount() > 0) {
+            return true;
+        }
+        if (money(summary.getLeaveDays()).compareTo(ZERO) > 0) {
+            return true;
+        }
+        if (money(summary.getOvertimeHours()).compareTo(ZERO) > 0) {
+            return true;
+        }
+        Integer shouldAttendDays = summary.getShouldAttendDays();
+        BigDecimal absenceDays = money(summary.getAbsenceDays());
+        return shouldAttendDays != null
+                && shouldAttendDays > 0
+                && absenceDays.compareTo(BigDecimal.valueOf(shouldAttendDays)) < 0;
+    }
+
     //private List<AttendancePayrollSourceVO> tempGetAttendanceMonthlySummary(String month, List<Long> employeeIds) {
     //    // 本方法未来替换为 hrms-business-attendance 的 AttendanceService#getPayrollSource(month, employeeIds)。
     //    return employeeIds.stream().map(employeeId -> AttendancePayrollSourceVO.builder()
@@ -1068,6 +1187,7 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
                 .employeeId(item.getEmployeeId())
                 .employeeNo(employee == null ? null : employee.getEmployeeNo())
                 .employeeName(employee == null ? null : employee.getEmployeeName())
+                .deptId(employee == null ? null : employee.getDeptId())
                 .deptName(resolveDeptName(employee))
                 .baseSalary(item.getBaseSalary())
                 .allowance(item.getAllowance())
@@ -1212,6 +1332,116 @@ public class SalaryCalculateServiceImpl implements SalaryCalculateService {
      * @return 规范化后的薪资月份
      * 本方法使用的工具类: StrUtil(hutool),YearMonth(JDK)
      */
+    /**
+     * 按部门重新聚合月度薪资趋势。
+     *
+     * @param startMonth 起始月份
+     * @param monthCount 月份数量
+     * @param batches 批次列表
+     * @param deptIds 部门ID列表
+     * @return 月度趋势列表
+     */
+    private List<SalaryBatchTrendVO> buildDepartmentBatchTrends(YearMonth startMonth, int monthCount,
+                                                                List<SalaryBatchEntity> batches, List<Long> deptIds) {
+        if (CollUtil.isEmpty(batches)) {
+            return buildEmptyBatchTrends(startMonth, monthCount);
+        }
+        List<Long> batchIds = batches.stream()
+                .map(SalaryBatchEntity::getId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (CollUtil.isEmpty(batchIds)) {
+            return buildEmptyBatchTrends(startMonth, monthCount);
+        }
+        // 查询批次明细并结合当前员工部门过滤，重新汇总图表所需的金额和人数。
+        List<SalaryBatchItemEntity> items = salaryBatchItemMapper.selectList(Wrappers.lambdaQuery(SalaryBatchItemEntity.class)
+                .in(SalaryBatchItemEntity::getBatchId, batchIds));
+        if (CollUtil.isEmpty(items)) {
+            return buildEmptyBatchTrends(startMonth, monthCount);
+        }
+        Map<Long, SalaryEmployeeSnapshotEntity> employeeMap = listEmployeesByIds(items.stream()
+                .map(SalaryBatchItemEntity::getEmployeeId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList());
+        Map<Long, String> batchMonthMap = batches.stream()
+                .filter(batch -> batch.getId() != null)
+                .collect(Collectors.toMap(SalaryBatchEntity::getId, SalaryBatchEntity::getSalaryMonth, (a, b) -> a));
+        Map<String, TrendSummary> monthSummaryMap = new java.util.HashMap<>();
+        for (SalaryBatchItemEntity item : items) {
+            SalaryEmployeeSnapshotEntity employee = employeeMap.get(item.getEmployeeId());
+            if (employee == null || employee.getDeptId() == null || !deptIds.contains(employee.getDeptId())) {
+                continue;
+            }
+            String salaryMonth = batchMonthMap.get(item.getBatchId());
+            if (StrUtil.isBlank(salaryMonth)) {
+                continue;
+            }
+            TrendSummary summary = monthSummaryMap.computeIfAbsent(salaryMonth, key -> new TrendSummary());
+            summary.grossSalary = summary.grossSalary.add(money(item.getGrossSalary()));
+            summary.netSalary = summary.netSalary.add(money(item.getNetSalary()));
+            summary.employeeCount += 1;
+        }
+        List<SalaryBatchTrendVO> trends = new ArrayList<>();
+        for (int index = 0; index < monthCount; index++) {
+            String trendMonth = startMonth.plusMonths(index).toString();
+            TrendSummary summary = monthSummaryMap.get(trendMonth);
+            trends.add(SalaryBatchTrendVO.builder()
+                    .month(trendMonth)
+                    .grossSalary(summary == null ? ZERO : money(summary.grossSalary))
+                    .netSalary(summary == null ? ZERO : money(summary.netSalary))
+                    .employeeCount(summary == null ? 0 : summary.employeeCount)
+                    .build());
+        }
+        return trends;
+    }
+
+    /**
+     * 构建横轴完整的空趋势数据。
+     *
+     * @param startMonth 起始月份
+     * @param monthCount 月份数量
+     * @return 空趋势列表
+     */
+    private List<SalaryBatchTrendVO> buildEmptyBatchTrends(YearMonth startMonth, int monthCount) {
+        List<SalaryBatchTrendVO> trends = new ArrayList<>();
+        for (int index = 0; index < monthCount; index++) {
+            trends.add(SalaryBatchTrendVO.builder()
+                    .month(startMonth.plusMonths(index).toString())
+                    .grossSalary(ZERO)
+                    .netSalary(ZERO)
+                    .employeeCount(0)
+                    .build());
+        }
+        return trends;
+    }
+
+    /**
+     * 规范化部门ID列表，去重并移除空值。
+     *
+     * @param deptIds 部门ID列表
+     * @return 规范化后的部门ID列表
+     */
+    private List<Long> normalizeDeptIds(List<Long> deptIds) {
+        if (CollUtil.isEmpty(deptIds)) {
+            return List.of();
+        }
+        return deptIds.stream().filter(Objects::nonNull).distinct().toList();
+    }
+
+    /**
+     * 月度趋势聚合摘要。
+     */
+    private static class TrendSummary {
+
+        private BigDecimal grossSalary = ZERO;
+
+        private BigDecimal netSalary = ZERO;
+
+        private int employeeCount;
+    }
+
     private String normalizeMonth(String month) {
         if (StrUtil.isBlank(month)) {
             throw new GlobalException(ErrorCode.PARAM_REQUIRED, "薪资月份不能为空");

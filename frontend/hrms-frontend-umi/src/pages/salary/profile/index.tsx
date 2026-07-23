@@ -9,7 +9,7 @@ import {
   type SalaryEmployeeProfileUpdateRequest,
   type SalaryTemplate,
 } from '@/services/salary';
-import { EditOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons';
+import { EditOutlined } from '@ant-design/icons';
 import { PageContainer } from '@ant-design/pro-components';
 import {
   Alert,
@@ -28,7 +28,6 @@ import {
   Space,
   Spin,
   Table,
-  Tag,
   Typography,
   message,
 } from 'antd';
@@ -43,6 +42,7 @@ type SearchFormValues = {
   employeeId?: number;
   deptId?: number;
   employeeOptionId?: number;
+  employeeNoOptionId?: number;
 };
 
 type ProfileEditFormValues = {
@@ -61,9 +61,17 @@ type ProfileEditFormValues = {
 type EmployeeOption = {
   label: string;
   value: number;
+  employeeName?: string;
+  employeeNo?: string;
+  deptName?: string;
 };
 
-/** 格式化金额显示。 */
+/**
+ * 格式化金额显示。
+ *
+ * @param value 金额值
+ * @returns 格式化后的金额文本
+ */
 function formatMoney(value?: number | string | null) {
   if (value == null || value === '') {
     return '--';
@@ -72,13 +80,19 @@ function formatMoney(value?: number | string | null) {
   if (!Number.isFinite(amount)) {
     return String(value);
   }
-  return `¥${amount.toLocaleString('zh-CN', {
+  return `￥${amount.toLocaleString('zh-CN', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   })}`;
 }
 
-/** 渲染金额差异文本，内部调用 `formatMoney` 统一格式。 */
+/**
+ * 渲染金额前后差异文本。
+ *
+ * @param before 调整前金额
+ * @param after 调整后金额
+ * @returns 差异文本
+ */
 function renderDiff(before?: number | string, after?: number | string) {
   const beforeText = formatMoney(before);
   const afterText = formatMoney(after);
@@ -88,7 +102,13 @@ function renderDiff(before?: number | string, after?: number | string) {
   return `${beforeText} -> ${afterText}`;
 }
 
-/** 渲染文本差异，供薪资档案变更历史展示前后值。 */
+/**
+ * 渲染普通文本前后差异。
+ *
+ * @param before 调整前文本
+ * @param after 调整后文本
+ * @returns 差异文本
+ */
 function renderTextDiff(before?: string | number, after?: string | number) {
   const beforeText = before == null || before === '' ? '--' : String(before);
   const afterText = after == null || after === '' ? '--' : String(after);
@@ -99,17 +119,22 @@ function renderTextDiff(before?: string | number, after?: string | number) {
 }
 
 /**
- * 薪资档案页面组件。
- * 负责员工薪资档案查询、详情展示和档案调整保存。
+ * 薪资档案页面。
+ *
+ * 负责员工薪资档案查询、详情展示和档案维护。
+ *
+ * @returns 页面组件
  */
 const SalaryProfilePage: React.FC = () => {
   const [searchForm] = Form.useForm<SearchFormValues>();
   const [editForm] = Form.useForm<ProfileEditFormValues>();
   const [departments, setDepartments] = useState<DeptListItem[]>([]);
   const [templates, setTemplates] = useState<SalaryTemplate[]>([]);
-  const [employeeOptions, setEmployeeOptions] = useState<EmployeeOption[]>([]);
+  const [employeeNameOptions, setEmployeeNameOptions] = useState<EmployeeOption[]>([]);
+  const [employeeNoOptions, setEmployeeNoOptions] = useState<EmployeeOption[]>([]);
   const [departmentLoading, setDepartmentLoading] = useState(false);
-  const [employeeLoading, setEmployeeLoading] = useState(false);
+  const [employeeNameLoading, setEmployeeNameLoading] = useState(false);
+  const [employeeNoLoading, setEmployeeNoLoading] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
   const [templateLoading, setTemplateLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -118,7 +143,62 @@ const SalaryProfilePage: React.FC = () => {
   const [profileDetail, setProfileDetail] = useState<SalaryEmployeeProfileDetail>();
   const [templateOutOfScope, setTemplateOutOfScope] = useState(false);
 
-  /** 加载部门列表，供员工筛选和部门选择使用。 */
+  /**
+   * 构建姓名搜索候选项。
+   *
+   * @param employee 员工简要信息
+   * @returns 候选项
+   */
+  const buildEmployeeNameOption = (
+    employee: Pick<EmployeeBrief, 'id' | 'employeeName' | 'employeeNo' | 'deptName'>,
+  ): EmployeeOption => ({
+    label: `${employee.employeeName}（${employee.employeeNo}）`,
+    value: employee.id,
+    employeeName: employee.employeeName,
+    employeeNo: employee.employeeNo,
+    deptName: employee.deptName,
+  });
+
+  /**
+   * 构建工号搜索候选项。
+   *
+   * @param employee 员工简要信息
+   * @returns 候选项
+   */
+  const buildEmployeeNoOption = (
+    employee: Pick<EmployeeBrief, 'id' | 'employeeName' | 'employeeNo' | 'deptName'>,
+  ): EmployeeOption => ({
+    label: `${employee.employeeNo} - ${employee.employeeName}${employee.deptName ? `（${employee.deptName}）` : ''}`,
+    value: employee.id,
+    employeeName: employee.employeeName,
+    employeeNo: employee.employeeNo,
+    deptName: employee.deptName,
+  });
+
+  /**
+   * 将当前员工同步到姓名和工号候选中，避免命中后下拉值丢失。
+   *
+   * @param employee 当前员工信息
+   */
+  const syncSelectedEmployeeOptions = (
+    employee: Pick<EmployeeBrief, 'id' | 'employeeName' | 'employeeNo' | 'deptName'>,
+  ) => {
+    setEmployeeNameOptions([buildEmployeeNameOption(employee)]);
+    setEmployeeNoOptions([buildEmployeeNoOption(employee)]);
+  };
+
+  /**
+   * 清空当前员工上下文，避免残留旧详情。
+   */
+  const clearSelectedEmployeeContext = () => {
+    setTemplateOutOfScope(false);
+    setProfileDetail(undefined);
+    setSelectedEmployeeId(undefined);
+  };
+
+  /**
+   * 加载部门列表，供部门筛选使用。
+   */
   const loadDepartments = async () => {
     setDepartmentLoading(true);
     try {
@@ -132,7 +212,12 @@ const SalaryProfilePage: React.FC = () => {
     }
   };
 
-  /** 加载可用薪资账套，供薪资档案编辑时选择账套。 */
+  /**
+   * 加载可用薪资账套，供编辑时选择。
+   *
+   * @param employeeId 员工ID
+   * @returns 账套列表
+   */
   const loadTemplates = async (employeeId?: number) => {
     setTemplateLoading(true);
     try {
@@ -179,7 +264,11 @@ const SalaryProfilePage: React.FC = () => {
 
   const isProbation = profileDetail?.employmentStatus === 1;
 
-  /** 加载薪资档案详情，供查询结果展示与编辑前回显。 */
+  /**
+   * 加载薪资档案详情。
+   *
+   * @param employeeId 员工ID
+   */
   const loadProfileDetail = async (employeeId: number) => {
     setProfileLoading(true);
     try {
@@ -196,13 +285,18 @@ const SalaryProfilePage: React.FC = () => {
     }
   };
 
-  /** 搜索员工选项，供按部门过滤后的员工下拉选择复用。 */
-  const searchEmployeeOptions = async (deptId?: number, keyword = '') => {
+  /**
+   * 按部门搜索姓名候选。
+   *
+   * @param deptId 部门ID
+   * @param keyword 关键字
+   */
+  const searchEmployeeNameOptions = async (deptId?: number, keyword = '') => {
     if (!deptId) {
-      setEmployeeOptions([]);
+      setEmployeeNameOptions([]);
       return;
     }
-    setEmployeeLoading(true);
+    setEmployeeNameLoading(true);
     try {
       const page = await getEmployeeList({
         deptIds: [deptId],
@@ -210,72 +304,172 @@ const SalaryProfilePage: React.FC = () => {
         pageNum: 1,
         pageSize: 50,
       });
-      setEmployeeOptions(
-        (page.records || []).map((item: EmployeeBrief) => ({
-          label: `${item.employeeName}（${item.employeeNo}）`,
-          value: item.id,
-        })),
+      setEmployeeNameOptions(
+        (page.records || []).map((item: EmployeeBrief) => buildEmployeeNameOption(item)),
       );
     } catch (error) {
-      setEmployeeOptions([]);
+      setEmployeeNameOptions([]);
       const text = error instanceof Error ? error.message : '员工列表加载失败';
       message.error(text);
     } finally {
-      setEmployeeLoading(false);
+      setEmployeeNameLoading(false);
     }
   };
 
-  /** 按员工 ID 查询员工与薪资档案，内部调用 `loadProfileDetail` 刷新详情面板。 */
+  /**
+   * 按工号关键字搜索员工。
+   *
+   * @param keyword 工号关键字
+   */
+  const searchEmployeeNoOptions = async (keyword = '') => {
+    const normalizedKeyword = keyword.trim();
+    if (!normalizedKeyword) {
+      if (profileDetail) {
+        syncSelectedEmployeeOptions({
+          id: profileDetail.employeeId,
+          employeeName: profileDetail.employeeName || '',
+          employeeNo: profileDetail.employeeNo || '',
+          deptName: profileDetail.deptName || '',
+        });
+      } else {
+        setEmployeeNoOptions([]);
+      }
+      return;
+    }
+    setEmployeeNoLoading(true);
+    try {
+      const page = await getEmployeeList({
+        keyword: normalizedKeyword,
+        pageNum: 1,
+        pageSize: 50,
+      });
+      setEmployeeNoOptions(
+        (page.records || []).map((item: EmployeeBrief) => buildEmployeeNoOption(item)),
+      );
+    } catch (error) {
+      setEmployeeNoOptions([]);
+      const text = error instanceof Error ? error.message : '员工工号列表加载失败';
+      message.error(text);
+    } finally {
+      setEmployeeNoLoading(false);
+    }
+  };
+
+  /**
+   * 根据员工详情统一回填筛选项并刷新档案详情。
+   *
+   * @param detail 员工详情
+   */
+  const applyEmployeeSelection = async (detail: Awaited<ReturnType<typeof getEmployeeDetail>>) => {
+    searchForm.setFieldsValue({
+      employeeId: detail.id,
+      deptId: detail.deptId,
+      employeeOptionId: detail.id,
+      employeeNoOptionId: detail.id,
+    });
+    syncSelectedEmployeeOptions({
+      id: detail.id,
+      employeeName: detail.employeeName,
+      employeeNo: detail.employeeNo,
+      deptName: detail.deptName,
+    });
+    await loadProfileDetail(detail.id);
+  };
+
+  /**
+   * 按员工ID查询并回显。
+   *
+   * @param rawEmployeeId 员工ID原始值
+   */
   const handleEmployeeIdLookup = async (rawEmployeeId?: number | string | null) => {
     const employeeId = Number(rawEmployeeId);
     if (!employeeId || employeeId < 1) {
       searchForm.setFieldsValue({
-        employeeOptionId: undefined,
+        employeeId: undefined,
         deptId: undefined,
+        employeeOptionId: undefined,
+        employeeNoOptionId: undefined,
       });
-      setEmployeeOptions([]);
-      setTemplateOutOfScope(false);
-      setProfileDetail(undefined);
-      setSelectedEmployeeId(undefined);
+      setEmployeeNameOptions([]);
+      setEmployeeNoOptions([]);
+      clearSelectedEmployeeContext();
       return;
     }
     try {
       const detail = await getEmployeeDetail(employeeId);
-      searchForm.setFieldsValue({
-        employeeId: detail.id,
-        deptId: detail.deptId,
-        employeeOptionId: detail.id,
-      });
-      setEmployeeOptions([
-        {
-          label: `${detail.employeeName}（${detail.employeeNo}）`,
-          value: detail.id,
-        },
-      ]);
-      await loadProfileDetail(detail.id);
+      await applyEmployeeSelection(detail);
     } catch (error) {
-      setEmployeeOptions([]);
-      setProfileDetail(undefined);
-      setSelectedEmployeeId(undefined);
+      setEmployeeNameOptions([]);
+      setEmployeeNoOptions([]);
+      clearSelectedEmployeeContext();
       const text = error instanceof Error ? error.message : '员工信息加载失败';
       message.error(text);
     }
   };
 
-  /** 处理员工选择，内部调用 `handleEmployeeIdLookup` 统一刷新档案上下文。 */
-  const handleEmployeeSelect = async (employeeId?: number) => {
+  /**
+   * 处理姓名候选选择。
+   *
+   * @param employeeId 员工ID
+   */
+  const handleEmployeeNameSelect = async (employeeId?: number) => {
     if (!employeeId) {
-      searchForm.setFieldsValue({ employeeId: undefined, employeeOptionId: undefined });
-      setTemplateOutOfScope(false);
-      setProfileDetail(undefined);
-      setSelectedEmployeeId(undefined);
+      const employeeNoOptionId = searchForm.getFieldValue('employeeNoOptionId');
+      if (employeeNoOptionId) {
+        searchForm.setFieldsValue({ employeeOptionId: undefined });
+        return;
+      }
+      searchForm.setFieldsValue({
+        employeeId: undefined,
+        employeeOptionId: undefined,
+        employeeNoOptionId: undefined,
+      });
+      setEmployeeNameOptions([]);
+      setEmployeeNoOptions([]);
+      clearSelectedEmployeeContext();
       return;
     }
-    searchForm.setFieldsValue({ employeeId, employeeOptionId: employeeId });
     await handleEmployeeIdLookup(employeeId);
   };
 
-  /** 打开档案编辑弹窗，并根据当前详情回填表单。 */
+  /**
+   * 处理工号候选选择。
+   *
+   * @param employeeId 员工ID
+   */
+  const handleEmployeeNoSelect = async (employeeId?: number) => {
+    if (!employeeId) {
+      const employeeOptionId = searchForm.getFieldValue('employeeOptionId');
+      if (employeeOptionId) {
+        searchForm.setFieldsValue({ employeeNoOptionId: undefined });
+        return;
+      }
+      searchForm.setFieldsValue({
+        employeeId: undefined,
+        deptId: undefined,
+        employeeOptionId: undefined,
+        employeeNoOptionId: undefined,
+      });
+      setEmployeeNameOptions([]);
+      setEmployeeNoOptions([]);
+      clearSelectedEmployeeContext();
+      return;
+    }
+    try {
+      const detail = await getEmployeeDetail(employeeId);
+      await applyEmployeeSelection(detail);
+    } catch (error) {
+      setEmployeeNameOptions([]);
+      setEmployeeNoOptions([]);
+      clearSelectedEmployeeContext();
+      const text = error instanceof Error ? error.message : '员工信息加载失败';
+      message.error(text);
+    }
+  };
+
+  /**
+   * 打开薪资档案编辑弹窗并回填当前值。
+   */
   const openEditModal = async () => {
     if (!profileDetail || !selectedEmployeeId) {
       return;
@@ -307,7 +501,12 @@ const SalaryProfilePage: React.FC = () => {
     setEditOpen(true);
   };
 
-  /** 保存薪资档案调整，并在成功后重新调用 `loadProfileDetail` 刷新详情。 */
+  /**
+   * 保存薪资档案调整。
+   *
+   * @param values 表单值
+   * @returns 是否保存成功
+   */
   const handleSave = async (values: ProfileEditFormValues) => {
     if (!selectedEmployeeId) {
       return false;
@@ -370,7 +569,8 @@ const SalaryProfilePage: React.FC = () => {
     {
       title: '社保基数',
       width: 180,
-      render: (_, record) => renderDiff(record.socialInsuranceBaseBefore, record.socialInsuranceBaseAfter),
+      render: (_, record) =>
+        renderDiff(record.socialInsuranceBaseBefore, record.socialInsuranceBaseAfter),
     },
     {
       title: '公积金基数',
@@ -380,7 +580,8 @@ const SalaryProfilePage: React.FC = () => {
     {
       title: '试用期薪资比例',
       width: 180,
-      render: (_, record) => renderTextDiff(record.probationSalaryRatioBefore, record.probationSalaryRatioAfter),
+      render: (_, record) =>
+        renderTextDiff(record.probationSalaryRatioBefore, record.probationSalaryRatioAfter),
     },
     {
       title: '调整原因',
@@ -407,7 +608,7 @@ const SalaryProfilePage: React.FC = () => {
       <Card bordered={false} style={{ marginBottom: 20, borderRadius: 20 }}>
         <Form form={searchForm} layout="vertical">
           <Row gutter={[16, 16]} align="bottom">
-            <Col xs={24} md={8}>
+            <Col xs={24} md={12} lg={6}>
               <Form.Item label="员工ID" name="employeeId">
                 <Input
                   allowClear
@@ -422,7 +623,7 @@ const SalaryProfilePage: React.FC = () => {
                 />
               </Form.Item>
             </Col>
-            <Col xs={24} md={8}>
+            <Col xs={24} md={12} lg={6}>
               <Form.Item label="部门" name="deptId">
                 <Select
                   allowClear
@@ -434,36 +635,61 @@ const SalaryProfilePage: React.FC = () => {
                   onChange={(value) => {
                     searchForm.setFieldsValue({
                       deptId: value,
-                      employeeOptionId: undefined,
                       employeeId: undefined,
+                      employeeOptionId: undefined,
+                      employeeNoOptionId: undefined,
                     });
-                    setProfileDetail(undefined);
-                    setSelectedEmployeeId(undefined);
-                    void searchEmployeeOptions(value);
+                    setEmployeeNameOptions([]);
+                    setEmployeeNoOptions([]);
+                    clearSelectedEmployeeContext();
+                    void searchEmployeeNameOptions(value);
                   }}
                 />
               </Form.Item>
             </Col>
-            <Col xs={24} md={8}>
+            <Col xs={24} md={12} lg={6}>
               <Form.Item label="员工姓名" name="employeeOptionId">
                 <Select
                   allowClear
                   showSearch
                   filterOption={false}
-                  loading={employeeLoading}
+                  loading={employeeNameLoading}
                   disabled={!searchForm.getFieldValue('deptId')}
-                  placeholder={searchForm.getFieldValue('deptId') ? '请选择员工' : '请先选择部门'}
-                  options={employeeOptions}
+                  placeholder={searchForm.getFieldValue('deptId') ? '请输入姓名搜索员工' : '请先选择部门'}
+                  options={employeeNameOptions}
                   onSearch={(value) => {
-                    void searchEmployeeOptions(searchForm.getFieldValue('deptId'), value);
+                    void searchEmployeeNameOptions(searchForm.getFieldValue('deptId'), value);
                   }}
                   onDropdownVisibleChange={(open) => {
                     if (open && searchForm.getFieldValue('deptId')) {
-                      void searchEmployeeOptions(searchForm.getFieldValue('deptId'));
+                      void searchEmployeeNameOptions(searchForm.getFieldValue('deptId'));
                     }
                   }}
                   onChange={(value) => {
-                    void handleEmployeeSelect(value);
+                    void handleEmployeeNameSelect(value);
+                  }}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={12} lg={6}>
+              <Form.Item label="员工工号" name="employeeNoOptionId">
+                <Select
+                  allowClear
+                  showSearch
+                  filterOption={false}
+                  loading={employeeNoLoading}
+                  placeholder="请输入工号搜索员工"
+                  options={employeeNoOptions}
+                  onSearch={(value) => {
+                    void searchEmployeeNoOptions(value);
+                  }}
+                  onDropdownVisibleChange={(open) => {
+                    if (open) {
+                      void searchEmployeeNoOptions(profileDetail?.employeeNo || '');
+                    }
+                  }}
+                  onChange={(value) => {
+                    void handleEmployeeNoSelect(value);
                   }}
                 />
               </Form.Item>
@@ -567,11 +793,7 @@ const SalaryProfilePage: React.FC = () => {
             message="当前已分配账套已不再适用于该员工，请重新选择可用账套"
           />
         )}
-        <Form<ProfileEditFormValues>
-          form={editForm}
-          layout="vertical"
-          onFinish={handleSave}
-        >
+        <Form<ProfileEditFormValues> form={editForm} layout="vertical" onFinish={handleSave}>
           <Row gutter={[16, 16]}>
             <Col xs={24} md={12}>
               <Form.Item

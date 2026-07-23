@@ -1340,6 +1340,8 @@ public class AttendanceServiceImpl implements AttendanceService {
         LocalDateTime now = LocalDateTime.now();
         LocalDate recordDate = now.toLocalDate();
         AttendanceGroupEntity group = resolveEmployeeAttendanceGroup(employee.getId(), recordDate);
+        // 法定节假日优先于按星期计算的工作日，命中时直接拒绝打卡。
+        validateClockWorkday(recordDate);
         //验证打卡时间范围
         validateClockRange(group, requestDTO, clientIp);
 
@@ -1359,6 +1361,17 @@ public class AttendanceServiceImpl implements AttendanceService {
         //发布打卡创建事件
         publishClockCreatedEvent(event);
         return buildClockVO(record, period, status, now);
+    }
+
+    /**
+     * 校验指定日期是否允许打卡。
+     *
+     * @param recordDate 打卡业务日期
+     */
+    private void validateClockWorkday(LocalDate recordDate) {
+        if (!attendanceCalendarConfigService.isWorkday(recordDate)) {
+            throw new GlobalException(ATTENDANCE_CLOCK_HOLIDAY_SKIP);
+        }
     }
 
     /**

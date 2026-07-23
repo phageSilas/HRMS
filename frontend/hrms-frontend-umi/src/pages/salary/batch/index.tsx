@@ -66,8 +66,10 @@ const ADJUSTMENT_ITEM_OPTIONS = [
   { label: '加班费', value: 'OVERTIME_PAY' },
   { label: '迟到扣款', value: 'LATE_DEDUCTION' },
   { label: '请假扣款', value: 'LEAVE_DEDUCTION' },
-  { label: '社保', value: 'SOCIAL_INSURANCE' },
-  { label: '公积金', value: 'HOUSING_FUND' },
+  { label: '养老保险', value: 'PENSION_INSURANCE' },
+  { label: '医疗保险', value: 'MEDICAL_INSURANCE' },
+  { label: '失业保险', value: 'UNEMPLOYMENT_INSURANCE' },
+  { label: '住房公积金', value: 'HOUSING_FUND' },
   { label: '个税', value: 'INCOME_TAX' },
 ];
 
@@ -111,10 +113,18 @@ function resolveStorageKey() {
 /** 读取缓存中的月份值，作为批次工作台默认月份。 */
 function getStoredMonth() {
   const stored = sessionStorage.getItem(resolveStorageKey());
+  const currentMonth = dayjs().format('YYYY-MM');
   if (!stored) {
-    return dayjs().format('YYYY-MM');
+    return currentMonth;
   }
-  return stored;
+  return dayjs(stored, 'YYYY-MM').isAfter(dayjs(), 'month')
+    ? currentMonth
+    : stored;
+}
+
+/** 判断指定月份是否晚于当前月。 */
+function isFutureSalaryMonth(month: string) {
+  return dayjs(month, 'YYYY-MM').isAfter(dayjs(), 'month');
 }
 
 /** 判断当前用户是否属于薪资管理视角。 */
@@ -190,10 +200,18 @@ function buildTrendChartData(items: SalaryBatchTrendItem[]) {
 }
 
 /** 聚合部门维度薪资数据，供部门分布图使用。 */
+function filterItemsByDeptIds(items: SalaryBatchItem[], deptIds: number[]) {
+  if (!deptIds.length) {
+    return items;
+  }
+  const deptIdSet = new Set(deptIds);
+  return items.filter((item) => item.deptId !== undefined && deptIdSet.has(item.deptId));
+}
+
 function buildDeptChartData(items: SalaryBatchItem[]) {
   const deptMap = new Map<
     string,
-    { deptName: string; grossSalary: number; netSalary: number; employeeCount: number }
+    { deptId?: number; deptName: string; grossSalary: number; netSalary: number; employeeCount: number }
   >();
 
   items.forEach((item) => {
@@ -215,6 +233,35 @@ function buildDeptChartData(items: SalaryBatchItem[]) {
 }
 
 /** 聚合收入构成数据，供收入构成图使用。 */
+function buildDeptChartDataByDeptId(items: SalaryBatchItem[]) {
+  const deptMap = new Map<
+    string,
+    { deptId?: number; deptName: string; grossSalary: number; netSalary: number; employeeCount: number }
+  >();
+
+  items.forEach((item) => {
+    const deptKey =
+      item.deptId !== undefined
+        ? `${item.deptId}-${item.deptName || '鏈煡閮ㄩ棬'}`
+        : item.deptName || '鏈煡閮ㄩ棬';
+    const deptName = item.deptName || '鏈煡閮ㄩ棬';
+    const current =
+      deptMap.get(deptKey) || {
+        deptId: item.deptId,
+        deptName,
+        grossSalary: 0,
+        netSalary: 0,
+        employeeCount: 0,
+      };
+    current.grossSalary += toNumber(item.grossSalary);
+    current.netSalary += toNumber(item.netSalary);
+    current.employeeCount += 1;
+    deptMap.set(deptKey, current);
+  });
+
+  return Array.from(deptMap.values());
+}
+
 function buildCompositionData(items: SalaryBatchItem[]) {
   const totals = {
     基本工资: 0,
@@ -247,19 +294,27 @@ function buildCompositionData(items: SalaryBatchItem[]) {
     .filter((item) => item.amount > 0);
 }
 
-/** 聚合社保与公积金数据，供成本构成图使用。 */
+/** 聚合社保公积金明细数据，供对比图使用。 */
 function buildSocialFundData(items: SalaryBatchItem[]) {
   const totals = {
-    社保: 0,
-    公积金: 0,
+    养老保险: 0,
+    医疗保险: 0,
+    失业保险: 0,
+    住房公积金: 0,
   };
 
   items.forEach((item) => {
-    totals.社保 += toNumber(item.socialInsurance);
-    totals.公积金 += toNumber(item.housingFund);
+    totals.养老保险 += toNumber(item.pensionInsurance);
+    totals.医疗保险 += toNumber(item.medicalInsurance);
+    totals.失业保险 += toNumber(item.unemploymentInsurance);
+    totals.住房公积金 += toNumber(item.housingFund);
   });
 
-  return Object.entries(totals).map(([type, amount]) => ({ type, amount }));
+  return Object.entries(totals).map(([type, amount], index) => ({
+    type,
+    amount,
+    color: COMPOSITION_COLORS[index % COMPOSITION_COLORS.length],
+  }));
 }
 
 /** 下载导出的薪资批次文件。 */
@@ -295,6 +350,10 @@ const SalaryBatchPage: React.FC = () => {
   const [trendData, setTrendData] = useState<SalaryBatchTrendItem[]>([]);
   const [departmentOptions, setDepartmentOptions] = useState<DeptListItem[]>([]);
   const [departmentLoading, setDepartmentLoading] = useState(false);
+  const [trendDeptIds, setTrendDeptIds] = useState<number[]>([]);
+  const [distributionDeptIds, setDistributionDeptIds] = useState<number[]>([]);
+  const [compositionDeptIds, setCompositionDeptIds] = useState<number[]>([]);
+  const [socialFundDeptIds, setSocialFundDeptIds] = useState<number[]>([]);
   const [selectedDeptName, setSelectedDeptName] = useState<string>();
   const [onlyAbnormalPreview, setOnlyAbnormalPreview] = useState(false);
   const [previewPageNum, setPreviewPageNum] = useState(1);
@@ -362,6 +421,7 @@ const SalaryBatchPage: React.FC = () => {
         anchorMonth: selectedMonth,
         months: 6,
         scopeType: 'ALL',
+        deptIds: trendDeptIds.length ? trendDeptIds : undefined,
       });
       setTrendData(trend || []);
     } catch (error) {
@@ -392,11 +452,10 @@ const SalaryBatchPage: React.FC = () => {
   const loadWorkspace = async (selectedMonth: string) => {
     const batch = await loadCurrentBatch(selectedMonth);
     if (batch?.id) {
-      await Promise.all([loadPreview(batch.id), loadTrend(selectedMonth)]);
+      await loadPreview(batch.id);
       return;
     }
     setPreviewData(undefined);
-    setTrendData([]);
   };
 
   useEffect(() => {
@@ -406,6 +465,13 @@ const SalaryBatchPage: React.FC = () => {
   useEffect(() => {
     void loadWorkspace(month);
   }, [month]);
+
+  useEffect(() => {
+    if (!canManage) {
+      return;
+    }
+    void loadTrend(month);
+  }, [canManage, month, trendDeptIds]);
 
   useEffect(() => {
     void loadDepartments();
@@ -438,6 +504,11 @@ const SalaryBatchPage: React.FC = () => {
 
   /** 创建薪资批次，成功后调用 `loadWorkspace` 刷新当前月份工作区。 */
   const handleCreateBatch = async () => {
+    if (isFutureSalaryMonth(month)) {
+      message.warning('未来月份不允许创建薪资核算批次');
+      setMonth(dayjs().format('YYYY-MM'));
+      return;
+    }
     setCreating(true);
     try {
       const batch = await createSalaryBatch({
@@ -597,18 +668,38 @@ const SalaryBatchPage: React.FC = () => {
     };
   }, [currentBatch, previewData]);
 
+  const departmentSelectOptions = useMemo(
+    () =>
+      departmentOptions.map((item) => ({
+        label: item.deptName,
+        value: item.id,
+      })),
+    [departmentOptions],
+  );
+  const distributionItems = useMemo(
+    () => filterItemsByDeptIds(previewData?.items || [], distributionDeptIds),
+    [distributionDeptIds, previewData?.items],
+  );
+  const compositionItems = useMemo(
+    () => filterItemsByDeptIds(previewData?.items || [], compositionDeptIds),
+    [compositionDeptIds, previewData?.items],
+  );
+  const socialFundItems = useMemo(
+    () => filterItemsByDeptIds(previewData?.items || [], socialFundDeptIds),
+    [previewData?.items, socialFundDeptIds],
+  );
   const trendChartData = useMemo(() => buildTrendChartData(trendData), [trendData]);
   const deptChartData = useMemo(
-    () => buildDeptChartData(previewData?.items || []),
-    [previewData?.items],
+    () => buildDeptChartDataByDeptId(distributionItems),
+    [distributionItems],
   );
   const compositionData = useMemo(
-    () => buildCompositionData(previewData?.items || []),
-    [previewData?.items],
+    () => buildCompositionData(compositionItems),
+    [compositionItems],
   );
   const socialFundData = useMemo(
-    () => buildSocialFundData(previewData?.items || []),
-    [previewData?.items],
+    () => buildSocialFundData(socialFundItems),
+    [socialFundItems],
   );
 
   const canRecalculate =
@@ -685,12 +776,14 @@ const SalaryBatchPage: React.FC = () => {
       render: (value) => <Text strong>{formatCurrency(value)}</Text>,
     },
     {
-      title: '社保/公积金',
+      title: '社保公积金明细',
       key: 'deductionGroup',
-      width: 180,
+      width: 220,
       render: (_value, record) => (
         <Space direction="vertical" size={0}>
-          <Text>社保：{formatCurrency(record.socialInsurance)}</Text>
+          <Text>养老：{formatCurrency(record.pensionInsurance)}</Text>
+          <Text>医疗：{formatCurrency(record.medicalInsurance)}</Text>
+          <Text>失业：{formatCurrency(record.unemploymentInsurance)}</Text>
           <Text>公积金：{formatCurrency(record.housingFund)}</Text>
         </Space>
       ),
@@ -757,11 +850,18 @@ const SalaryBatchPage: React.FC = () => {
                 picker="month"
                 allowClear={false}
                 value={dayjs(month, 'YYYY-MM')}
+                disabledDate={(current) => current.isAfter(dayjs(), 'month')}
                 onChange={(value) => {
                   if (!value) {
                     return;
                   }
-                  setMonth(value.format('YYYY-MM'));
+                  const nextMonth = value.format('YYYY-MM');
+                  if (isFutureSalaryMonth(nextMonth)) {
+                    message.warning('未来月份不允许创建薪资核算批次');
+                    setMonth(dayjs().format('YYYY-MM'));
+                    return;
+                  }
+                  setMonth(nextMonth);
                 }}
                 style={{ width: '100%' }}
               />
@@ -939,6 +1039,21 @@ const SalaryBatchPage: React.FC = () => {
                 <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
                   <Col xs={24} xl={12}>
                     <Card bordered={false} style={{ borderRadius: 20 }} title="月度薪资趋势">
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+                        <Select
+                          mode="multiple"
+                          allowClear
+                          maxTagCount="responsive"
+                          showSearch
+                          loading={departmentLoading}
+                          placeholder="按部门筛选"
+                          optionFilterProp="label"
+                          style={{ width: 220 }}
+                          value={trendDeptIds}
+                          options={departmentSelectOptions}
+                          onChange={(value) => setTrendDeptIds(value)}
+                        />
+                      </div>
                       {loadingTrend ? (
                         <Spin />
                       ) : trendChartData.length > 0 ? (
@@ -971,6 +1086,21 @@ const SalaryBatchPage: React.FC = () => {
                   </Col>
                   <Col xs={24} xl={12}>
                     <Card bordered={false} style={{ borderRadius: 20 }} title="部门薪资分布">
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+                        <Select
+                          mode="multiple"
+                          allowClear
+                          maxTagCount="responsive"
+                          showSearch
+                          loading={departmentLoading}
+                          placeholder="按部门筛选"
+                          optionFilterProp="label"
+                          style={{ width: 220 }}
+                          value={distributionDeptIds}
+                          options={departmentSelectOptions}
+                          onChange={(value) => setDistributionDeptIds(value)}
+                        />
+                      </div>
                       {deptChartData.length > 0 ? (
                         <Column
                           height={260}
@@ -1006,6 +1136,21 @@ const SalaryBatchPage: React.FC = () => {
                 <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
                   <Col xs={24} xl={12}>
                     <Card bordered={false} style={{ borderRadius: 20 }} title="薪资构成占比">
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+                        <Select
+                          mode="multiple"
+                          allowClear
+                          maxTagCount="responsive"
+                          showSearch
+                          loading={departmentLoading}
+                          placeholder="按部门筛选"
+                          optionFilterProp="label"
+                          style={{ width: 220 }}
+                          value={compositionDeptIds}
+                          options={departmentSelectOptions}
+                          onChange={(value) => setCompositionDeptIds(value)}
+                        />
+                      </div>
                       {compositionData.length > 0 ? (
                         <Space direction="vertical" size={12} style={{ width: '100%' }}>
                           <Space wrap size={[16, 8]} style={{ paddingTop: 4 }}>
@@ -1063,14 +1208,29 @@ const SalaryBatchPage: React.FC = () => {
                     </Card>
                   </Col>
                   <Col xs={24} xl={12}>
-                    <Card bordered={false} style={{ borderRadius: 20 }} title="社保公积金对比">
+                    <Card bordered={false} style={{ borderRadius: 20 }} title="社保公积金明细对比">
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+                        <Select
+                          mode="multiple"
+                          allowClear
+                          maxTagCount="responsive"
+                          showSearch
+                          loading={departmentLoading}
+                          placeholder="按部门筛选"
+                          optionFilterProp="label"
+                          style={{ width: 220 }}
+                          value={socialFundDeptIds}
+                          options={departmentSelectOptions}
+                          onChange={(value) => setSocialFundDeptIds(value)}
+                        />
+                      </div>
                       {socialFundData.length > 0 ? (
                         <Column
                           height={260}
                           data={socialFundData}
                           xField="type"
                           yField="amount"
-                          color="#fa8c16"
+                          colorField="type"
                           yAxis={{ label: { formatter: (value: string) => `¥${Number(value).toLocaleString('zh-CN')}` } }}
                           tooltip={{
                             items: [
@@ -1082,7 +1242,7 @@ const SalaryBatchPage: React.FC = () => {
                           }}
                         />
                       ) : (
-                        <Empty description="暂无社保公积金数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                        <Empty description="暂无社保公积金明细数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
                       )}
                     </Card>
                   </Col>

@@ -46,6 +46,25 @@ public final class PersonnelCacheKeys {
     }
 
     /**
+     * 入职分页列表缓存 Key
+     *
+     * @param queryKey 规范化查询条件
+     * @return Redis Key
+     */
+    public static String entryPage(String queryKey) {
+        return PREFIX + "entry:page:" + normalizeQueryKey(queryKey);
+    }
+
+    /**
+     * 入职分页缓存 Key 模式
+     *
+     * @return Redis Key 模式
+     */
+    public static String entryPagePattern() {
+        return PREFIX + "entry:page:*";
+    }
+
+    /**
      * 入职提交防重 token Key
      *
      * @param id 入职申请ID
@@ -156,5 +175,15 @@ public final class PersonnelCacheKeys {
      */
     public static String transferPagePattern() {
         return PREFIX + "transfer:page:*";
+    }
+
+    /**
+     * 规范化查询条件 Key，避免空值生成重复缓存。
+     *
+     * @param queryKey 原始查询条件
+     * @return 规范化后的查询条件
+     */
+    private static String normalizeQueryKey(String queryKey) {
+        return StrUtil.blankToDefault(queryKey, "blank");
     }
 }

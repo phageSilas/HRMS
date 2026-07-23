@@ -204,6 +204,7 @@ public class PersonnelApprovalEventListener {
         }
         redisTemplate.delete(PersonnelCacheKeys.entryDetail(entryApplicationId));
         evictCacheByPattern(PersonnelCacheKeys.entryStatsPattern());
+        evictCacheByPattern(PersonnelCacheKeys.entryPagePattern());
     }
 
     /**

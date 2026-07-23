@@ -48,7 +48,8 @@ public interface SalaryCalculateService {
      * @return 薪资趋势列表
      * 本方法使用的工具类: List(JDK)
      */
-    List<SalaryBatchTrendVO> listBatchTrend(String anchorMonth, Integer months, String scopeType, String scopeValue);
+    List<SalaryBatchTrendVO> listBatchTrend(String anchorMonth, Integer months, String scopeType, String scopeValue,
+                                            List<Long> deptIds);
 
     /**
      * 保存薪资批次人工调整。
