@@ -40,9 +40,29 @@ import {
   mergeDept,
 } from '@/services/organization';
 import { hasEmployeesInDept } from '@/services/employee';
+import dayjs from 'dayjs';
 import type { DeptTreeNode, DeptDetail } from '@/services/organization';
 
 const { TextArea } = Input;
+
+/**
+ * 格式化时间（处理数组格式和字符串格式）
+ */
+const formatDateTime = (value?: string | number[] | null): string => {
+  if (!value) return '-';
+
+  // 处理数组格式 [year, month, day, hour, minute, second]
+  if (Array.isArray(value)) {
+    const [year, month, day, hour = 0, minute = 0, second = 0] = value;
+    if (!year || !month || !day) return '-';
+    const date = dayjs(new Date(year, month - 1, day, hour, minute, second));
+    return date.isValid() ? date.format('YYYY-MM-DD HH:mm:ss') : '-';
+  }
+
+  // 处理字符串格式
+  const date = dayjs(value);
+  return date.isValid() ? date.format('YYYY-MM-DD HH:mm:ss') : '-';
+};
 
 const DeptPage: React.FC = () => {
   const [treeData, setTreeData] = useState<DeptTreeNode[]>([]);
@@ -419,7 +439,7 @@ const DeptPage: React.FC = () => {
                   </Tag>
                 </Descriptions.Item>
                 <Descriptions.Item label="创建时间">
-                  {currentDept.createTime || '-'}
+                  {formatDateTime(currentDept.createTime)}
                 </Descriptions.Item>
                 <Descriptions.Item label="备注" span={2}>
                   {currentDept.remark || <span style={{ color: '#999' }}>无</span>}
