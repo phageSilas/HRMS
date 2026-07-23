@@ -2,6 +2,7 @@ package com.hrms.business.mycenter.listener;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.hrms.business.approval.service.event.ApprovalCompletedEvent;
+import com.hrms.business.mycenter.dto.AttendanceGroupConfigDTO;
 import com.hrms.business.mycenter.entity.AttendanceCorrectionEntity;
 import com.hrms.business.mycenter.entity.AttendanceOvertimeEntity;
 import com.hrms.business.mycenter.entity.LeaveBalanceEntity;
@@ -17,6 +18,8 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -119,7 +122,7 @@ public class ApprovalEventListener {
     }
 
     /**
-     * 处理补卡审批完成：根据审批结果更新补卡记录状态，通过时同步更新考勤记录
+     * 处理补卡审批完成：根据审批结果更新补卡记录状态，通过时根据补卡时间同步更新考勤记录
      */
     private void handleCorrectionCompleted(ApprovalCompletedEvent event) {
         AttendanceCorrectionEntity correction = correctionMapper.selectById(event.getBizId());
@@ -135,39 +138,26 @@ public class ApprovalEventListener {
 
         // 审批通过 → 同步更新考勤记录
         if (newStatus == 2) {
-            // 1. 先通过 recordId 查找考勤记录（提交申请时关联的）
-            MyAttendanceRecordEntity record = null;
-            if (correction.getRecordId() != null) {
-                record = attendanceRecordMapper.selectById(correction.getRecordId());
-            }
-            // 2. 找不到则按员工+日期查找（可能当天完全无打卡记录）
-            if (record == null) {
-                record = attendanceRecordMapper.selectOne(
-                        new LambdaQueryWrapper<MyAttendanceRecordEntity>()
-                                .eq(MyAttendanceRecordEntity::getEmployeeId, correction.getEmployeeId())
-                                .eq(MyAttendanceRecordEntity::getRecordDate, correction.getCorrectionDate())
-                );
-            }
-            // 3. 仍然找不到 → 创建一条新考勤记录
-            boolean isNewRecord = false;
-            if (record == null) {
-                record = new MyAttendanceRecordEntity();
-                record.setEmployeeId(correction.getEmployeeId());
-                record.setRecordDate(correction.getCorrectionDate());
-                Long groupId = attendanceRecordMapper.selectDefaultAttendanceGroupId();
-                record.setGroupId(groupId);
-                attendanceRecordMapper.insert(record);
-                isNewRecord = true;
-                log.info("补卡审批通过，已新建考勤记录: employeeId={}, date={}",
-                        correction.getEmployeeId(), correction.getCorrectionDate());
-            }
+            MyAttendanceRecordEntity record = findOrCreateAttendanceRecord(correction);
 
-            if (isNewRecord) {
-                // 新建记录：当天完全无打卡数据，补卡审批通过意味着全天出勤有效
-                record.setClockInStatus("NORMAL");
-                record.setClockOutStatus("NORMAL");
+            if (correction.getCorrectionTime() != null) {
+                // 有补卡时间 → 根据实际时间判定打卡状态（正常/迟到/早退）
+                LocalDateTime correctedDateTime = correction.getCorrectionDate()
+                        .atTime(correction.getCorrectionTime());
+                AttendanceGroupConfigDTO config = attendanceRecordMapper
+                        .selectGroupTimeConfig(record.getGroupId());
+
+                if ("CLOCK_IN".equals(correction.getCorrectionType())) {
+                    record.setClockInTime(correctedDateTime);
+                    record.setClockInStatus(
+                            determineClockInStatusByConfig(config, correction.getCorrectionTime()));
+                } else if ("CLOCK_OUT".equals(correction.getCorrectionType())) {
+                    record.setClockOutTime(correctedDateTime);
+                    record.setClockOutStatus(
+                            determineClockOutStatusByConfig(config, correction.getCorrectionTime()));
+                }
             } else {
-                // 已有记录：仅更新补卡对应的状态，保留另一方原始状态（如 LATE / EARLY_LEAVE）
+                // 兼容旧数据（无补卡时间）：默认设为 NORMAL
                 if ("CLOCK_IN".equals(correction.getCorrectionType())) {
                     record.setClockInStatus("NORMAL");
                 } else if ("CLOCK_OUT".equals(correction.getCorrectionType())) {
@@ -177,11 +167,68 @@ public class ApprovalEventListener {
             record.setCorrectionStatus("APPROVED");
             attendanceRecordMapper.updateById(record);
 
-            log.info("补卡审批通过，已同步更新考勤记录: recordId={}, correctionType={}",
-                    record.getId(), correction.getCorrectionType());
+            log.info("补卡审批通过，已同步更新考勤记录: recordId={}, correctionType={}, time={}",
+                    record.getId(), correction.getCorrectionType(), correction.getCorrectionTime());
         }
 
         log.info("补卡审批完成: correctionId={}, newStatus={}", event.getBizId(), newStatus);
+    }
+
+    /**
+     * 查找或创建考勤记录
+     */
+    private MyAttendanceRecordEntity findOrCreateAttendanceRecord(AttendanceCorrectionEntity correction) {
+        MyAttendanceRecordEntity record = null;
+        // 1. 先通过 recordId 查找（提交申请时关联的）
+        if (correction.getRecordId() != null) {
+            record = attendanceRecordMapper.selectById(correction.getRecordId());
+        }
+        // 2. 找不到则按员工+日期查找（可能当天完全无打卡记录）
+        if (record == null) {
+            record = attendanceRecordMapper.selectOne(
+                    new LambdaQueryWrapper<MyAttendanceRecordEntity>()
+                            .eq(MyAttendanceRecordEntity::getEmployeeId, correction.getEmployeeId())
+                            .eq(MyAttendanceRecordEntity::getRecordDate, correction.getCorrectionDate())
+            );
+        }
+        // 3. 仍然找不到 → 创建一条新考勤记录
+        if (record == null) {
+            record = new MyAttendanceRecordEntity();
+            record.setEmployeeId(correction.getEmployeeId());
+            record.setRecordDate(correction.getCorrectionDate());
+            Long groupId = attendanceRecordMapper.selectDefaultAttendanceGroupId();
+            record.setGroupId(groupId);
+            attendanceRecordMapper.insert(record);
+            log.info("补卡审批通过，已新建考勤记录: employeeId={}, date={}",
+                    correction.getEmployeeId(), correction.getCorrectionDate());
+        }
+        return record;
+    }
+
+    /**
+     * 根据考勤组配置判定补卡上班时间对应的状态（NORMAL / LATE）
+     */
+    private String determineClockInStatusByConfig(AttendanceGroupConfigDTO config, LocalTime clockTime) {
+        if (config == null || config.getWorkStartTime() == null) {
+            return "NORMAL";
+        }
+        int threshold = config.getLateThresholdMinutes() != null
+                ? config.getLateThresholdMinutes() : 15;
+        LocalTime lateLine = config.getWorkStartTime().plusMinutes(threshold);
+        return clockTime.isAfter(lateLine) ? "LATE" : "NORMAL";
+    }
+
+    /**
+     * 根据考勤组配置判定补卡下班时间对应的状态（NORMAL / EARLY_LEAVE）
+     */
+    private String determineClockOutStatusByConfig(AttendanceGroupConfigDTO config, LocalTime clockTime) {
+        if (config == null || config.getWorkEndTime() == null) {
+            return "NORMAL";
+        }
+        int threshold = config.getEarlyLeaveThresholdMinutes() != null
+                ? config.getEarlyLeaveThresholdMinutes() : 15;
+        LocalTime earlyLine = config.getWorkEndTime().minusMinutes(threshold);
+        return clockTime.isBefore(earlyLine) ? "EARLY_LEAVE" : "NORMAL";
     }
 
     /**

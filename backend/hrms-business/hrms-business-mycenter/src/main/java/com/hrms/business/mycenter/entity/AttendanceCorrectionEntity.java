@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 
 /**
  * 补卡申请实体
@@ -30,6 +31,11 @@ public class AttendanceCorrectionEntity extends BaseEntity {
      * 补卡日期
      */
     private LocalDate correctionDate;
+
+    /**
+     * 补卡时间（用户指定的实际打卡时间）
+     */
+    private LocalTime correctionTime;
 
     /**
      * 补卡类型：CLOCK_IN-上班补卡 CLOCK_OUT-下班补卡

@@ -174,9 +174,38 @@ const ProfileAttendancePage: React.FC = () => {
   // ============ 提交回调 ============
 
   const handleMakeupSubmit = async (values: any) => {
+    const dateStr = values.correctionDate.format('YYYY-MM-DD');
+    const correctionType = values.correctionType;
+
+    // 查找该日期的考勤记录（已加载的日历数据）
+    const dayRecord = calendarDays.find((d) => d.date === dateStr);
+
+    if (dayRecord) {
+      // 已有完整打卡记录 → 禁止补卡
+      if (['NORMAL', 'LATE', 'EARLY_LEAVE'].includes(dayRecord.status)) {
+        message.warning('该日已有完整的打卡记录，请勿重复打卡');
+        return;
+      }
+      // 已请假 → 禁止补卡
+      if (dayRecord.status === 'LEAVE') {
+        message.warning('该日已请假，请勿重复打卡');
+        return;
+      }
+      // 无完整打卡记录 → 检查具体打卡状态
+      if (correctionType === 'CLOCK_IN' && dayRecord.clockInTime) {
+        message.warning('该日已有上班打卡记录，请勿重复补上班卡');
+        return;
+      }
+      if (correctionType === 'CLOCK_OUT' && dayRecord.clockOutTime) {
+        message.warning('该日已有下班打卡记录，请勿重复补下班卡');
+        return;
+      }
+    }
+
     const payload = {
-      correctionDate: values.correctionDate.format('YYYY-MM-DD'),
-      correctionType: values.correctionType,
+      correctionDate: dateStr,
+      correctionTime: values.correctionTime.format('HH:mm:ss'),
+      correctionType,
       correctionReason: values.correctionReason,
     };
     await createMakeup(payload);

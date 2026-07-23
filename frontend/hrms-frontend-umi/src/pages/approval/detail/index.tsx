@@ -69,6 +69,7 @@ const FORM_LABEL_MAP: Record<string, Record<string, string>> = {
   },
   CORRECTION: {
     correctionDate: '补卡日期',
+    correctionTime: '补卡时间',
     correctionType: '补卡类型',
     correctionReason: '补卡原因',
   },

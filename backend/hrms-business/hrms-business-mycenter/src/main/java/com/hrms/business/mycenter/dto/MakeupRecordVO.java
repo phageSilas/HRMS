@@ -6,6 +6,7 @@ import lombok.Data;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 /**
  * 补卡记录 VO
@@ -20,6 +21,10 @@ public class MakeupRecordVO {
     @Schema(description = "补卡日期")
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate correctionDate;
+
+    @Schema(description = "补卡时间")
+    @JsonFormat(pattern = "HH:mm:ss")
+    private LocalTime correctionTime;
 
     @Schema(description = "补卡类型：CLOCK_IN-上班补卡 CLOCK_OUT-下班补卡")
     private String correctionType;

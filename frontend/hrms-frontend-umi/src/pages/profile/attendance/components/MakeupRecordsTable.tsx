@@ -15,6 +15,7 @@ interface Props {
 const MakeupRecordsTable: React.FC<Props> = ({ records, loading }) => {
   const columns = [
     { title: '补卡日期', dataIndex: 'correctionDate', key: 'correctionDate', width: 120 },
+    { title: '补卡时间', dataIndex: 'correctionTime', key: 'correctionTime', width: 90 },
     {
       title: '补卡类型',
       dataIndex: 'correctionType',

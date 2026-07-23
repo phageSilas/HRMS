@@ -310,21 +310,53 @@ public class AttendanceServiceImpl implements AttendanceService {
             throw new GlobalException(ErrorCode.CONFLICT, "该日期已有同类型补卡申请");
         }
 
+        // 校验考勤状态：禁止对已有完整记录或已请假的日期补卡
+        LocalDate correctionDate = request.getCorrectionDate();
+
+        // 1. 查询当天是否有请假记录（审批中或已通过）
+        List<LeaveRequestEntity> leaves = leaveRequestMapper.selectList(
+                new LambdaQueryWrapper<LeaveRequestEntity>()
+                        .eq(LeaveRequestEntity::getEmployeeId, employeeId)
+                        .in(LeaveRequestEntity::getApprovalStatus, 1, 2)
+                        .le(LeaveRequestEntity::getStartTime, correctionDate.atTime(23, 59, 59))
+                        .ge(LeaveRequestEntity::getEndTime, correctionDate.atStartOfDay())
+        );
+        if (!leaves.isEmpty()) {
+            throw new GlobalException(ErrorCode.BUSINESS_ERROR, "该日已请假，请勿重复打卡");
+        }
+
+        // 2. 查询当天考勤记录
+        MyAttendanceRecordEntity record = attendanceRecordMapper.selectOne(
+                new LambdaQueryWrapper<MyAttendanceRecordEntity>()
+                        .eq(MyAttendanceRecordEntity::getEmployeeId, employeeId)
+                        .eq(MyAttendanceRecordEntity::getRecordDate, correctionDate)
+        );
+        if (record != null) {
+            String status = determineStatus(record);
+            // 已有完整打卡记录（正常/迟到/早退）
+            if ("NORMAL".equals(status) || "LATE".equals(status) || "EARLY_LEAVE".equals(status)) {
+                throw new GlobalException(ErrorCode.BUSINESS_ERROR, "该日已有完整的打卡记录，请勿重复打卡");
+            }
+            // 检查具体打卡时间
+            if ("CLOCK_IN".equals(request.getCorrectionType()) && record.getClockInTime() != null) {
+                throw new GlobalException(ErrorCode.BUSINESS_ERROR, "该日已有上班打卡记录，请勿重复补上班卡");
+            }
+            if ("CLOCK_OUT".equals(request.getCorrectionType()) && record.getClockOutTime() != null) {
+                throw new GlobalException(ErrorCode.BUSINESS_ERROR, "该日已有下班打卡记录，请勿重复补下班卡");
+            }
+        }
+
         AttendanceCorrectionEntity entity = new AttendanceCorrectionEntity();
         entity.setEmployeeId(employeeId);
         entity.setCorrectionDate(request.getCorrectionDate());
+        entity.setCorrectionTime(request.getCorrectionTime());
         entity.setCorrectionType(request.getCorrectionType());
         entity.setCorrectionReason(request.getCorrectionReason());
         entity.setApprovalStatus(1); // 审批中
 
-        // 查询当天考勤记录，设置关联的 record_id
-        MyAttendanceRecordEntity attendanceRecord = attendanceRecordMapper.selectOne(
-                new LambdaQueryWrapper<MyAttendanceRecordEntity>()
-                        .eq(MyAttendanceRecordEntity::getEmployeeId, employeeId)
-                        .eq(MyAttendanceRecordEntity::getRecordDate, request.getCorrectionDate())
-        );
-        if (attendanceRecord != null) {
-            entity.setRecordId(attendanceRecord.getId());
+        // 设置关联的考勤记录ID（复用上面已查到的 record）
+        if (record != null) {
+            entity.setRecordId(record.getId());
         }
         correctionMapper.insert(entity);
 
@@ -356,6 +388,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         StringBuilder json = new StringBuilder();
         json.append("{");
         json.append("\"correctionDate\":\"").append(request.getCorrectionDate()).append("\",");
+        json.append("\"correctionTime\":\"").append(request.getCorrectionTime()).append("\",");
         json.append("\"correctionType\":\"").append(escapeJson(request.getCorrectionType())).append("\",");
         json.append("\"correctionReason\":\"").append(escapeJson(request.getCorrectionReason())).append("\"");
         json.append("}");
@@ -392,6 +425,7 @@ public class AttendanceServiceImpl implements AttendanceService {
             MakeupRecordVO vo = new MakeupRecordVO();
             vo.setId(e.getId());
             vo.setCorrectionDate(e.getCorrectionDate());
+            vo.setCorrectionTime(e.getCorrectionTime());
             vo.setCorrectionType(e.getCorrectionType());
             vo.setCorrectionReason(e.getCorrectionReason());
             vo.setApprovalStatus(e.getApprovalStatus());

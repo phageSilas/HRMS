@@ -78,6 +78,7 @@ export interface ClockInRequest {
 /** 补卡申请请求 */
 export interface MakeupRequest {
   correctionDate: string;
+  correctionTime: string;
   correctionType: string;
   correctionReason: string;
 }
@@ -86,6 +87,7 @@ export interface MakeupRequest {
 export interface MakeupRecordVO {
   id: number;
   correctionDate: string;
+  correctionTime?: string;
   correctionType: string;
   correctionReason: string;
   approvalStatus: number;

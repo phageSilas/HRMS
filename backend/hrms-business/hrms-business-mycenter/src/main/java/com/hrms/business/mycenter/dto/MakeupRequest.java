@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 
 /**
  * 补卡申请请求 DTO
@@ -17,6 +18,10 @@ public class MakeupRequest {
     @NotNull(message = "补卡日期不能为空")
     @Schema(description = "补卡日期")
     private LocalDate correctionDate;
+
+    @NotNull(message = "补卡时间不能为空")
+    @Schema(description = "补卡时间（实际打卡时间，如 09:05:00）")
+    private LocalTime correctionTime;
 
     @NotBlank(message = "补卡类型不能为空")
     @Schema(description = "补卡类型：CLOCK_IN-上班补卡 CLOCK_OUT-下班补卡")

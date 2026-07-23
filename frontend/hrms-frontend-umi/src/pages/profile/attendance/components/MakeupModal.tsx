@@ -1,7 +1,7 @@
 /**
  * 补卡申请弹窗
  */
-import { DatePicker, Form, Input, Modal, Select, message } from 'antd';
+import { DatePicker, Form, Input, Modal, Select, TimePicker, message } from 'antd';
 import dayjs from 'dayjs';
 import React from 'react';
 
@@ -55,6 +55,13 @@ const MakeupModal: React.FC<Props> = ({ open, onClose, onSubmit, initialDate }) 
           <DatePicker style={{ width: '100%' }}
             disabledDate={(current) => current && current.isAfter(dayjs().endOf('day'))}
           />
+        </Form.Item>
+        <Form.Item
+          name="correctionTime"
+          label="补卡时间"
+          rules={[{ required: true, message: '请选择补卡时间' }]}
+        >
+          <TimePicker style={{ width: '100%' }} format="HH:mm:ss" minuteStep={1} secondStep={30} />
         </Form.Item>
         <Form.Item
           name="correctionType"
